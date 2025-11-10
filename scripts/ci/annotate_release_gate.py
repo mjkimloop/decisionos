@@ -85,7 +85,7 @@ def _summarize(
     if trend:
         lines.append(f"\n### 최근 추세(Top-10, {trend.get('window_days', 7)}일)")
         for code, count in (trend.get("total_top") or [])[:10]:
-            lines.append(f"- `{code}` × {count}")
+            lines.append(f"- `{code}` x {count}")
 
     evidence_path = "var/evidence/latest.json"
     if os.path.exists(evidence_path):

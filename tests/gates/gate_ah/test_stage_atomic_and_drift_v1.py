@@ -14,9 +14,10 @@ def test_atomic_write_and_read(tmp_path):
     path = tmp_path / "desired_stage.txt"
     s = write_stage_atomic("canary", str(path))
     assert s.stage == "canary"
-    # no trailing newline
-    with open(path, "rb") as f:
-        assert not f.read().endswith(b"\n")
+    # stage token with newline (platform-independent check)
+    content = path.read_text(encoding="utf-8")
+    assert content.strip() == "canary"
+    assert content.endswith("\n")
 
 @pytest.mark.skipif(WIN, reason="requires POSIX rename semantics")
 def test_concurrent_writers_no_corruption(tmp_path):

@@ -66,7 +66,7 @@ def reason_trend_card_html(
 ) -> HTMLResponse:
     trend = aggregate_reason_trend("var/evidence", days)
     top = (trend.get("total_top") or [])[:topK]
-    list_items = "".join(f"<li><code>{code}</code> × {count}</li>" for code, count in top)
+    list_items = "".join(f"<li><code>{code}</code> x {count}</li>" for code, count in top)
     html = f"""
     <html>
       <head>

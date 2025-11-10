@@ -1,5 +1,7 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11p-1 — 2025-11-11 — Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
+
 - v0.5.11p — 2025-11-11 — Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
 
 - v0.5.11o — 2025-11-11 — RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제

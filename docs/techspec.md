@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11p-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
+summary: Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
 -->
 
 
@@ -2776,3 +2776,15 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
   - 기존 'reason:' 접두 라벨은 정리 후 재부착(중복/스팸 방지)
   - 라벨 미존재 시 자동 생성(색상 고정)
 <!-- AUTOGEN:END:CI — Top-impact Labeler -->
+
+
+<!-- AUTOGEN:BEGIN:Ops — Reason Trend Card API v1.1 (Cache/ETag/RBAC) -->
+• 라우트 보호: RBAC scope = ops:read
+• 캐싱: in-proc TTL(기본 60s, DECISIONOS_OPS_CACHE_TTL_SEC로 조정)
+• ETag: 응답 바이트 SHA-256 기반. If-None-Match 일치 시 304 반환
+• 헤더: Cache-Control: public, max-age=<ttl>, ETag, Vary: Accept, If-None-Match
+• 대상 라우트:
+  - GET /ops/reason-trend
+  - GET /ops/reason-trend/card
+  - GET /ops/reason-trend/card.html
+<!-- AUTOGEN:END:Ops — Reason Trend Card API v1.1 (Cache/ETag/RBAC) -->

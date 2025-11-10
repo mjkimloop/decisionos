@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11p-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
+summary: Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
 -->
 
 # DecisionOS Implementation Plan
@@ -737,4 +737,9 @@ Day 3: 운영문서 업데이트(Ops API/대시보드 카드)
 
 <!-- AUTOGEN:BEGIN:Releases -->
 - v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러
+- v0.5.11p-1: Ops 카드 API 캐싱/ETag + RBAC(ops:read)
 <!-- AUTOGEN:END:Releases -->
+
+## Milestones — v0.5.11p-1
+Day 1: cache/etag/RBAC 적용 및 단위 테스트
+Day 2: CI 매트릭스에 gate_ops 포함, API 304 경로 스모크

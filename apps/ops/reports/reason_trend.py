@@ -97,13 +97,13 @@ def save_trend_reports(
         "## Top Reasons (overall)",
     ]
     for code, count in (trend.get("total_top") or [])[:10]:
-        lines.append(f"- `{code}` × {count}")
+        lines.append(f"- `{code}` x {count}")
 
     lines.append("## Daily Top-5")
     for day, pairs in trend.get("by_day", {}).items():
         lines.append(f"### {day}")
         for code, count in pairs[:5]:
-            lines.append(f"- `{code}` × {count}")
+            lines.append(f"- `{code}` x {count}")
 
     Path(out_md).parent.mkdir(parents=True, exist_ok=True)
     with open(out_md, "w", encoding="utf-8") as fh:

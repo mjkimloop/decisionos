@@ -174,3 +174,6 @@
 ## v0.5.11p — 2025-11-11
 - Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
 
+## v0.5.11p-1 — 2025-11-11
+- Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
+

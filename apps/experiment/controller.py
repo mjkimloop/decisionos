@@ -160,7 +160,7 @@ class TrafficController:
             return
         self._stage_file_mtime = record.mtime
         self._stage_hash = record.sha256
-        self._apply_stage_state(record.stage)
+        self._apply_stage_state(record)
 
     def _apply_stage_state(self, state: StageState) -> None:
         token = state.stage

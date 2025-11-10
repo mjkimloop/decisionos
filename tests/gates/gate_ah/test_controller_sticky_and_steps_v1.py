@@ -8,6 +8,12 @@ pytestmark = [pytest.mark.gate_ah]
 from apps.experiment.controller import TrafficController
 
 
+@pytest.fixture(autouse=True)
+def stage_key(monkeypatch):
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY", "test-stage-key")
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY_ID", "test-stage")
+
+
 def _policy(tmp_path: Path, stages=None):
     data = {
         "stages": stages or [10, 50, 100],
