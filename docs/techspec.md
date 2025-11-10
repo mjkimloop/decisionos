@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11edcbaccbabaaaaa
+version: v0.5.11fedcbaccbabaaaaa
 date: 2025-11-10
 status: locked
-summary: Gate-T + Gate-S Integration — Witness CSV → Metering → Rating/Quota smoke test
+summary: Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
 -->
 
 
@@ -2301,3 +2301,30 @@ apps/obs/calibration/golden_trace.py는 가짜 분포를 합성하여 err/p95/co
 - 전체 파이프라인 검증: tokens=130 (over=30 → 0.6 KRW), quota=throttle.
 - v1: 더미 CSV만 지원 (실제 witness 포맷은 별도).
 <!-- AUTOGEN:END:Gate-T + Gate-S Integration v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Integration — Witness↔Metering↔Rating/Quota↔Cost-Guard v1 -->
+목적: Gate-T의 witness CSV를 기준으로 Gate-S 전체 체인(rating/quota/cost-guard)을 실행하고,
+     판정 근거를 Evidence(JSON)로 스냅샷 저장.
+구성:
+  - 파서: apps.obs.witness.io::parse_witness_csv()
+  - 집계: apps.metering.reconcile.aggregate_hourly_with_watermark(now, policy)
+  - 요금: apps.rating.engine.rate_report(plan, report)
+  - 한도: apps.limits.quota.apply_quota_batch(tenant, deltas, cfg, state)
+  - 예산: apps.cost_guard.budget.check_budget(spent, policy)
+  - 이상: apps.cost_guard.anomaly.ewma_detect(series, cfg, current=spent)
+  - 스냅샷: apps.obs.evidence.snapshot.build_snapshot(...).to_json()
+Evidence 필수 필드:
+  - meta: version, generated_at, tenant
+  - witness: csv_sha256, rows
+  - usage: buckets(sum/min/max/count), deltas_by_metric
+  - rating: subtotal, items[metric, included, overage, amount]
+  - quota: decisions[metric → action(allow/throttle/deny), used, soft, hard]
+  - budget: level(ok/warn/exceeded), spent, limit
+  - anomaly: is_spike, ewma, ratio
+  - integrity: signature_sha256(메인 필드 정렬 JSON의 SHA-256)
+수락 기준:
+  - snapshot JSON에 상기 키 존재 및 타입 일치
+  - budget.level과 anomaly.is_spike가 테스트 시나리오대로 판정
+  - 파일 저장: var/evidence/evidence-YYYYMMDDTHHMMSS.json 생성
+<!-- AUTOGEN:END:Integration — Witness↔Metering↔Rating/Quota↔Cost-Guard v1 -->

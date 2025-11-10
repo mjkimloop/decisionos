@@ -138,3 +138,6 @@
 ## v0.5.11e — 2025-11-10
 - Gate-T + Gate-S Integration — Witness CSV → Metering → Rating/Quota smoke test
 
+## v0.5.11f — 2025-11-10
+- Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
+

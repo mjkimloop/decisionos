@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11edcbaccbabaaa
+version: v0.5.11fedcbaccbabaaa
 date: 2025-11-10
 status: locked
-summary: Gate-T + Gate-S Integration — Witness CSV → Metering → Rating/Quota smoke test
+summary: Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
 -->
 
 # DecisionOS Implementation Plan
@@ -594,3 +594,12 @@ Day 205: 백테스트 크론 · Evidence/대시 업데이트
 ## Next Actions — Integration
 Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering) ✓
 Day 222: Cost-Guard 조치의 Evidence 연동 + RBAC hook
+
+## Milestones — v0.5.11f
+- Evidence 스냅샷 모듈(apps/obs/evidence/snapshot.py) 추가
+- 통합 테스트(test_integration_costguard_evidence_v1.py) Green
+- 스냅샷 파일 저장 및 해시 무결성 확인
+
+## Next Actions — v0.5.11f
+Day 222: 통합 테스트 Green 및 Evidence 샘플 커밋
+Day 223: slo.json 기반 Judge(멀티쿼럼) 연계 스냅샷(v0.5.11g)

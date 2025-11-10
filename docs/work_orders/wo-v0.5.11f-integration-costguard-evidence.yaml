@@ -1,0 +1,46 @@
+meta:
+  version: v0.5.11f
+  date: 2025-11-10
+  status: locked
+  summary: "Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성"
+
+patches:
+  techspec:
+    - section: "Integration — Witness↔Metering↔Rating/Quota↔Cost-Guard v1"
+      mode: upsert
+      content: |
+        목적: Gate-T의 witness CSV를 기준으로 Gate-S 전체 체인(rating/quota/cost-guard)을 실행하고,
+             판정 근거를 Evidence(JSON)로 스냅샷 저장.
+        구성:
+          - 파서: apps.obs.witness.io::parse_witness_csv()
+          - 집계: apps.metering.reconcile.aggregate_hourly_with_watermark(now, policy)
+          - 요금: apps.rating.engine.rate_report(plan, report)
+          - 한도: apps.limits.quota.apply_quota_batch(tenant, deltas, cfg, state)
+          - 예산: apps.cost_guard.budget.check_budget(spent, policy)
+          - 이상: apps.cost_guard.anomaly.ewma_detect(series, cfg, current=spent)
+          - 스냅샷: apps.obs.evidence.snapshot.build_snapshot(...).to_json()
+        Evidence 필수 필드:
+          - meta: version, generated_at, tenant
+          - witness: csv_sha256, rows
+          - usage: buckets(sum/min/max/count), deltas_by_metric
+          - rating: subtotal, items[metric, included, overage, amount]
+          - quota: decisions[metric → action(allow/throttle/deny), used, soft, hard]
+          - budget: level(ok/warn/exceeded), spent, limit
+          - anomaly: is_spike, ewma, ratio
+          - integrity: signature_sha256(메인 필드 정렬 JSON의 SHA-256)
+        수락 기준:
+          - snapshot JSON에 상기 키 존재 및 타입 일치
+          - budget.level과 anomaly.is_spike가 테스트 시나리오대로 판정
+          - 파일 저장: var/evidence/evidence-YYYYMMDDTHHMMSS.json 생성
+  plan:
+    - section: "Milestones — v0.5.11f"
+      mode: upsert
+      content: |
+        - Evidence 스냅샷 모듈(apps/obs/evidence/snapshot.py) 추가
+        - 통합 테스트(test_integration_costguard_evidence_v1.py) Green
+        - 스냅샷 파일 저장 및 해시 무결성 확인
+    - section: "Next Actions — v0.5.11f"
+      mode: upsert
+      content: |
+        Day 222: 통합 테스트 Green 및 Evidence 샘플 커밋
+        Day 223: slo.json 기반 Judge(멀티쿼럼) 연계 스냅샷(v0.5.11g)

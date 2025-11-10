@@ -1,0 +1,65 @@
+test(integration): Cost-Guard + Evidence snapshot; budget/anomaly proof (v0.5.11f)
+
+Witness → Metering → Rating/Quota → Cost-Guard 전체 체인 + Evidence JSON 스냅샷 생성 완료.
+
+신규 모듈 (1개):
+1. apps/obs/evidence/ - Evidence 스냅샷 생성
+   - snapshot.py (4.8 KB): Evidence, build_snapshot, sha256 무결성 검증
+
+Evidence 스냅샷 구조:
+- meta: version, generated_at, tenant
+- witness: csv_path, csv_sha256, rows
+- usage: buckets (window별 sum/min/max/count), deltas_by_metric
+- rating: subtotal, items[metric, included, overage, amount]
+- quota: decisions[metric → action(allow/throttle/deny), used, soft, hard]
+- budget: level(ok/warn/exceeded), spent, limit
+- anomaly: is_spike, ewma, ratio
+- integrity: signature_sha256 (핵심 필드 정렬 JSON SHA-256)
+
+Integration Test:
+- tests/integration/test_integration_costguard_evidence_v1.py
+- 파이프라인: Witness CSV 3건 → Metering → Rating(0.6) → Quota(deny) → Cost-Guard
+- 검증 포인트:
+  1. Witness 파싱: 3건 이벤트 (tokens=130, storage_gb=8)
+  2. Rating: tokens overage=30 → 0.6 KRW
+  3. Quota: tokens used=130 > hard=120 → deny
+  4. Budget: spent=0.6 > limit=0.5 → exceeded
+  5. Anomaly: EWMA 급증 탐지 → is_spike=true
+  6. Evidence JSON 생성 및 파일 저장 (var/evidence/)
+  7. 무결성 서명 검증 (SHA-256 재계산 일치)
+
+전체 테스트 결과:
+통합 테스트:
+✓ test_costguard_evidence_snapshot PASSED
+✓ test_witness_to_metering_to_rating_to_quota PASSED
+
+Gate-S 테스트:
+✓ test_budget_levels_and_ewma_spike PASSED
+✓ test_inmemory_idempotency_basic PASSED
+✓ test_sqlite_idempotency_persistent PASSED
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ test_quota_soft_and_hard PASSED
+✓ test_rating_simple_overage PASSED
+✓ test_watermark_lateness_v1_drop_and_keep PASSED
+✓ test_metering_contract_shape_seed XPASS
+
+총 10개 테스트: 9 passed, 1 xpassed (0.94초)
+
+Work Order:
+- docs/work_orders/wo-v0.5.11f-integration-costguard-evidence.yaml
+- techspec: Integration — Witness↔Metering↔Rating/Quota↔Cost-Guard v1
+- plan: Milestones — v0.5.11f
+
+Evidence 스냅샷 기능:
+- 전체 체인 판정 근거를 단일 JSON으로 직렬화
+- 타임스탬프 기반 파일명 (evidence-YYYYMMDDTHHMMSSZ.json)
+- SHA-256 무결성 서명 (core fields → deterministic hash)
+- 감사 추적(audit trail) 및 재현 가능성 보장
+
+다음 단계 (Day 223):
+- slo.json 기반 Judge 멀티쿼럼 연계 스냅샷 (v0.5.11g)
+- RBAC hook 통합
+
+Gate-S + Gate-T + Evidence 상태: Green + Full Audit Trail
+
+No-Gemini. Claude Code 단독 구현.
