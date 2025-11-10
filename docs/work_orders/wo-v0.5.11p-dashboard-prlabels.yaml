@@ -1,0 +1,47 @@
+meta:
+  version: v0.5.11p
+  date: 2025-11-11
+  status: locked
+  summary: "Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러"
+
+patches:
+  techspec:
+    - section: "Ops — Reason Trend Card API v1"
+      mode: upsert
+      content: |
+        • FASTAPI 엔드포인트:
+          - GET /ops/reason-trend?days=7 → trend JSON
+          - GET /ops/reason-trend/card?days=7&topK=5 → 카드용 요약(JSON)
+          - GET /ops/reason-trend/card.html?days=7&topK=5 → 초경량 HTML 카드
+        • 데이터 소스: var/evidence/index.json(+fallback scan)
+        • CORS 허용(환경변수 DECISIONOS_CORS_ORIGINS)
+
+    - section: "CI — PR Comment with Artifacts URL"
+      mode: upsert
+      content: |
+        • scripts/ci/annotate_release_gate.py가 --artifacts <json> 입력을 받아
+          PR 코멘트에 아티팩트 링크(실행 run #artifacts)를 자동 첨부.
+        • 링크 생성 헬퍼: GITHUB_SERVER_URL/GITHUB_REPOSITORY/GITHUB_RUN_ID 기반.
+
+    - section: "CI — Top-impact Labeler"
+      mode: upsert
+      content: |
+        • scripts/ci/label_top_impact.py:
+          - 입력: var/reports/reason_trend.json
+          - 동작: 상위 K개 reason 코드를 라벨명 'reason: <code>'로 PR에 부착
+          - 기존 'reason:' 접두 라벨은 정리 후 재부착(중복/스팸 방지)
+          - 라벨 미존재 시 자동 생성(색상 고정)
+
+  plan:
+    - section: "Milestones — v0.5.11p"
+      mode: upsert
+      content: |
+        Day 1: API/스크립트 구현 및 단위 테스트
+        Day 2: CI 배선(PR 코멘트/레이블러) 및 아티팩트 링크 검증
+        Day 3: 운영문서 업데이트(Ops API/대시보드 카드)
+
+  index:
+    - section: "Releases"
+      mode: append
+      content: |
+        - v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러

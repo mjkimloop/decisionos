@@ -32,6 +32,8 @@ def _base_evidence(perf_extra: dict | None = None):
         k: ev[k]
         for k in ["meta", "witness", "usage", "rating", "quota", "budget", "anomaly"]
     }
+    # Include perf_judge in signature calculation
+    core["perf_judge"] = ev["perf_judge"]
     ev["integrity"]["signature_sha256"] = hashlib.sha256(
         json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()

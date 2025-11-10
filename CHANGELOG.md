@@ -171,3 +171,6 @@
 ## v0.5.11o — 2025-11-11
 - RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
 
+## v0.5.11p — 2025-11-11
+- Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
+

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11onmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+summary: Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
 -->
 
 
@@ -2750,3 +2750,29 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 • 경계값(정확히 ==)은 허용(pass)로 정의.
 • min_samples 미만이면 grace_burst 계산 자체를 생략하고 samples_insufficient로 fail.
 <!-- AUTOGEN:END:SLO — grace_burst Boundary Semantics -->
+
+
+<!-- AUTOGEN:BEGIN:Ops — Reason Trend Card API v1 -->
+• FASTAPI 엔드포인트:
+  - GET /ops/reason-trend?days=7 → trend JSON
+  - GET /ops/reason-trend/card?days=7&topK=5 → 카드용 요약(JSON)
+  - GET /ops/reason-trend/card.html?days=7&topK=5 → 초경량 HTML 카드
+• 데이터 소스: var/evidence/index.json(+fallback scan)
+• CORS 허용(환경변수 DECISIONOS_CORS_ORIGINS)
+<!-- AUTOGEN:END:Ops — Reason Trend Card API v1 -->
+
+
+<!-- AUTOGEN:BEGIN:CI — PR Comment with Artifacts URL -->
+• scripts/ci/annotate_release_gate.py가 --artifacts <json> 입력을 받아
+  PR 코멘트에 아티팩트 링크(실행 run #artifacts)를 자동 첨부.
+• 링크 생성 헬퍼: GITHUB_SERVER_URL/GITHUB_REPOSITORY/GITHUB_RUN_ID 기반.
+<!-- AUTOGEN:END:CI — PR Comment with Artifacts URL -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Top-impact Labeler -->
+• scripts/ci/label_top_impact.py:
+  - 입력: var/reports/reason_trend.json
+  - 동작: 상위 K개 reason 코드를 라벨명 'reason: <code>'로 PR에 부착
+  - 기존 'reason:' 접두 라벨은 정리 후 재부착(중복/스팸 방지)
+  - 라벨 미존재 시 자동 생성(색상 고정)
+<!-- AUTOGEN:END:CI — Top-impact Labeler -->

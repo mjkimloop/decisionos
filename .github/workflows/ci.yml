@@ -98,6 +98,36 @@ EOF
             --quorum 2/3 --attach-evidence
           if [ $? -ne 0 ]; then echo "CANARY_FAIL=1" >> $GITHUB_OUTPUT; fi
           exit 0
+      - name: Build Reason Trend (7d)
+        run: |
+          python -m jobs.reason_trend_daily --days 7 --topK 10 --out var/reports
+      - name: Compose Artifact Links
+        run: |
+          python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+repo = os.getenv("GITHUB_REPOSITORY")
+base = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+run_id = os.getenv("GITHUB_RUN_ID")
+run_url = f"{base}/{repo}/actions/runs/{run_id}" if repo and run_id else ""
+artifacts = [
+    {"name": "reason-trend", "url": run_url + "#artifacts"} if run_url else None,
+    {"name": "evidence", "url": run_url + "#artifacts"} if run_url else None,
+]
+payload = {"artifacts": [a for a in artifacts if a]}
+out = Path("var/reports")
+out.mkdir(parents=True, exist_ok=True)
+out.joinpath("artifacts.json").write_text(json.dumps(payload), encoding="utf-8")
+PY
+      - name: Strict SLO Gate
+        env:
+          DECISIONOS_ALLOW_SCOPES: judge:run
+        run: |
+          python -m apps.cli.dosctl.slo_judge \
+            --slo configs/slo/slo-billing-strict-v2.json \
+            --evidence var/evidence/latest.json
       - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,15 +135,27 @@ EOF
           name: evidence-${{ github.run_id }}
           path: |
             var/evidence/*.json
+            var/reports/**/*.json
             reports/**/*.xml
             var/rollout/**
-      - name: Annotate PR
-        if: always()
+      - name: PR Comment (Summary)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python scripts/ci/annotate_release_gate.py \
+          python -m scripts.ci.annotate_release_gate \
+            --slo configs/slo/slo-billing-strict-v2.json \
             --evidence var/evidence/latest.json \
-            --infra-fail "${{ steps.gates.outputs.INFRA_FAIL }}" \
-            --canary-fail "${{ steps.gates.outputs.CANARY_FAIL }}"
+            --trend var/reports/reason_trend.json \
+            --artifacts var/reports/artifacts.json
+      - name: Label PR Top Impact
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m scripts.ci.label_top_impact \
+            --trend var/reports/reason_trend.json \
+            --topK 3
       - name: Summarize Hardening
         if: always()
         run: |

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11onmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+summary: Ops API(Reason Trend 카드) + PR 코멘트 아티팩트 링크 + Top-impact 레이블러
 -->
 
 # DecisionOS Implementation Plan
@@ -728,3 +728,13 @@ Day 5: grace_burst 경계 테스트 추가 및 CI 매트릭스 편입
 • CI에 pre_gate: clock_guard → evidence_index → gc(dry-run) 아티팩트 업로드
 • release_gate: infra+canary SLO 통과 시에만 promote
 • RUNBOOK 갱신: 이유코드/롤백/키미설정 시 Safe-Mode 동작
+
+## Milestones — v0.5.11p
+Day 1: API/스크립트 구현 및 단위 테스트
+Day 2: CI 배선(PR 코멘트/레이블러) 및 아티팩트 링크 검증
+Day 3: 운영문서 업데이트(Ops API/대시보드 카드)
+
+
+<!-- AUTOGEN:BEGIN:Releases -->
+- v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러
+<!-- AUTOGEN:END:Releases -->
