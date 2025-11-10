@@ -32,9 +32,11 @@ log() {
 
 python - <<'PY'
 import sys
-from apps.policy.pep import PEP
+from apps.policy.pep import require
 
-if not PEP().enforce("deploy:canary"):
+try:
+    require("deploy:canary")
+except PermissionError:
     print("[rbac] deploy:canary denied", file=sys.stderr)
     sys.exit(3)
 PY

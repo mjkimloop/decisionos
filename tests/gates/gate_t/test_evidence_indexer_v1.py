@@ -35,12 +35,12 @@ def test_scan_evidence_dir_marks_valid_files(tmp_path):
     ev = tmp_path / "evidence.json"
     _make_evidence(ev)
     index = scan_evidence_dir(str(tmp_path))
-    assert index["count"] == 1
-    assert index["items"][0]["tampered"] is False
+    assert index["summary"]["count"] == 1
+    assert index["files"][0]["tampered"] is False
 
 
 def test_scan_evidence_dir_marks_missing_blocks(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text("{}", encoding="utf-8")
     index = scan_evidence_dir(str(tmp_path))
-    assert index["items"][0]["tampered"] is True
+    assert index["files"][0]["tampered"] is True

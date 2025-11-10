@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11mmllki.2i.2i.1ihgfedcbaccbabaaaaa
-date: 2025-11-10
+version: v0.5.11onmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+date: 2025-11-11
 status: locked
-summary: Evidence 불변성/인덱서 + S3 ObjectLock + Chaos/DR 스크립트 + Clock drift 가드 + RBAC·CI 주석
+summary: RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
 -->
 
 
@@ -2665,3 +2665,88 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - 모든 릴리스 스크립트는 PEP.enforce(scope) 필수.
 - CI Step Summary에 stage/증빙 요약 남김, 아티팩트 업로드.
 <!-- AUTOGEN:END:RBAC & CI Notes -->
+
+
+<!-- AUTOGEN:BEGIN:Security — RBAC -->
+- 기본 거부(default-deny): DECISIONOS_ALLOW_SCOPES 미설정 시 모든 액션 거부.
+- 프로파일:
+    LOCAL : allow all (개발 편의)
+    CI    : judge:run,deploy:promote,deploy:abort
+    PROD  : 최소권한(서비스별 세분화)
+<!-- AUTOGEN:END:Security — RBAC -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Lifecycle/Tiering -->
+- Tier: WIP(기본), LOCKED(ObjectLock/S3 업로드 확인 후 전이)
+- Index 스키마(index.json):
+    { "generated_at": "...", "root": "var/evidence",
+      "files": [ { "path":"...", "sha256":"...", "size":123, "mtime":"...", "tier":"WIP|LOCKED", "locked_at":null|"..." , "tampered":false } ],
+      "summary": { "count":N, "tampered":M, "wip":X, "locked":Y } }
+<!-- AUTOGEN:END:Evidence — Lifecycle/Tiering -->
+
+
+<!-- AUTOGEN:BEGIN:Judge SLO — Infra Params -->
+- latency/error 정책에 min_samples 추가
+- infra.window_sec, infra.grace_burst(스파이크 관용치) 추가
+- 샘플 부족: decision=inconclusive → 정책에 따라 fail-closed 또는 canary-hold
+<!-- AUTOGEN:END:Judge SLO — Infra Params -->
+
+
+<!-- AUTOGEN:BEGIN:Rollout — Stage Integrity -->
+- stage 토큰은 여전히 var/rollout/desired_stage.txt(단일 문자열: stable|canary|promote|abort)
+- 무결성은 사이드카 manifest: var/rollout/desired_stage.manifest.json
+- manifest 스키마:
+    { "token_sha256":"...", "sig_hmac":"...", "key_id":"k1", "algo":"HMAC-SHA256", "generated_at":"..." }
+- 컨트롤러는 주기 검증/불일치 시 guard_and_repair 수행
+<!-- AUTOGEN:END:Rollout — Stage Integrity -->
+
+
+<!-- AUTOGEN:BEGIN:Reasons — Namespace & Contract v1 -->
+• 모든 실패/보류 사유는 main_code 하나만 주(reason)에 기록, 나머지는 meta.reason_detail로 부속.
+• 네임스페이스: {infra.*, perf.*, budget.*, quota.*, integrity.*, witness.*, canary.*}
+• JSON 컨트랙트:
+  {
+    "decision": "fail|pass|hold",
+    "reasons": [{"code": "infra.samples_insufficient", "message": "..."}],
+    "meta": {"reason_detail": [{"code":"perf.p95_over","at_ms":1234}]}
+  }
+• 소비자/리포트는 주(reasons[0].code)만 기준으로 분류.
+<!-- AUTOGEN:END:Reasons — Namespace & Contract v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Stage — Safe-Mode without Key -->
+• DECISIONOS_STAGE_KEY 미설정/서명검증 불가 시 컨트롤러는 fail-safe로 stage=stable 고정.
+• 기록(write)은 금지하고 경고 로그만 남김. 읽기(read)는 stable로 복구.
+• 런서버 부팅 시 키/키ID 프리체크: 실패 시 WARN, 운영모드 진입은 허용하되 변경 불가.
+<!-- AUTOGEN:END:Stage — Safe-Mode without Key -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — GC Policy Externalization -->
+• 정책 파일: configs/evidence/gc.yaml
+• 스키마:
+  retention_days:
+    WIP: 7
+    LOCKED: 365
+  keep_min_per_tenant: 5
+  exclude_globs: ["**/*locked.json"]
+  dry_run: true
+  object_lock:
+    enabled: true
+    retention_days: 365
+    s3_bucket: null
+    s3_prefix: null
+<!-- AUTOGEN:END:Evidence — GC Policy Externalization -->
+
+
+<!-- AUTOGEN:BEGIN:CLI Exit Codes — Contract -->
+• dosctl judge quorum: 0=pass, 2=policy_fail, 3=rbac_denied, 4=invalid_input, 5=infra_error.
+• 배포 스크립트: 릴리스 게이트 실패(2,4,5) → abort_on_gate_fail.sh 호출 → stage 'stable'.
+• 문서: docs/ops/CLI-DEPLOY.md에 테이블 고정.
+<!-- AUTOGEN:END:CLI Exit Codes — Contract -->
+
+
+<!-- AUTOGEN:BEGIN:SLO — grace_burst Boundary Semantics -->
+• (p95 - limit) / limit ≤ grace_burst → pass, 초과하면 fail.
+• 경계값(정확히 ==)은 허용(pass)로 정의.
+• min_samples 미만이면 grace_burst 계산 자체를 생략하고 samples_insufficient로 fail.
+<!-- AUTOGEN:END:SLO — grace_burst Boundary Semantics -->

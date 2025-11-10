@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -9,7 +10,13 @@ from typing import Any, Dict, Iterable, Optional
 
 import yaml
 
-from apps.experiment.stage_file import Stage, StageState, guard_and_repair, write_stage_atomic
+from apps.experiment.stage_file import (
+    Stage,
+    StageState,
+    has_stage_key,
+    read_stage_with_hash,
+    write_stage_atomic,
+)
 from apps.judge.metrics import JudgeMetrics
 
 
@@ -148,7 +155,7 @@ class TrafficController:
     def _sync_stage_from_file(self, *, initial: bool = False) -> None:
         if not self.stage_file:
             return
-        record = guard_and_repair(str(self.stage_file))
+        record = read_stage_with_hash(str(self.stage_file))
         if not initial and record.sha256 == self._stage_hash and record.mtime <= self._stage_file_mtime:
             return
         self._stage_file_mtime = record.mtime
@@ -182,12 +189,15 @@ class TrafficController:
     def _write_stage_file(self, state: Stage, meta: Optional[Dict[str, Any]] = None) -> None:
         if not self.stage_file:
             return
+        if not has_stage_key():
+            logging.getLogger(__name__).warning("Stage Safe-Mode active (no signing key); ignoring write request")
+            return
         try:
             record = write_stage_atomic(state, str(self.stage_file))
             self._stage_file_mtime = record.mtime
             self._stage_hash = record.sha256
         except OSError:
-            pass
+            logging.getLogger(__name__).warning("Failed to persist stage token", exc_info=True)
 
 
 __all__ = ["TrafficController", "RolloutPolicy"]

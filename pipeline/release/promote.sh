@@ -7,10 +7,12 @@ HOOK_CMD="${DECISIONOS_CONTROLLER_HOOK:-}"
 
 python - <<'PY'
 import os, sys
-from apps.policy.pep import PEP
+from apps.policy.pep import require
 
 scope = os.environ.get("RBAC_SCOPE", "deploy:promote")
-if not PEP().enforce(scope):
+try:
+    require(scope)
+except PermissionError:
     print(f"[promote] RBAC denied for scope '{scope}'", file=sys.stderr)
     sys.exit(3)
 PY

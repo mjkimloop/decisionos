@@ -165,3 +165,9 @@
 ## v0.5.11m — 2025-11-10
 - stage 파일 원자화·드리프트 가드, Evidence 불변성, 카나리 장애/롤백 시뮬, 키/시계/권한 하드닝, CI 게이트 강화
 
+## v0.5.11n — 2025-11-11
+- RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+
+## v0.5.11o — 2025-11-11
+- RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+

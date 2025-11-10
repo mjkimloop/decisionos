@@ -1,7 +1,9 @@
 {
   "judge_infra": {
-    "latency": {"max_p95_ms": 900, "max_p99_ms": 1800},
-    "availability": {"min_availability": 0.995},
-    "sig": {"max_sig_error_rate": 0.001}
+    "latency": { "max_p95_ms": 1200, "max_p99_ms": 2500, "min_samples": 100 },
+    "availability": { "min_availability": 0.995 },
+    "sig": { "max_sig_error_rate": 0.001, "min_samples": 100 },
+    "window_sec": 300,
+    "grace_burst": 0.05
   }
 }

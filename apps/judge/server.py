@@ -13,13 +13,11 @@ from apps.judge.metrics import JudgeMetrics
 from apps.judge.crypto import MultiKeyLoader, verify_with_multikey
 from apps.judge.replay_plugins import RedisReplayStore, ReplayStoreABC, SQLiteReplayStore
 from apps.judge import slo_judge
-from apps.policy.pep import PEP
+from apps.policy.pep import require
 
 _DEFAULT_WINDOW = int(os.getenv("DECISIONOS_JUDGE_METRIC_WINDOW", "600"))
 _metrics = JudgeMetrics(window_seconds=_DEFAULT_WINDOW)
 _key_loader = MultiKeyLoader()
-_pep = PEP()
-
 
 def _build_replay_store() -> ReplayStoreABC:
     backend = os.getenv("DECISIONOS_REPLAY_BACKEND", "sqlite").lower()
@@ -87,7 +85,9 @@ def create_app(replay_store: Optional[ReplayStoreABC] = None) -> FastAPI:
             status_code = 400
             raise HTTPException(status_code=400, detail="invalid payload structure")
 
-        if not _pep.enforce("judge:run"):
+        try:
+            require("judge:run")
+        except PermissionError:
             status_code = 403
             raise HTTPException(status_code=403, detail="rbac denied")
 

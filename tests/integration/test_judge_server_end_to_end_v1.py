@@ -10,6 +10,7 @@ pytestmark = [pytest.mark.gate_aj]
 
 from apps.judge.server import create_app
 from apps.judge.crypto import hmac_sign
+from apps.obs.evidence.snapshot import sha256_text
 
 
 def _payload():
@@ -30,11 +31,10 @@ def _payload():
         },
         "integrity": {"signature_sha256": "deadbeef"},
     }
-    core = {
-        k: evidence[k]
-        for k in ["meta", "witness", "usage", "rating", "quota", "budget", "anomaly"]
-    }
-    evidence["integrity"]["signature_sha256"] = hashlib_sha(core)
+    core = {k: evidence[k] for k in ["meta", "witness", "usage", "rating", "quota", "budget", "anomaly"]}
+    core["perf_judge"] = evidence["perf_judge"]
+    core_json = json.dumps(core, ensure_ascii=False, sort_keys=True)
+    evidence["integrity"]["signature_sha256"] = sha256_text(core_json)
     slo = {
         "judge_infra": {
             "latency": {"max_p95_ms": 900, "max_p99_ms": 1500},
@@ -45,13 +45,11 @@ def _payload():
     return {"evidence": evidence, "slo": slo}
 
 
-def hashlib_sha(core: dict) -> str:
-    return hashlib.sha256(json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
-
 
 def test_judge_server_signature_and_metrics(monkeypatch):
     monkeypatch.setenv("DECISIONOS_JUDGE_KEYS", '[{"key_id":"k1","secret":"super-secret","state":"active"}]')
     monkeypatch.setenv("DECISIONOS_REPLAY_SQLITE", ":memory:")
+    monkeypatch.setenv("DECISIONOS_ALLOW_SCOPES", "judge:run")
     app = create_app()
 
     async def _run() -> None:

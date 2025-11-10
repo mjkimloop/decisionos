@@ -1,0 +1,12 @@
+retention_days:
+  WIP: 7
+  LOCKED: 365
+keep_min_per_tenant: 5
+exclude_globs:
+  - "**/*locked.json"
+dry_run: true
+object_lock:
+  enabled: true
+  retention_days: 365
+  s3_bucket:
+  s3_prefix:

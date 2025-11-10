@@ -13,7 +13,7 @@ from apps.judge.pool import quorum_decide
 from apps.judge.providers.http import HTTPJudgeProvider
 from apps.judge.providers.local import LocalJudgeProvider
 from apps.obs.evidence.ops import recompute_integrity
-from apps.policy.pep import PEP
+from apps.policy.pep import require
 
 
 def _load_json(path: str) -> Dict[str, Any]:
@@ -73,8 +73,9 @@ def main(argv: List[str] | None = None) -> None:
     parser.add_argument("--attach-evidence", action="store_true", help="Evidence에 judges 블록 병합")
     parser.add_argument("--out", default="var/evidence/evidence-with-judges.json", help="attach 시 저장 경로")
     args = parser.parse_args(argv)
-    pep = PEP()
-    if not pep.enforce("judge:run"):
+    try:
+        require("judge:run")
+    except PermissionError:
         raise SystemExit(3)
     slo = _load_json(args.slo)
     evidence = _load_json(args.evidence)

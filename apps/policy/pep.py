@@ -1,17 +1,27 @@
 from __future__ import annotations
+
 import os
-
-class PEP:
-    """ENV 기반 아주 단순한 PEP: DECISIONOS_ALLOW_SCOPES='judge:run,deploy:promote'"""
-    def __init__(self, env="DECISIONOS_ALLOW_SCOPES"):
-        self.env = env
-
-    def enforce(self, scope: str) -> bool:
-        allowed = os.getenv(self.env, "")
-        scopes = {s.strip() for s in allowed.split(",") if s.strip()}
-        if not scopes:
-            return True
-        return scope in scopes
+from functools import lru_cache
 
 
-__all__ = ["PEP"]
+@lru_cache(maxsize=1)
+def _allowed() -> set[str]:
+    scopes = os.getenv("DECISIONOS_ALLOW_SCOPES", "")
+    if scopes.strip() == "*":
+        return {"*"}
+    return {scope.strip() for scope in scopes.split(",") if scope.strip()}
+
+
+def enforce(scope: str) -> bool:
+    allowed = _allowed()
+    if "*" in allowed:
+        return True
+    return scope in allowed
+
+
+def require(scope: str) -> None:
+    if not enforce(scope):
+        raise PermissionError(f"RBAC deny: scope={scope}")
+
+
+__all__ = ["enforce", "require"]

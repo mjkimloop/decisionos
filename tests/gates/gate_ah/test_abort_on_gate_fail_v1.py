@@ -13,6 +13,12 @@ if sys.platform.startswith("win"):
     pytest.skip("requires bash environment", allow_module_level=True)
 
 
+@pytest.fixture(autouse=True)
+def stage_key(monkeypatch):
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY", "test-stage-key")
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY_ID", "test-stage")
+
+
 def test_abort_on_gate_fail_triggers_abort(tmp_path, monkeypatch):
     stage = tmp_path / "desired_stage.txt"
     write_stage_atomic("canary", str(stage))
@@ -54,4 +60,4 @@ def test_abort_on_gate_fail_triggers_abort(tmp_path, monkeypatch):
     ).returncode
     assert rc == 2
     state = read_stage_with_hash(str(stage))
-    assert state.stage == "abort"
+    assert state.stage == "stable"

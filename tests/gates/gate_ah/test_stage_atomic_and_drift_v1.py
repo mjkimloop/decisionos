@@ -5,6 +5,11 @@ from apps.experiment.stage_file import write_stage_atomic, read_stage_with_hash,
 pytestmark = [pytest.mark.gate_ah]
 WIN = sys.platform.startswith("win")
 
+@pytest.fixture(autouse=True)
+def stage_key(monkeypatch):
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY", "test-stage-key")
+    monkeypatch.setenv("DECISIONOS_STAGE_KEY_ID", "test-stage")
+
 def test_atomic_write_and_read(tmp_path):
     path = tmp_path / "desired_stage.txt"
     s = write_stage_atomic("canary", str(path))

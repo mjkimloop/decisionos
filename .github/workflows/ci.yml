@@ -24,6 +24,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -e .
+      - name: Pre-gate — Clock drift guard
+        run: python -m jobs.clock_guard --max-skew-sec 5
       - name: Run pytest (gate)
         run: |
           pytest -q -m ${{ matrix.gate }} --ignore vendor --ignore kai-decisionos
@@ -65,6 +67,12 @@ jobs:
             --out-json var/evidence/perf-judge-latest.json \
             --evidence var/evidence/latest.json \
             --canary-json var/evidence/canary-latest.json
+      - name: Build Evidence Index
+        run: |
+          python -m jobs.evidence_indexer --root var/evidence --out var/evidence/index.json
+      - name: Evidence GC (dry-run)
+        run: |
+          python -m jobs.evidence_gc --root var/evidence --dry-run
       - name: Prepare local providers
         run: |
           mkdir -p var
@@ -94,10 +102,11 @@ EOF
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gate-artifacts
+          name: evidence-${{ github.run_id }}
           path: |
             var/evidence/*.json
             reports/**/*.xml
+            var/rollout/**
       - name: Annotate PR
         if: always()
         run: |
@@ -105,6 +114,24 @@ EOF
             --evidence var/evidence/latest.json \
             --infra-fail "${{ steps.gates.outputs.INFRA_FAIL }}" \
             --canary-fail "${{ steps.gates.outputs.CANARY_FAIL }}"
+      - name: Summarize Hardening
+        if: always()
+        run: |
+          COUNT=$(python - <<'PY'
+import json
+from pathlib import Path
+try:
+    data = json.loads(Path("var/evidence/index.json").read_text())
+    print(data.get("count", 0))
+except Exception:
+    print("n/a")
+PY
+)
+          {
+            echo "### v0.5.11m — Immutability/Chaos/Clock ✅"
+            echo "- clock guard executed"
+            echo "- evidence index entries: $COUNT"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail if gate failed
         if: steps.gates.outputs.INFRA_FAIL == '1' || steps.gates.outputs.CANARY_FAIL == '1'
         run: exit 1

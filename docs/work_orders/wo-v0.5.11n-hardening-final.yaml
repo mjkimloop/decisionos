@@ -1,0 +1,68 @@
+meta:
+  version: v0.5.11n
+  date: 2025-11-11
+  status: locked
+  summary: "RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제"
+
+patches:
+  techspec:
+    - section: "Security — RBAC"
+      mode: upsert
+      content: |
+        - 기본 거부(default-deny): DECISIONOS_ALLOW_SCOPES 미설정 시 모든 액션 거부.
+        - 프로파일:
+            LOCAL : allow all (개발 편의)
+            CI    : judge:run,deploy:promote,deploy:abort
+            PROD  : 최소권한(서비스별 세분화)
+    - section: "Evidence — Lifecycle/Tiering"
+      mode: upsert
+      content: |
+        - Tier: WIP(기본), LOCKED(ObjectLock/S3 업로드 확인 후 전이)
+        - Index 스키마(index.json):
+            { "generated_at": "...", "root": "var/evidence",
+              "files": [ { "path":"...", "sha256":"...", "size":123, "mtime":"...", "tier":"WIP|LOCKED", "locked_at":null|"..." , "tampered":false } ],
+              "summary": { "count":N, "tampered":M, "wip":X, "locked":Y } }
+    - section: "Judge SLO — Infra Params"
+      mode: upsert
+      content: |
+        - latency/error 정책에 min_samples 추가
+        - infra.window_sec, infra.grace_burst(스파이크 관용치) 추가
+        - 샘플 부족: decision=inconclusive → 정책에 따라 fail-closed 또는 canary-hold
+    - section: "Rollout — Stage Integrity"
+      mode: upsert
+      content: |
+        - stage 토큰은 여전히 var/rollout/desired_stage.txt(단일 문자열: stable|canary|promote|abort)
+        - 무결성은 사이드카 manifest: var/rollout/desired_stage.manifest.json
+        - manifest 스키마:
+            { "token_sha256":"...", "sig_hmac":"...", "key_id":"k1", "algo":"HMAC-SHA256", "generated_at":"..." }
+        - 컨트롤러는 주기 검증/불일치 시 guard_and_repair 수행
+
+  plan:
+    - section: "Milestones — v0.5.11n"
+      mode: upsert
+      content: |
+        - RBAC default-deny 적용(pep.py)
+        - SLO 인프라 파라미터(min_samples/window/grace) 반영
+        - evidence GC 잡(dry-run 포함) + CI 프리게이트 삽입
+        - stage 서명 사이드카 도입 및 테스트 보강
+
+  ci:
+    - section: "Pre/Release Gates"
+      mode: upsert
+      content: |
+        - Pre-gate: clock_guard → evidence_indexer → evidence_gc(dry-run) → artifacts
+        - Release-gate: infra/canary SLO → 실패 시 abort_on_gate_fail.sh
+
+deliverables:
+  - files:
+      - apps/policy/pep.py
+      - configs/slo/slo-judge-infra.json
+      - apps/judge/slo_schema.py
+      - apps/judge/slo_judge.py
+      - apps/obs/evidence/indexer.py
+      - jobs/evidence_indexer.py
+      - jobs/evidence_gc.py
+      - apps/experiment/stage_file.py
+      - tests/gates/gate_aj/test_slo_infra_min_samples_v1.py
+      - tests/gates/gate_t/test_evidence_gc_tiering_v1.py
+      - tests/gates/gate_ah/test_stage_sig_mismatch_repair_v1.py

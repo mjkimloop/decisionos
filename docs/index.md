@@ -1,5 +1,9 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11o — 2025-11-11 — RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+
+- v0.5.11n — 2025-11-11 — RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
+
 - v0.5.11m — 2025-11-10 — stage 파일 원자화·드리프트 가드, Evidence 불변성, 카나리 장애/롤백 시뮬, 키/시계/권한 하드닝, CI 게이트 강화
 
 - v0.5.11l — 2025-11-10 — 실트래픽 배포 파이프라인 연결(카나리/블루그린), 로그→Evidence 자동화, 운영 게이트/런북

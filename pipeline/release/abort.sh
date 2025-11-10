@@ -10,10 +10,12 @@ log() {
 }
 
 python - <<'PY'
-import os, sys
-from apps.policy.pep import PEP
+import sys
+from apps.policy.pep import require
 
-if not PEP().enforce("deploy:abort"):
+try:
+    require("deploy:abort")
+except PermissionError:
     print("[rbac] deploy:abort denied", file=sys.stderr)
     sys.exit(3)
 PY
@@ -23,8 +25,8 @@ import os
 from apps.experiment.stage_file import write_stage_atomic
 
 stage_path = os.environ.get("STAGE_PATH", "var/rollout/desired_stage.txt")
-write_stage_atomic("abort", stage_path)
-print(f"[stage] abort requested for {stage_path}")
+write_stage_atomic("stable", stage_path)
+print(f"[stage] stable requested for {stage_path}")
 PY
 
 case "$ROLLOUT_MODE" in

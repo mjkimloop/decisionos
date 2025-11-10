@@ -1,0 +1,69 @@
+meta:
+  version: v0.5.11o
+  date: 2025-11-11
+  status: locked
+  summary: "RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제"
+
+patches:
+  techspec:
+    - section: "Reasons — Namespace & Contract v1"
+      mode: upsert
+      content: |
+        • 모든 실패/보류 사유는 main_code 하나만 주(reason)에 기록, 나머지는 meta.reason_detail로 부속.
+        • 네임스페이스: {infra.*, perf.*, budget.*, quota.*, integrity.*, witness.*, canary.*}
+        • JSON 컨트랙트:
+          {
+            "decision": "fail|pass|hold",
+            "reasons": [{"code": "infra.samples_insufficient", "message": "..."}],
+            "meta": {"reason_detail": [{"code":"perf.p95_over","at_ms":1234}]}
+          }
+        • 소비자/리포트는 주(reasons[0].code)만 기준으로 분류.
+    - section: "Stage — Safe-Mode without Key"
+      mode: upsert
+      content: |
+        • DECISIONOS_STAGE_KEY 미설정/서명검증 불가 시 컨트롤러는 fail-safe로 stage=stable 고정.
+        • 기록(write)은 금지하고 경고 로그만 남김. 읽기(read)는 stable로 복구.
+        • 런서버 부팅 시 키/키ID 프리체크: 실패 시 WARN, 운영모드 진입은 허용하되 변경 불가.
+    - section: "Evidence — GC Policy Externalization"
+      mode: upsert
+      content: |
+        • 정책 파일: configs/evidence/gc.yaml
+        • 스키마:
+          retention_days:
+            WIP: 7
+            LOCKED: 365
+          keep_min_per_tenant: 5
+          exclude_globs: ["**/*locked.json"]
+          dry_run: true
+          object_lock:
+            enabled: true
+            retention_days: 365
+            s3_bucket: null
+            s3_prefix: null
+    - section: "CLI Exit Codes — Contract"
+      mode: upsert
+      content: |
+        • dosctl judge quorum: 0=pass, 2=policy_fail, 3=rbac_denied, 4=invalid_input, 5=infra_error.
+        • 배포 스크립트: 릴리스 게이트 실패(2,4,5) → abort_on_gate_fail.sh 호출 → stage 'stable'.
+        • 문서: docs/ops/CLI-DEPLOY.md에 테이블 고정.
+    - section: "SLO — grace_burst Boundary Semantics"
+      mode: upsert
+      content: |
+        • (p95 - limit) / limit ≤ grace_burst → pass, 초과하면 fail.
+        • 경계값(정확히 ==)은 허용(pass)로 정의.
+        • min_samples 미만이면 grace_burst 계산 자체를 생략하고 samples_insufficient로 fail.
+  plan:
+    - section: "Milestones — v0.5.11o"
+      mode: upsert
+      content: |
+        Day 1: Reasons 표준화 훅 적용(slo_judge) + 문서(REA S ONS.md)
+        Day 2: Stage Safe-Mode 구현(controller/stage_file)
+        Day 3: GC 외부화 로더 + 잡 갱신(indexer/gc)
+        Day 4: CLI 종료코드 E2E, 문서 반영
+        Day 5: grace_burst 경계 테스트 추가 및 CI 매트릭스 편입
+    - section: "Next Actions — Ops Hardening"
+      mode: upsert
+      content: |
+        • CI에 pre_gate: clock_guard → evidence_index → gc(dry-run) 아티팩트 업로드
+        • release_gate: infra+canary SLO 통과 시에만 promote
+        • RUNBOOK 갱신: 이유코드/롤백/키미설정 시 Safe-Mode 동작

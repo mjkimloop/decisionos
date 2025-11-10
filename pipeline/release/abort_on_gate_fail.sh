@@ -8,9 +8,11 @@ QUORUM="${4:-2/3}"
 
 python - <<'PY'
 import sys
-from apps.policy.pep import PEP
+from apps.policy.pep import require
 
-if not PEP().enforce("deploy:abort"):
+try:
+    require("deploy:abort")
+except PermissionError:
     print("[rbac] deploy:abort denied", file=sys.stderr)
     sys.exit(3)
 PY

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11mmllki.2i.2i.1ihgfedcbaccbabaaa
-date: 2025-11-10
+version: v0.5.11onmmllki.2i.2i.1ihgfedcbaccbabaaa
+date: 2025-11-11
 status: locked
-summary: Evidence 불변성/인덱서 + S3 ObjectLock + Chaos/DR 스크립트 + Clock drift 가드 + RBAC·CI 주석
+summary: RBAC default-deny · Evidence GC tiering · Judge infra SLO 파라미터화 · Stage 무결성(서명) 강제
 -->
 
 # DecisionOS Implementation Plan
@@ -704,3 +704,27 @@ Day 5: SLO 알람/런북 + CI 릴리스 게이트 확장(운영 스텝)
 - apps/common/clock.py, jobs/clock_guard.py
 - pipeline/chaos/chaos_inject.sh, pipeline/release/abort_on_gate_fail.sh
 - tests/* 스모크 추가, CI 매트릭스에 pre-gate 삽입
+
+## Milestones — v0.5.11n
+- RBAC default-deny 적용(pep.py)
+- SLO 인프라 파라미터(min_samples/window/grace) 반영
+- evidence GC 잡(dry-run 포함) + CI 프리게이트 삽입
+- stage 서명 사이드카 도입 및 테스트 보강
+
+
+<!-- AUTOGEN:BEGIN:Pre/Release Gates -->
+- Pre-gate: clock_guard → evidence_indexer → evidence_gc(dry-run) → artifacts
+- Release-gate: infra/canary SLO → 실패 시 abort_on_gate_fail.sh
+<!-- AUTOGEN:END:Pre/Release Gates -->
+
+## Milestones — v0.5.11o
+Day 1: Reasons 표준화 훅 적용(slo_judge) + 문서(REA S ONS.md)
+Day 2: Stage Safe-Mode 구현(controller/stage_file)
+Day 3: GC 외부화 로더 + 잡 갱신(indexer/gc)
+Day 4: CLI 종료코드 E2E, 문서 반영
+Day 5: grace_burst 경계 테스트 추가 및 CI 매트릭스 편입
+
+## Next Actions — Ops Hardening
+• CI에 pre_gate: clock_guard → evidence_index → gc(dry-run) 아티팩트 업로드
+• release_gate: infra+canary SLO 통과 시에만 promote
+• RUNBOOK 갱신: 이유코드/롤백/키미설정 시 Safe-Mode 동작
