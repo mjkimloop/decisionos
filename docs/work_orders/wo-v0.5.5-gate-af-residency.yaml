@@ -1,0 +1,142 @@
+meta:
+  version: v0.5.5
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AF: Geo/Residency Enforcement v2 — Routing/Transfers/Ledger/Orchestrator (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Residency Model & Region Topology"
+      mode: replace
+      content: |
+        목적: 데이터/결정/아티팩트를 지역 경계에 맞게 저장·처리·이동.
+        모델:
+          - region{id, provider, geo: KR|AP|EU|US, zones[], llm_routes[]}
+          - residency_label{dataset_id|connector_id, region_id, basis[law|contract|consent], sensitivity(P0..P3)}
+          - transfer_matrix{from_region -> to_region: allowed[true|false], basis[], safeguards[SCC|BCR|Encryption]}
+        구성요소:
+          - configs/residency/{regions.yaml, transfer_matrix.yaml}
+          - apps/residency/{models.py, service.py}
+          - 카탈로그 태그: catalog.tags.prv.residency=region_id, prv.sensitivity=P*
+        원칙: 기본은 **in-region 우선**, 교차 전송은 **사전 승인**·**증빙 필수**.
+
+    - section: "Ingest/Process Residency Gate (PEP Hook)"
+      mode: replace
+      content: |
+        훅: apps/policy/pep_hooks/residency.py
+        검사: action[ingest|read|export|train|replicate], actor, dataset.tags(prv.*), region(context).
+        조치: allow / queue_for_transfer / block. 위반 시 reason_codes[], policy_id@ver 기록.
+        마스킹: 교차허용 전 read/export는 자동 redaction(민감 필드).
+
+    - section: "Cross-Border Transfer Controls & Ledger"
+      mode: replace
+      content: |
+        전송 요청: apps/residency/transfer/{request.py, assessor.py, ledger.py}
+        평가: 목적/법적근거/민감도/대체가능성/암호화/수탁자.
+        승인흐름: 위험등급별 4-eyes(Gate-Q)·법무 확인·SCC 템플릿 링크.
+        실행: 암호화 전송, 무결성 체크섬, 대상 리전 키/권한 검증.
+        레저: transfer_id, from/to, basis, approvers, evidence_paths, prev_hash→curr_hash 체인.
+
+    - section: "Region-Aware Router (API/LLM/Jobs)"
+      mode: replace
+      content: |
+        apps/residency/router.py — 요청의 지역/정책/성능을 고려해 경로 결정.
+        LLM 경로: region→허용 모델 목록, 금지/대체 경로(품질/비용/보안) 스코어링.
+        Fallback: 인-리전 불가 시 '승급 경로' + 로그 강화 + HITL 옵션.
+
+    - section: "Data Movement Orchestrator"
+      mode: replace
+      content: |
+        jobs/residency/orchestrator.py — snapshot diff(메타/파티션) 기반 복제/동기화.
+        모드: replicate(one-way), promote(cutover), recall(delete back).
+        제약: 워터마크·레이트리밋·레거시 커넥터 지연 큐, 실패 재시도/보상 트랜잭션.
+
+    - section: "Edge Cache/CDN & Temp Artifacts"
+      mode: replace
+      content: |
+        규칙: P0/P1는 캐시 금지, P2는 단기 TTL+암호화, P3는 표준 TTL.
+        임시물: tmp artifacts는 지역별 버킷 분리·자동 수거·태그 상속.
+
+    - section: "Discovery/Privacy Integration"
+      mode: replace
+      content: |
+        Gate-AD 태그(prv.sensitivity, prv.pii_type)를 residency 훅이 소비.
+        DSAR/삭제 전파 시 cross-region 링크 추적·삭제 롤업 리포트 생성.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - GET  /api/v1/residency/regions
+          - GET  /api/v1/residency/labels?dataset_id=
+          - POST /api/v1/residency/transfer/request {dataset_id, from, to, purpose}
+          - POST /api/v1/residency/transfer/approve {id}
+          - GET  /api/v1/residency/transfer/{id}/evidence
+          - POST /api/v1/residency/orchestrator/run {mode, targets[]}
+        CLI(dosctl):
+          - dosctl residency regions|label get|transfer request|approve|evidence|orchestrator run
+
+    - section: "Dashboards & Evidence"
+      mode: replace
+      content: |
+        dashboards/residency/{overview.json, router.json, transfers.json, lag.json}
+        Evidence(Residency): transfer_ledger.json, scc_bundle.zip, cross_region_deletes.csv
+
+    - section: "Security/Compliance & SLO"
+      mode: replace
+      content: |
+        암호화: at-rest AES-256, in-transit TLS1.2+, 키는 region-local KMS.
+        접근: ABAC 최소권한, 레플리카 읽기는 승인 필요.
+        SLO/수락기준:
+          - 불허 전송 차단율 100%, 미스라우트 0건
+          - 레플리케이션 지연 p95 ≤ 30m (정책 대상 세트)
+          - DSAR 삭제 전파 cross-region 누락 ≤ 0.5%
+          - Router 정책 일관성 테스트 100% 통과
+          - Evidence Binder(Residency) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Region/Residency 모델·구성(매트릭스/라벨)
+        - PEP 훅·Router(LLM/API/Jobs) 통합
+        - Transfer 평가/승인/레저·SCC 번들
+        - Orchestrator(복제/승격/회수)·지연/실패 복구
+        - 대시/증빙·SLO 측정
+
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 176: regions.yaml/transfer_matrix.yaml · models/service 스캐폴드
+        Day 177: PEP 훅(residency) · Router 통합(LLM/API)
+        Day 178: transfer assessor/ledger · 승인흐름(Q 연계) · SCC 템플릿
+        Day 179: orchestrator(복제/승격/회수) · lag 측정 · 실패 보상
+        Day 180: API/CLI · 대시보드 · SLO 측정 · Evidence(Residency)
+
+work:
+  claude:
+    - id: C-90
+      title: Residency Policy Pack & SCC Kit
+      deliverables:
+        - docs/residency/policy_ko.md
+        - docs/residency/scc_templates_ko.md
+        - ops/transfer_assessment_checklist.md
+      acceptance:
+        - 국경이전 근거/예외/승인흐름·체크리스트 포함
+
+    - id: C-91
+      title: Region Topology & Runbook
+      deliverables:
+        - docs/residency/region_topology.md
+        - ops/replication_runbook.md
+      acceptance:
+        - 멀티리전 패턴·장애/지연 대응·복구 절차
+risks:
+  - name: 과도 차단으로 가용성 저하
+    mitigation: queue_for_transfer·비동기 승인·카나리 라우팅
+  - name: 커넥터 지역 기능 한계
+    mitigation: 대체 경로/프록시·전송 전 익명화/토큰화
+  - name: 레플리카 지연/일관성
+    mitigation: 워터마크/TTL·읽기 경고·일관성 등급 표시
+  - name: 오류 구성으로 데이터 유출
+    mitigation: 정책 드리프트 감지·정기 검증·레저 감점 경보

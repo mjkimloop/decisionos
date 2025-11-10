@@ -1,0 +1,779 @@
+# Model Card Template
+#
+# 이 템플릿은 ML 모델의 포괄적인 문서화를 위한 표준 형식입니다.
+# DecisionOS의 모든 프로덕션 모델은 이 템플릿을 따라 Model Card를 작성해야 합니다.
+#
+# 참고: Model Cards for Model Reporting (Mitchell et al., 2019)
+# https://arxiv.org/abs/1810.03993
+
+model_details:
+  # 기본 정보
+  name: "모델 이름 (예: Credit Risk Scoring Model)"
+  version: "시맨틱 버저닝 (예: 2.1.0)"
+  model_id: "고유 식별자 (예: credit_risk_v2_1_0)"
+
+  # 소유 및 연락처
+  owner:
+    team: "소유 팀 (예: Credit Risk ML Team)"
+    contact: "연락처 이메일 (예: credit-ml@company.com)"
+    product_owner: "제품 오너 (예: Jane Doe)"
+    ml_engineer: "ML 엔지니어 (예: John Smith)"
+
+  # 모델 유형
+  model_type:
+    category: "모델 카테고리 (classification/regression/ranking/clustering/rule_based/hybrid)"
+    algorithm: "알고리즘 (예: XGBoost, LightGBM, Neural Network, Decision Tree, Rule Engine)"
+    framework: "프레임워크 (예: scikit-learn 1.3.0, PyTorch 2.0, custom)"
+
+  # 버전 이력
+  version_history:
+    - version: "2.1.0"
+      date: "2025-11-03"
+      changes: "변경 사항 설명"
+      author: "작성자"
+    - version: "2.0.0"
+      date: "2025-09-15"
+      changes: "이전 버전 변경 사항"
+      author: "작성자"
+
+  # 라이센스 및 인용
+  license: "내부 사용 전용 / MIT / Apache 2.0 등"
+  citation:
+    required: true/false
+    format: "인용 형식"
+
+  # 문서 및 참조
+  references:
+    documentation: "https://docs.company.com/models/credit_risk_v2"
+    repository: "https://github.com/company/credit-risk-model"
+    paper: "관련 논문 URL (있는 경우)"
+    related_models:
+      - "관련 모델 ID 1"
+      - "관련 모델 ID 2"
+
+intended_use:
+  # 주요 용도
+  primary_uses:
+    - "신용 대출 승인/거부 의사결정"
+    - "신용 한도 설정"
+    - "리스크 스코어링"
+
+  # 주요 사용자
+  primary_users:
+    - role: "Credit Analysts"
+      usage: "대출 심사 보조 도구"
+    - role: "Automated Decision System"
+      usage: "자동 승인/거부 결정"
+    - role: "Risk Management Team"
+      usage: "포트폴리오 리스크 모니터링"
+
+  # 사용 범위
+  scope:
+    geographic: "대한민국 (또는 Global)"
+    temporal: "2025-2027년 (예상 유효 기간)"
+    domain: "개인 신용 대출"
+    products:
+      - "신용 대출"
+      - "신용카드"
+      - "마이너스 통장"
+
+  # 부적절한 사용
+  out_of_scope_uses:
+    - use: "주택담보대출 심사"
+      reason: "훈련 데이터에 주택담보대출 미포함"
+    - use: "법인 신용 평가"
+      reason: "개인 신용 평가용으로만 훈련됨"
+    - use: "취업 심사"
+      reason: "차별적 사용 가능성"
+    - use: "보험 인수"
+      reason: "보험 도메인 특성 미반영"
+
+factors:
+  # 관련 요인
+  relevant_factors:
+    demographic:
+      - factor: "연령"
+        range: "만 19-75세"
+        note: "법적 연령 제한 및 데이터 분포"
+      - factor: "성별"
+        values: ["남성", "여성", "기타/미공개"]
+        note: "공정성 모니터링 대상"
+
+    socioeconomic:
+      - factor: "소득 수준"
+        range: "연 1,200만원 - 5억원"
+      - factor: "직업"
+        categories: ["정규직", "계약직", "자영업", "프리랜서", "기타"]
+      - factor: "거주 지역"
+        values: "대한민국 전역"
+
+    financial:
+      - factor: "신용 점수"
+        range: "300-900"
+        source: "신용평가기관"
+      - factor: "부채 수준"
+        metric: "DTI (Debt-to-Income Ratio)"
+      - factor: "연체 이력"
+        window: "최근 5년"
+
+  # 평가 요인
+  evaluation_factors:
+    note: "모델 성능은 다음 세그먼트별로 평가됨"
+    segments:
+      - dimension: "연령대"
+        values: ["20대", "30대", "40대", "50대", "60대+"]
+      - dimension: "소득 분위"
+        values: ["하위 25%", "중위 50%", "상위 25%"]
+      - dimension: "신용 등급"
+        values: ["우수", "양호", "보통", "주의"]
+
+metrics:
+  # 모델 성능 메트릭
+  model_performance:
+    primary_metric:
+      name: "AUC-ROC"
+      value: 0.85
+      threshold: ">= 0.80"
+      note: "주요 성능 지표"
+
+    classification_metrics:
+      accuracy:
+        value: 0.82
+        description: "전체 정확도"
+      precision:
+        value: 0.78
+        description: "승인 정밀도 (승인 중 실제 양호 비율)"
+      recall:
+        value: 0.85
+        description: "승인 재현율 (실제 양호 중 승인 비율)"
+      f1_score:
+        value: 0.81
+        description: "F1 Score"
+      specificity:
+        value: 0.80
+        description: "거부 정확도 (실제 불량 중 거부 비율)"
+
+    threshold_analysis:
+      default_threshold: 0.5
+      precision_at_k:
+        k: 100
+        value: 0.90
+        description: "상위 100명 중 정밀도"
+      business_metrics:
+        approval_rate: 0.65
+        bad_rate: 0.03
+        revenue_per_decision: 150000  # KRW
+
+  # 비즈니스 메트릭
+  business_metrics:
+    - name: "승인율"
+      value: "65%"
+      target: "60-70%"
+      description: "전체 신청 중 승인 비율"
+
+    - name: "불량률"
+      value: "3.0%"
+      target: "< 5%"
+      description: "승인 후 90일 이내 연체율"
+
+    - name: "수익성"
+      value: "15%"
+      target: ">= 12%"
+      description: "승인 포트폴리오 ROI"
+
+  # 공정성 메트릭
+  fairness_metrics:
+    note: "보호 속성별 성능 격차 모니터링"
+
+    by_gender:
+      male:
+        approval_rate: 0.66
+        bad_rate: 0.029
+        auc: 0.851
+      female:
+        approval_rate: 0.64
+        bad_rate: 0.031
+        auc: 0.849
+      disparity:
+        approval_rate_ratio: 1.03  # male/female
+        threshold: "< 1.2 (80% rule)"
+        status: "PASS"
+
+    by_age_group:
+      "20s":
+        approval_rate: 0.58
+        auc: 0.830
+      "30s":
+        approval_rate: 0.68
+        auc: 0.860
+      "40s":
+        approval_rate: 0.70
+        auc: 0.855
+      "50s+":
+        approval_rate: 0.62
+        auc: 0.845
+      note: "연령대별 차이는 신용 이력 차이에 기인함 (정당한 차이)"
+
+    fairness_tests:
+      - test: "Demographic Parity"
+        result: "PASS"
+        note: "보호 집단 간 승인율 차이 < 20%"
+      - test: "Equal Opportunity"
+        result: "PASS"
+        note: "보호 집단 간 TPR 차이 < 10%"
+      - test: "Equalized Odds"
+        result: "PASS"
+        note: "보호 집단 간 TPR 및 FPR 차이 < 10%"
+
+training_data:
+  # 데이터 출처
+  data_sources:
+    - source: "내부 대출 신청 데이터베이스"
+      description: "과거 3년간 대출 신청 및 성과 데이터"
+      date_range: "2022-01-01 to 2024-12-31"
+      num_records: 1500000
+
+    - source: "신용평가기관 데이터"
+      description: "신용점수 및 신용 이력"
+      provider: "NICE, KCB"
+      refresh_frequency: "월간"
+
+    - source: "외부 경제 지표"
+      description: "거시경제 변수 (금리, 실업률 등)"
+      provider: "한국은행, 통계청"
+
+  # 데이터 수집
+  data_collection:
+    method: "프로덕션 데이터베이스 추출 + API 연계"
+    time_period: "2022-01-01 ~ 2024-12-31 (3년)"
+    sampling_strategy: "전수 데이터 (샘플링 없음)"
+    consent: "고객 동의 하에 수집 (약관 동의)"
+
+  # 데이터 전처리
+  preprocessing:
+    - step: "결측치 처리"
+      method: "중앙값 대체 (수치형), 최빈값 대체 (범주형), 또는 별도 범주"
+      missing_threshold: "< 30% 결측 피처만 사용"
+
+    - step: "이상치 처리"
+      method: "IQR 방법으로 탐지, 상하한 캡핑"
+      threshold: "Q1 - 3*IQR, Q3 + 3*IQR"
+
+    - step: "피처 엔지니어링"
+      features_created:
+        - "debt_to_income_ratio"
+        - "credit_utilization_rate"
+        - "payment_history_score"
+        - "recent_inquiry_count"
+
+    - step: "인코딩"
+      method: "원-핫 인코딩 (범주형), 표준화 (수치형)"
+
+    - step: "클래스 불균형 처리"
+      method: "SMOTE (Synthetic Minority Over-sampling)"
+      original_ratio: "97:3 (good:bad)"
+      balanced_ratio: "70:30"
+
+  # 데이터 분할
+  data_splits:
+    train:
+      size: 1050000  # 70%
+      date_range: "2022-01-01 ~ 2024-08-31"
+
+    validation:
+      size: 225000  # 15%
+      date_range: "2024-09-01 ~ 2024-10-31"
+
+    test:
+      size: 225000  # 15%
+      date_range: "2024-11-01 ~ 2024-12-31"
+
+    note: "시계열 분할 (과거 데이터로 훈련, 미래 데이터로 테스트)"
+
+  # 데이터 특성
+  data_characteristics:
+    num_features: 120
+    feature_types:
+      numerical: 85
+      categorical: 35
+
+    target_variable:
+      name: "is_good"
+      definition: "승인 후 12개월 내 90일 이상 연체 없음"
+      positive_class: "Good (양호)"
+      negative_class: "Bad (불량)"
+      class_distribution:
+        train: "Good: 97%, Bad: 3%"
+        test: "Good: 96.8%, Bad: 3.2%"
+
+  # 데이터 품질
+  data_quality:
+    completeness: "95.2%"
+    accuracy: "검증됨 (신용평가기관 데이터 교차 확인)"
+    consistency: "데이터 검증 규칙 통과율 99.1%"
+    timeliness: "월간 업데이트, 최대 30일 지연"
+
+    quality_issues:
+      - issue: "일부 자영업자 소득 데이터 신뢰도 낮음"
+        mitigation: "보수적 추정치 사용, 서류 검증 강화"
+      - issue: "신용 이력 부족 고객 (thin file) 5%"
+        mitigation: "대체 데이터 활용 (통신비 납부 등)"
+
+quantitative_analyses:
+  # 단일 분석
+  unitary_analysis:
+    performance_summary:
+      metric: "AUC-ROC"
+      train: 0.89
+      validation: 0.86
+      test: 0.85
+      note: "과적합 없음, 일반화 성능 양호"
+
+    confusion_matrix:
+      test_set:
+        true_positives: 195000  # Good → Approved
+        true_negatives: 5760    # Bad → Denied
+        false_positives: 1440   # Bad → Approved (오승인)
+        false_negatives: 22800  # Good → Denied (오거부)
+
+      interpretation:
+        false_positive_rate: "0.20 (5% bad rate 중 20% 오승인)"
+        false_negative_rate: "0.105 (10.5% 오거부)"
+        cost_analysis: "오승인 비용 >> 오거부 비용 → 보수적 임계값 설정"
+
+  # 교차 분석
+  intersectional_analysis:
+    note: "보호 속성 교차 분석 (성별 × 연령 × 소득)"
+
+    subgroups:
+      - group: "여성 × 20대 × 저소득"
+        sample_size: 15000
+        approval_rate: 0.52
+        bad_rate: 0.038
+        auc: 0.815
+        note: "다른 그룹 대비 성능 낮음 → 추가 모니터링"
+
+      - group: "남성 × 40대 × 고소득"
+        sample_size: 35000
+        approval_rate: 0.78
+        bad_rate: 0.018
+        auc: 0.880
+        note: "최고 성능 세그먼트"
+
+      - group: "전체 기타 조합"
+        note: "모든 교차 그룹에서 AUC >= 0.80 유지"
+
+    disparity_analysis:
+      max_auc_gap: 0.065  # 0.880 - 0.815
+      max_approval_rate_gap: 0.26  # 0.78 - 0.52
+      threshold: "< 0.20 for fairness"
+      status: "REVIEW_NEEDED"
+      action: "저성능 그룹에 대한 모델 개선 계획 수립"
+
+ethical_considerations:
+  # 편향 및 공정성
+  bias_and_fairness:
+    identified_biases:
+      - bias: "연령 편향"
+        description: "20대 승인율이 40대 대비 낮음"
+        root_cause: "신용 이력 부족 (정당한 차이)"
+        mitigation: "대체 데이터 활용 (통신비, 공과금 납부 이력)"
+        status: "MITIGATED"
+
+      - bias: "성별 격차"
+        description: "남녀 승인율 3% 차이"
+        root_cause: "소득 격차 반영 (사회적 요인)"
+        mitigation: "지속적 모니터링, 보호 속성 직접 사용 금지"
+        status: "MONITORING"
+
+    fairness_interventions:
+      - intervention: "보호 속성 제외"
+        detail: "성별, 인종 등을 직접 피처로 사용하지 않음"
+
+      - intervention: "공정성 제약 조건"
+        detail: "Demographic parity 제약 (승인율 격차 < 20%)"
+
+      - intervention: "사후 처리"
+        detail: "임계값 조정을 통해 세그먼트별 공정성 개선"
+
+  # 사용 사례 및 위험
+  use_cases_and_risks:
+    acceptable_risks:
+      - risk: "오거부 (False Negative)"
+        impact: "고객 불편, 사업 기회 손실"
+        severity: "중간"
+        mitigation: "이의 제기 프로세스 제공, 수동 검토 옵션"
+
+      - risk: "오승인 (False Positive)"
+        impact: "재무 손실 (연체/부실)"
+        severity: "높음"
+        mitigation: "보수적 임계값, 사후 모니터링"
+
+    unacceptable_risks:
+      - risk: "차별적 의사결정"
+        description: "보호 속성에 기반한 부당한 차별"
+        prevention: "공정성 테스트 필수, 지속적 모니터링, 규제 준수"
+
+      - risk: "설명 불가능한 거부"
+        description: "거부 사유를 설명할 수 없음"
+        prevention: "Explainability 모듈 (SHAP, Reason Codes) 필수"
+
+  # 규제 준수
+  regulatory_compliance:
+    regulations:
+      - regulation: "신용정보의 이용 및 보호에 관한 법률"
+        compliance_status: "준수"
+        key_requirements:
+          - "신용정보 주체 동의"
+          - "신용정보 보호 조치"
+          - "신용정보 제공·활용 내역 통보"
+
+      - regulation: "개인정보 보호법"
+        compliance_status: "준수"
+        key_requirements:
+          - "개인정보 수집·이용 동의"
+          - "개인정보 처리 방침 공개"
+          - "개인정보 열람·정정·삭제 권리 보장"
+
+      - regulation: "AI 윤리 기준 (금융위원회 가이드라인)"
+        compliance_status: "준수"
+        key_requirements:
+          - "투명성 및 설명 가능성"
+          - "공정성 및 비차별"
+          - "책임성"
+
+    audit_trail:
+      enabled: true
+      retention: "7년 (법적 요구사항)"
+      access_control: "감사 권한자 전용"
+
+  # 환경 영향
+  environmental_impact:
+    training:
+      compute_hours: "500 GPU hours (NVIDIA A100)"
+      energy_consumption: "약 1,500 kWh"
+      carbon_footprint: "약 600 kg CO2e"
+
+    inference:
+      latency: "< 100ms per request"
+      throughput: "1000 requests/second"
+      energy_per_inference: "< 0.01 Wh"
+
+    sustainability:
+      note: "클라우드 제공자의 재생에너지 사용 비율: 75%"
+      optimization: "모델 경량화를 통해 추론 비용 30% 절감"
+
+caveats_and_recommendations:
+  # 주의사항
+  caveats:
+    - caveat: "외부 경제 위기 시 성능 저하 가능"
+      detail: "팬데믹, 금융위기 등 극단적 상황에서는 재훈련 필요"
+      monitoring: "거시경제 지표 모니터링, 드리프트 감지"
+
+    - caveat: "신용 이력 부족 고객 (thin file)에 대한 성능 제한적"
+      detail: "신규 사회 진입자, 이민자 등에 대한 정확도 낮음"
+      alternative: "대체 데이터 모델 사용 권장"
+
+    - caveat: "특정 직업군(프리랜서, 자영업자) 소득 추정 불확실성"
+      detail: "소득 변동성 높아 예측 어려움"
+      mitigation: "추가 서류 검증, 보수적 평가"
+
+    - caveat: "법규 변경 시 재검증 필요"
+      detail: "DSR 규제 강화 등 정책 변경 시 모델 업데이트 필수"
+      process: "분기별 규제 모니터링, 필요 시 긴급 재훈련"
+
+  # 권장사항
+  recommendations:
+    deployment:
+      - recommendation: "Canary 배포 필수"
+        detail: "1% → 5% → 25% → 50% → 100% 단계적 배포"
+        reason: "프로덕션 환경에서의 예상치 못한 문제 조기 발견"
+
+      - recommendation: "Shadow 모드 1주일 운영"
+        detail: "실제 결정에 영향 없이 병렬 실행하여 성능 검증"
+        reason: "A/B 비교를 통한 안전한 배포"
+
+      - recommendation: "수동 검토 옵션 유지"
+        detail: "경계선 케이스(스코어 0.4-0.6)는 수동 검토"
+        reason: "완전 자동화의 리스크 완화"
+
+    monitoring:
+      - recommendation: "일일 성능 모니터링"
+        detail: "승인율, 불량률, 드리프트 메트릭 대시보드 확인"
+        frequency: "매일 오전 10시"
+
+      - recommendation: "월간 공정성 감사"
+        detail: "보호 속성별 성능 격차 리포트 생성"
+        responsible: "ML Ops 팀 + 컴플라이언스 팀"
+
+      - recommendation: "분기별 모델 검증"
+        detail: "최신 데이터로 성능 재평가, 재훈련 필요성 판단"
+        trigger: "AUC < 0.82 또는 드리프트 심화 시 재훈련"
+
+    improvement:
+      - recommendation: "대체 데이터 확장"
+        detail: "통신비, 공과금 납부, SNS 데이터 활용 검토"
+        benefit: "Thin file 고객 평가 개선"
+
+      - recommendation: "설명 가능성 강화"
+        detail: "Reason Codes + SHAP 설명 제공"
+        benefit: "고객 신뢰 향상, 규제 대응"
+
+      - recommendation: "앙상블 모델 검토"
+        detail: "XGBoost + LightGBM + 규칙 기반 앙상블"
+        benefit: "성능 향상 및 강건성 증대"
+
+    retraining:
+      - recommendation: "정기 재훈련 주기: 분기 1회"
+        detail: "최근 3개월 데이터 추가하여 재훈련"
+        condition: "드리프트 없어도 정기 재훈련 권장"
+
+      - recommendation: "긴급 재훈련 조건"
+        detail: "AUC < 0.80 또는 불량률 > 5% 또는 PSI > 0.25 지속"
+        sla: "2주 이내 재훈련 및 재배포"
+
+model_governance:
+  # 승인 및 검토
+  approval_process:
+    initial_approval:
+      date: "2025-11-03"
+      approvers:
+        - name: "ML Lead"
+          role: "Technical Approval"
+        - name: "Risk Manager"
+          role: "Risk Approval"
+        - name: "Compliance Officer"
+          role: "Regulatory Approval"
+        - name: "Product Owner"
+          role: "Business Approval"
+
+    review_schedule:
+      frequency: "분기별"
+      next_review: "2026-02-03"
+      triggers:
+        - "성능 저하 (AUC < 0.82)"
+        - "공정성 위반"
+        - "규제 변경"
+        - "중대 사고"
+
+  # 버전 관리
+  version_control:
+    repository: "https://github.com/company/credit-risk-model"
+    branch: "main"
+    commit_hash: "a1b2c3d4e5f6"
+    artifacts:
+      model_binary: "s3://models/credit_risk_v2.1.0.pkl"
+      training_code: "s3://code/train_credit_risk_v2.1.0.zip"
+      config: "s3://configs/credit_risk_v2.1.0.yaml"
+      test_results: "s3://results/credit_risk_v2.1.0_test.json"
+
+  # 접근 제어
+  access_control:
+    model_artifacts:
+      read: ["ml_team", "data_science_team", "auditors"]
+      write: ["ml_lead", "senior_ml_engineer"]
+
+    production_deployment:
+      approval_required: true
+      approvers: ["ml_lead", "engineering_manager"]
+
+    training_data:
+      access: ["ml_team", "data_engineers"]
+      pii_access: ["authorized_personnel_only"]
+
+  # 감사 로그
+  audit_logging:
+    enabled: true
+    log_location: "s3://audit-logs/models/credit_risk/"
+    retention_period: "7 years"
+    logged_events:
+      - "모델 훈련"
+      - "모델 배포"
+      - "모델 롤백"
+      - "설정 변경"
+      - "접근 로그"
+      - "예측 요청 (샘플링 10%)"
+
+technical_specifications:
+  # 시스템 요구사항
+  system_requirements:
+    inference:
+      cpu: "4 cores"
+      memory: "8 GB"
+      storage: "2 GB"
+      gpu: "Not required"
+
+    training:
+      cpu: "16 cores"
+      memory: "64 GB"
+      storage: "100 GB"
+      gpu: "NVIDIA A100 (optional, 5x speedup)"
+
+  # 성능 특성
+  performance_characteristics:
+    latency:
+      p50: "45ms"
+      p95: "85ms"
+      p99: "120ms"
+      max: "200ms"
+
+    throughput:
+      max_rps: 1000
+      recommended_rps: 500
+
+    resource_usage:
+      cpu_per_request: "10ms"
+      memory_per_request: "5MB"
+
+  # 입력 사양
+  input_specifications:
+    format: "JSON"
+    schema_version: "2.1"
+    required_fields:
+      - field: "applicant_id"
+        type: "string"
+        format: "UUID"
+
+      - field: "credit_score"
+        type: "integer"
+        range: [300, 900]
+
+      - field: "annual_income"
+        type: "float"
+        range: [0, 1000000000]
+        unit: "KRW"
+
+      - field: "employment_type"
+        type: "string"
+        enum: ["permanent", "contract", "self_employed", "freelancer"]
+
+      # ... (총 120개 피처)
+
+    optional_fields:
+      - field: "existing_relationship"
+        type: "boolean"
+
+    validation:
+      schema_validation: "JSON Schema v7"
+      business_rules: "Additional validation rules applied"
+
+  # 출력 사양
+  output_specifications:
+    format: "JSON"
+    schema:
+      decision:
+        type: "string"
+        enum: ["APPROVE", "DENY", "REVIEW"]
+
+      score:
+        type: "float"
+        range: [0, 1]
+        description: "신용 리스크 스코어 (0=고위험, 1=저위험)"
+
+      confidence:
+        type: "float"
+        range: [0, 1]
+        description: "예측 신뢰도"
+
+      reason_codes:
+        type: "array"
+        items: "string"
+        description: "결정 사유 코드"
+
+      recommended_limit:
+        type: "float"
+        unit: "KRW"
+        nullable: true
+        description: "권장 한도 (승인 시)"
+
+change_log:
+  - version: "2.1.0"
+    date: "2025-11-03"
+    type: "minor"
+    changes:
+      - "대체 데이터 피처 추가 (통신비 납부 이력)"
+      - "공정성 제약 조건 강화"
+      - "추론 성능 최적화 (20% 개선)"
+
+    impact:
+      performance: "AUC: 0.84 → 0.85"
+      fairness: "성별 승인율 격차: 5% → 3%"
+      business: "Thin file 고객 커버리지 15% 증가"
+
+    migration:
+      breaking_changes: false
+      backward_compatible: true
+      action_required: "None"
+
+  - version: "2.0.0"
+    date: "2025-09-15"
+    type: "major"
+    changes:
+      - "전면 재설계 (XGBoost → LightGBM)"
+      - "피처 엔지니어링 개선"
+      - "훈련 데이터 기간 1년 → 3년 확장"
+
+    impact:
+      performance: "AUC: 0.78 → 0.84"
+      latency: "150ms → 85ms (p95)"
+
+    migration:
+      breaking_changes: true
+      action_required: "입력 스키마 변경, 재통합 필요"
+      migration_guide: "https://docs.company.com/models/migration_v1_to_v2"
+
+contact_information:
+  # 기술 지원
+  technical_support:
+    team: "ML Operations Team"
+    email: "ml-ops@company.com"
+    slack: "#ml-support"
+    on_call: "PagerDuty (ml-oncall)"
+
+  # 비즈니스 문의
+  business_inquiries:
+    product_owner: "Jane Doe"
+    email: "jane.doe@company.com"
+
+  # 규제 및 컴플라이언스
+  compliance:
+    officer: "Compliance Team"
+    email: "compliance@company.com"
+
+  # 모델 개발팀
+  development_team:
+    lead: "John Smith"
+    email: "credit-ml@company.com"
+    repository: "https://github.com/company/credit-risk-model"
+
+appendix:
+  # 추가 자료
+  additional_resources:
+    - title: "모델 개발 보고서"
+      url: "https://docs.company.com/models/credit_risk_development_report.pdf"
+
+    - title: "공정성 감사 보고서"
+      url: "https://docs.company.com/models/credit_risk_fairness_audit.pdf"
+
+    - title: "성능 벤치마크"
+      url: "https://docs.company.com/models/credit_risk_benchmark.pdf"
+
+    - title: "A/B 테스트 결과"
+      url: "https://docs.company.com/models/credit_risk_ab_test_results.pdf"
+
+  # 용어 정의
+  glossary:
+    AUC-ROC: "Area Under the Receiver Operating Characteristic Curve - 분류 모델의 성능 지표"
+    PSI: "Population Stability Index - 데이터 분포 변화 측정 지표"
+    SHAP: "SHapley Additive exPlanations - 모델 설명 기법"
+    DTI: "Debt-to-Income Ratio - 소득 대비 부채 비율"
+    DSR: "Debt Service Ratio - 총부채원리금상환비율"
+    Thin File: "신용 이력이 부족한 고객"
+
+  # 참고 문헌
+  references:
+    - citation: "Mitchell, M., et al. (2019). Model Cards for Model Reporting. FAT* '19."
+      url: "https://arxiv.org/abs/1810.03993"
+
+    - citation: "Mehrabi, N., et al. (2021). A Survey on Bias and Fairness in Machine Learning. ACM Computing Surveys."
+      url: "https://arxiv.org/abs/1908.09635"

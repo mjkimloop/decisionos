@@ -1,0 +1,131 @@
+meta:
+  version: v0.5.2
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AC: FinOps v2 — Unit Economics · Forecast · Optimizers (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Cost Ontology & Attribution"
+      mode: replace
+      content: |
+        원가 계층: provider→service→resource→operation(metric)→decision/event.
+        기본 매핑:
+          - LLM/모델: tokens_in/out, requests, router_path
+          - 데이터: storage.gb_month, egress.gb, scans.ops
+          - 실행: cpu_min, gpu_min, job.exec_ms
+        귀속(Attribution):
+          - tenant/org/project/workspace/tag(cost_center) 기준 가중배분
+          - shared cost: fanout 비율/시간/사용량 기반 apportion
+        정합성: Gate-S usage/rating과 1% 이내 차이, Gate-T counters와 교차검증
+
+    - section: "Unit Economics · Showback/Chargeback"
+      mode: replace
+      content: |
+        KPI: cost_per_decision, cost_per_lead, gross_margin_per_org, channel_CAC, payback.
+        Showback: 월별/채널별 리포트, Cost Center별 분해.
+        Chargeback: org 단위 내부 정산 스텁(회계 연동은 후속).
+
+    - section: "Forecast & Budget Planning"
+      mode: replace
+      content: |
+        Forecast 엔진: 프로파일 기반(주/월 seasonality) + 간단한 Prophet/ARIMA 스텁 선택.
+        출력: next_1/3/6/12개월 usage/cost 예측(MAPE 목표 ≤ 15%).
+        예산 계획: budget_suggest{amount, bands(p50/p90), notes}, Gate-S 코스트가드와 연동.
+
+    - section: "Optimizers (Policies & Executors)"
+      mode: replace
+      content: |
+        모델 최적화:
+          - model_policy: quality tier(hi/med/low)·latency·cost ceiling
+          - router_cost: 저비용 경로 우선, 실패/품질 저하 시 승급
+        실행 최적화:
+          - batcher: 미세 호출 묶기, dedupe/cache(hit ratio 카드)
+          - sampler: 커넥터/ETL 샘플링율/주기 조정
+          - storage_lifecycle: hot→warm→cold TTL/압축/삭제 정책
+        커밋먼트:
+          - committed_use/_reserved 관리, 이용률 추적, 언더/오버 유틸 경보
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - GET  /api/v1/finops/unit?scope=tenant|project&period=...
+          - GET  /api/v1/finops/forecast?scope=...&horizon=1|3|6|12
+          - POST /api/v1/finops/optimizer/run {targets[], policy_id?}
+          - POST /api/v1/finops/commitments/set {provider, product, qty, term}
+          - GET  /api/v1/finops/commitments/utilization
+        CLI(dosctl):
+          - dosctl finops unit|forecast|opt run|commit set|commit util
+
+    - section: "Dashboards"
+      mode: replace
+      content: |
+        dashboards/finops:
+          - unit_economics.json (per decision/lead/org)
+          - forecast.json (p50/p90 bands)
+          - optimizers.json (savings, cache hit, batch ratio)
+          - commitments.json (utilization, break-even)
+
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        ABAC(W)로 비용 데이터 접근 최소화. 비용 메타는 PII 제거/가명화.
+        증빙: 모든 최적화 실행에 ticket_id/trace_id, before/after 스냅샷 보관(Evidence/FinOps).
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AC 성공 기준:
+          - Forecast MAPE ≤ 15% (top tenants 3개월 창)
+          - Optimizer 실행 후 30일 내 실현 비용 절감 ≥ 10% (대상 영역 평균)
+          - Cost attribution 차이 |finops - billing| / billing ≤ 1%
+          - Commit utilization ≥ 80% (적용 테넌트)
+          - Evidence Binder(FinOps) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - 코스트 온톨로지/귀속 엔진
+        - 유닛 이코노믹스·쇼백/차지백 리포트
+        - 예측/예산 계획 엔진
+        - 옵티마이저(모델/배치/스토리지/커넥터)
+        - 커밋먼트 관리·대시보드·증빙
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 161: cost_model/attribution 스키마·엔진 · billing/obs 대조
+        Day 162: unit economics 리포트 · showback/chargeback 스텁
+        Day 163: forecast 엔진(p50/p90) · budget_suggest · 대시 카드
+        Day 164: optimizers(model_policy/router_cost/batcher/cache/sampler/storage_lifecycle)
+        Day 165: commitments 관리/활용률 · API/CLI · SLO 측정 · Evidence(FinOps)
+
+work:
+  claude:
+    - id: C-83
+      title: FinOps Policy Pack & Savings Playbook
+      deliverables:
+        - docs/finops/policies.md
+        - ops/savings_playbook.md  # 모델/배치/스토리지/커넥터별 전술
+      acceptance:
+        - 품질 보존 조건·롤백 기준·의사결정 트리 포함
+
+    - id: C-84
+      title: Forecast/Budget Guide
+      deliverables:
+        - docs/finops/forecast_method.md
+        - docs/finops/budget_planning.md
+      acceptance:
+        - seasonality/휴일 효과·MAPE 측정법·예산 편성 지침
+risks:
+  - name: 과도한 최적화로 QoS 악화
+    mitigation: 품질 가드(정확도/지연 상한)·카나리/롤백·HITL 승인(Gate-Q)
+  - name: 귀속오류/중복집계
+    mitigation: 스키마 검증·샘플 대조·billing/obs 더블체크
+  - name: 예측 드리프트
+    mitigation: 월간 재추정·MAPE 경보·모델 전환 스위치
+  - name: 커밋 과대/과소
+    mitigation: 3/6/12M 시나리오 비교·유틸화율 경보·승인 흐름
+  - name: 데이터 경계/PII 혼입
+    mitigation: ABAC/가명화·Residency 준수·증빙 마스킹

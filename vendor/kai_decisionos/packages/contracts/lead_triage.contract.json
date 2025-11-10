@@ -1,0 +1,12 @@
+{
+  "$schema": "https://example.com/schemas/decision_contract.schema.json",
+  "schema_version": "v1",
+  "name": "lead_triage",
+  "version": "1.0.0",
+  "description": "Lead triage contract for lending pack v1",
+  "rule_path": "rules/triage/lead_triage.yaml",
+  "input_schema": "schemas/lead_payload.schema.json",
+  "request_schema": "schemas/decision_request.schema.json",
+  "response_schema": "schemas/decision_response.schema.json",
+  "label_key": "converted"
+}

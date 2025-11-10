@@ -1,0 +1,60 @@
+meta:
+  version: v0.5.10a
+  date: 2025-11-07
+  status: locked
+  summary: "Gate-AJ Hotfix — No-SPOF, Witness-based Judge, Quorum(2/3)"
+
+patches:
+  techspec:
+    - section: "Experiment Ops — Scope & Principles"
+      mode: upsert
+      content: |
+        Judge는 측정을 수행하지 않는다. 모든 SLO 판정은 Gate-T가 산출한 증빙(witness) 아티팩트에만 의존한다.
+        판정은 최소 2개 독립 구현의 합의(2/3)를 필요로 한다. 합의 실패 시 Fail-Closed.
+
+    - section: "SLO-as-Code — Schema"
+      mode: upsert
+      content: |
+        slo.json에 'witness_requirements' 추가:
+          - source: gate-t
+          - kinds: [histogram, counter, gauge, custom:rag_citation]
+          - integrity: sha256(q-ledger hash)
+        예: RAG_Answer_Standard -> latency_p95_ms, err_rate, citation_cov
+
+    - section: "Runner & Judge"
+      mode: upsert
+      content: |
+        runner는 부하 합성/재생만 제공(선택). 판정 데이터는 witness에서만 읽는다.
+        judge는 3경로 구현: X-190a(codex), C-102(claude), dosctl 내장 DSL. 합의(2/3) 필수.
+        self-test: gold_witness 케이스 통과 필수.
+
+    - section: "AB/N-Way & Guarded Rollout"
+      mode: upsert
+      content: |
+        승급 조건: (i) witness 정합성 OK, (ii) 합의된 Pass, (iii) 비용가드(S) 미위반.
+        불일치/누락 시 자동 동결·롤백(최대 TTR 10분).
+
+    - section: "Dashboards & Evidence"
+      mode: upsert
+      content: |
+        evidence/expops/<run_id>/
+          - witness_refs.json (gate-t 소스/해시/기간)
+          - verdicts_{x190a,c102,cli}.json
+          - quorum_verdict.json
+          - discrepancies.csv (판정 불일치)
+  plan:
+    - section: "Milestones — Gate-AJ"
+      mode: upsert
+      content: |
+        - Gate-T witness export v1
+        - Multi-Judge(2/3) 합의 및 self-test
+        - AH 승급 훅: witness+quorum 의존
+        - 일일 백테스트 크론
+    - section: "Next Actions — Gate-AJ"
+      mode: upsert
+      content: |
+        Day 201: Gate-T witness exporter 스키마/샘플
+        Day 202: X-190a(codex) judge 구현 · gold_witness 작성
+        Day 203: C-102(claude) judge 구현 · dosctl DSL 판
+        Day 204: quorum 합의/불일치 처리 · AH/S 훅 교체
+        Day 205: 백테스트 크론 · Evidence/대시 업데이트

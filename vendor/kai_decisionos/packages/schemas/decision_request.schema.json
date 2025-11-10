@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://decisionos.io/schemas/decision_request.json",
+  "title": "Decision Request Schema",
+  "description": "Schema for decision API requests",
+  "type": "object",
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "description": "Organization identifier",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object",
+      "description": "Decision payload (contract-specific)",
+      "properties": {
+        "credit_score": {
+          "type": "integer",
+          "minimum": 300,
+          "maximum": 850
+        },
+        "dti": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2.0
+        },
+        "income_verified": {
+          "type": "boolean"
+        }
+      },
+      "required": ["credit_score", "dti", "income_verified"]
+    }
+  },
+  "required": ["org_id", "payload"],
+  "additionalProperties": false
+}

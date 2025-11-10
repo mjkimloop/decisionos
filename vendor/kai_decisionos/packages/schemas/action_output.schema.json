@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://decisionos.io/schemas/action_output.json",
+  "title": "Action Output Schema",
+  "description": "Output schema for decision actions",
+  "type": "object",
+  "properties": {
+    "class": {
+      "type": "string",
+      "enum": ["approve", "reject", "review"],
+      "description": "Decision class",
+      "examples": ["approve", "reject", "review"]
+    },
+    "reasons": {
+      "type": "array",
+      "description": "List of reasons for the decision",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "examples": [
+        ["strong_credit_and_low_dti"],
+        ["low_credit_score", "high_risk_profile"]
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score (0.0-1.0)",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "examples": [0.92, 0.85, 0.55]
+    },
+    "required_docs": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "List of required documents (for review class)",
+      "default": [],
+      "examples": [
+        ["income_proof", "identity"],
+        ["bank_statements", "tax_returns"]
+      ]
+    }
+  },
+  "required": ["class", "reasons", "confidence"],
+  "additionalProperties": false
+}

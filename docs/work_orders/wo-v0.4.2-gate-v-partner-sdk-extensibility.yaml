@@ -1,0 +1,181 @@
+meta:
+  version: v0.4.2
+  date: 2025-11-04
+  status: locked
+  summary: "Gate-V: Partner SDK & Extensibility · Plugins/Webhooks/Embeds · Sandbox/Signing · Marketplace Beta (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Extensibility — Scope & Types"
+      mode: replace
+      content: |
+        확장 유형(v1):
+          - Decision Plugin: 규칙/모델 실행 전·후 훅(pre|post), 커스텀 스코어러/피처 계산기
+          - Connector Plugin: 신규 데이터 소스/싱크(읽기/쓰기)
+          - Policy Hook: 가드레일/정책 평가 커스텀 모듈
+          - Webhook: 이벤트 구독(case.opened, decision.made, invoice.issued 등)
+          - Embed Widget: 대시/케이스뷰에 삽입 가능한 UI 위젯(read-only 우선)
+        표준 계약(Manifest ext.yaml):
+          name, version(semver), type, entrypoint, permissions(scopes[]),
+          resources(cpus, mem_mb, tmp_mb, timeout_ms), network_egress[none|allow_domains[]],
+          secrets(required[]), runtime[python-3.11|node-20|wasm], compat{api_min, api_max}
+
+    - section: "Security — Sandbox & Permissions"
+      mode: replace
+      content: |
+        샌드박스:
+          - 런타임: WASI/wasmtime 우선, python/node는 파이어크래커 경량VM
+          - 파일: 읽기전용 바인드, /tmp만 쓰기, 용량 제한
+          - 네트워크: 기본 차단, allowlist 도메인별 승인
+          - 시크릿: 런타임 주입(단건 스코프), 환경변수/파일 저장 금지
+        권한/스코프 예:
+          - data.read: 카탈로그/라인리지 조회
+          - decisions.run: DecisionContract 호출
+          - hitl.write: 케이스/노트/첨부 쓰기
+          - billing.read: 사용량/인보이스 조회
+        서명/신뢰:
+          - dev 서명(Self-signed) → staging, org 서명(Org CA) → 내부 배포, platform CA → 마켓 승인
+          - ext.tgz + ext.yaml + sig 파일(sha256 + x509) 검증
+
+    - section: "SDKs & DevEx"
+      mode: replace
+      content: |
+        SDK:
+          - sdk/python: decorators(@pre_hook, @post_hook, @feature), client(dos-api)
+          - sdk/node: 동일 컨셉
+        로컬 실행기:
+          - ext-run: 샌드박스 에뮬레이터(리소스·네트워크 제한 시뮬레이션)
+        스캐폴드:
+          - `dosctl ext init --type decision --runtime python` → 예제 생성
+        테스트:
+          - 계약·권한·리소스·시간초과·네트워크 제한 단위/통합 테스트
+
+    - section: "Distribution — Registry/Marketplace (Beta)"
+      mode: replace
+      content: |
+        레지스트리:
+          - 내부 OCI 호환 레지스트리(artifact: ext:namespace/name:version)
+          - 채널: dev, staging, private-beta
+        승인 플로우:
+          - 제출 → 자동 검사(정적분석/권한/크기/라이선스) → 보안 리뷰 → 샌드박스 e2e → 서명 → 게시
+        마켓(베타, 비공개):
+          - web/marketplace: 카드 뷰(이름/권한/지원 도메인), 설치/업데이트 이력
+          - 설치는 org owner만, 변경 사항 감사 로그
+
+    - section: "Lifecycle & APIs"
+      mode: replace
+      content: |
+        설치/업데이트/롤백:
+          - install: ext artifact pull → 검증/서명 확인 → 배치 → 활성화
+          - update: 호환성 검사(api range) → 트래픽 1% 카나리 → 100%
+          - rollback: 이전 해시로 복귀
+        API:
+          - POST /api/v1/ext/install {org_id, artifact_ref}
+          - POST /api/v1/ext/enable {org_id, name, version}
+          - POST /api/v1/ext/disable {org_id, name}
+          - GET  /api/v1/ext/list?org_id=
+          - POST /api/v1/webhooks/subscribe {event, target_url, secret?}
+          - GET  /api/v1/marketplace/list?channel=private-beta
+        CLI(dosctl):
+          - `dosctl ext init|pack|sign|push|install|enable|disable|ls`
+          - `dosctl webhooks add|ls|rm`
+          - `dosctl market ls --channel private-beta`
+
+    - section: "Interfaces — Plugin Contracts"
+      mode: replace
+      content: |
+        Decision Plugin(예):
+          def pre_hook(request: DecisionRequest, ctx: Ctx) -> DecisionRequest|Error
+          def post_hook(response: DecisionResponse, ctx: Ctx) -> DecisionResponse|Error
+        Connector Plugin(예):
+          class Source:
+            def scan(self, since_cursor) -> RecordsPage
+          class Sink:
+            def write(self, records: list[Record]) -> Result
+        모든 콜은 ctx.trace_id/corr_id/tenant 스코프 포함, 시간제한 기본 3s
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-V 성공 기준:
+          - 샌드박스 격리 검증: 파일/네트워크/시크릿 위반 0, 리소스 가드 동작
+          - 서명/배포/롤백 e2e, 검증 실패 시 차단 동작
+          - SDK Hello-World(Decision/Connector) 2종 설치→실행 성공
+          - 웹훅 서브스크립션 보안검증(서명·리플레이 방지) 통과
+          - 마켓플레이스(베타) 비공개 리스트에서 설치/업데이트/감사 로그 증빙
+          - 문서/가이드/샘플 포함한 Evidence Bundle 제출
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - 샌드박스/권한/서명 체인 · 설치/업데이트/롤백
+        - SDK(py/node) · 스캐폴드/로컬 실행기
+        - 플러그인 계약(Decision/Connector/Policy) v1
+        - 레지스트리/마켓(베타) · 설치/감사
+        - 웹훅/임베드 위젯(읽기 전용) · Evidence Bundle
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 111: 샌드박스 실행기(ext-run)·리소스/네트워크 가드·권한 스키마
+        Day 112: 서명/검증 파이프라인·`dosctl ext sign|push` · 설치/롤백 API
+        Day 113: SDK(py/node)·스캐폴드·HelloWorld(Decision/Connector)
+        Day 114: 레지스트리/마켓(베타)·카드 뷰·설치 감사
+        Day 115: 웹훅/임베드(읽기)·보안 시험·SLO 증빙·Evidence 업데이트
+
+work:
+    codex:
+    - id: X-99
+      title: Sandbox Runtime & Guards
+      deliverables:
+        - apps/ext/sandbox/{runner.py, wasi_host.rs, limits.py}
+        - apps/ext/security/{perm_model.py, secrets_vault.py, egress_guard.py}
+      acceptance:
+        - 파일/네트워크/시크릿 위반 테스트 100% 차단, 리소스 제한 동작
+    - id: X-100
+      title: Signing & Distribution
+      deliverables:
+        - apps/ext/signing/{sign.py, verify.py}
+        - routers/ext_deploy.py  # install/enable/disable/list
+      acceptance:
+        - ext.tgz+ext.yaml 서명 검증·롤백 e2e·서명 위조 차단
+    - id: X-101
+      title: SDKs & Scaffold & Local Runner
+      deliverables:
+        - sdk/python/{decorators.py, client.py, examples/}
+        - sdk/node/{index.ts, examples/}
+        - tools/ext-run
+      acceptance:
+        - HelloWorld 플러그인 2종 로컬·샌드박스 실행 성공
+    - id: X-102
+      title: Registry & Marketplace (Beta)
+      deliverables:
+        - apps/ext/registry/{oci.py}
+        - web/marketplace/{index.html, card.html}
+      acceptance:
+        - private-beta 채널 게시/설치/감사 로그 저장
+    - id: X-103
+      title: Webhooks & Embeds
+      deliverables:
+        - routers/webhooks.py, apps/ext/webhooks/verify.py
+        - web/embed/widgets/{counter.html, chart.html}  # read-only
+      acceptance:
+        - 서명검증·리플레이 방지, 위젯 삽입/권한 체크
+    - id: P-19
+      title: dosctl Extensions (ext/webhooks/market)
+      deliverables:
+        - cli/dosctl/main.py: ext init|pack|sign|push|install|ls, webhooks add|ls|rm, market ls
+      acceptance:
+        - 로컬에서 패키징→서명→배포→설치 e2e 가능
+
+risks:
+  - name: 샌드박스 우회/권한 과다
+    mitigation: 최소권한, 정적분석·정책 린트, 실행 전 권한 승인 흐름
+  - name: 비용 폭증(무한 로그/네트워크)
+    mitigation: 리소스/네트워크 쿼터, 요금/코스트가드 연동(Gate-S)
+  - name: 공급망 위험(악성 플러그인)
+    mitigation: 서명·리뷰·리스트 제한(private-beta), 런타임 모니터링
+  - name: 호환성 파편화
+    mitigation: api_min/max 범위 엄격, 디프리케이션 정책·컴패티빌리티 층
+  - name: 데이터 유출
+    mitigation: 데이터 경계/ABAC(Gate-W 예정) 선적용 대상만 노출

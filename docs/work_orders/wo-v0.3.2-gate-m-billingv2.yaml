@@ -1,0 +1,124 @@
+meta:
+  version: v0.3.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-M: Usage-Based Pricing v2 · Seat/Role Billing · Self‑Serve Upgrade/Cancel (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Pricing Model v2"
+      mode: replace
+      content: |
+        플랜/요율(v2):
+        - Plan Tiers: Sandbox(무료), PoV(계량), Pilot(계량+최저요금), Enterprise(견적)
+        - Metrics:
+          * decide_calls (1000건 단위), ingest_calls, storage_gb_days, hitl_tasks
+          * seats: {agent, reviewer, admin} — 역할별 단가
+        - Rating Rules:
+          * 계량 단가는 계층형(tiered) — 예: 0-100k, 100k-1M, 1M+
+          * seats는 일할 계산(일 단위), 중도 변경 시 프로레이션
+        - Taxes: VAT 10%(KR) — 금액·세액 라인 분리, 영수증/인보이스에 표기
+        - Discounts/Coupons: 퍼센트·정액·구간 한도 지원, 소진/만료 추적
+    - section: "Entitlements & Enforcement"
+      mode: replace
+      content: |
+        권한/한도(v2):
+        - entitlements.yaml: {feature_flags, rate_limits, seat_limits, region, vendors}
+        - Enforcement: gateway/budget_enforcer와 통합, 초과 시 소프트캡(경고)→하드캡(차단)
+        - Grace: 결제실패 시 7일 유예, 이후 좌석 downsize→필수 기능만 유지
+    - section: "Billing Engine v2"
+      mode: replace
+      content: |
+        과금 엔진 구성:
+        - Collector: usage_event{ts, tenant_id, metric, qty} 수집(버전·출처 포함)
+        - Rater: 요율표(ratebook.yaml)로 rating → line_items
+        - Invoicer: 월말/중도 결산, 프로레이션·세금·할인 적용 → invoice_{id}.pdf
+        - Reconciler: provider 정산과 대조(드리프트 ≤ 1%), 조정분 생성
+        - Currency: KRW 기본(소수점 원단위 반올림), 멀티통화는 차기 게이트
+    - section: "Self‑Serve Flows"
+      mode: replace
+      content: |
+        셀프서비스:
+        - 업그레이드/다운그레이드: seats·plan 변경 즉시 적용(프로레이션), 일부 기능은 주기 말에 적용 옵션
+        - 취소/중지/재개: cancel(at_period_end|immediate), resume; 환불 정책은 ToS 연동
+        - 결제수단 관리: 카드 교체/검증, 영수증 이메일 설정
+        - Dunning: 0d/3d/7d 알림 → 10d 제한(읽기전용) → 20d 중지
+    - section: "Payments Adapter"
+      mode: replace
+      content: |
+        결제 어댑터:
+        - ProviderBase: create_customer, attach_payment_method, charge, refund, webhook_verify
+        - 어댑터: provider_pg(local 테스트), provider_stripe(옵션) — 실제 PG는 .env로 선택
+        - Webhook: /api/v1/billing/webhook (HMAC 서명, 멱등키)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API:
+        - GET  /api/v1/billing/entitlements
+        - POST /api/v1/billing/upgrade {plan, seats{agent,reviewer,admin}}
+        - POST /api/v1/billing/downgrade {plan?, seats?}
+        - POST /api/v1/billing/cancel {at_period_end:bool}
+        - POST /api/v1/billing/resume
+        - POST /api/v1/billing/payment_method {token}
+        - GET  /api/v1/billing/invoices?month=YYYY-MM
+        - POST /api/v1/billing/coupon {code}
+        - POST /api/v1/billing/webhook (internal)
+        UI:
+        - web/billing/: 플랜·좌석·결제수단·청구서·쿠폰·취소/재개
+    - section: "Reports & KPIs"
+      mode: replace
+      content: |
+        지표/리포트:
+        - Revenue: MRR/ARR, ARPA, Expansion/Contraction, Churn
+        - Usage: per‑metric histograms, overage events, seat utilization
+        - Billing: failed_payment_rate, dunning_success_rate, refund_rate
+        - 정확도: 인보이스 vs 원천사용량·원가 드리프트 ≤ 1%
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑M 성공 기준:
+        - 업/다운/취소/재개 e2e(프로레이션/세금/할인 적용) — 시나리오 6종 통과
+        - 던닝 정책 자동화(0/3/7/10/20d) + 이벤트 로그·알림 템플릿 증빙
+        - 인보이스 대조 드리프트 ≤ 1%, 과금오류 0(샘플 50건)
+        - UI/CLI 동등 기능 제공, RBAC/HMAC/멱등키 통과
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑M 마일스톤(완료 조건):
+        - ratebook.yaml/entitlements.yaml 확정·적용 + 라인아이템 생성 검증
+        - self‑serve API/UI + 프로레이션·세금·쿠폰 동작
+        - payments 어댑터 + 웹훅 검증·던닝 워크플로우 가동
+        - 대조/정확도 리포트 + Evidence Binder(Billing v2) 업데이트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 66: ratebook/entitlements 스키마·적용기 + 좌석 일할/프로레이션 구현
+        Day 67: self‑serve API(업/다운/취소/재개/결제수단/쿠폰) + 단위테스트
+        Day 68: payments 어댑터/웹훅 + 멱등/HMAC + 던닝 잡
+        Day 69: UI(billing center) 1차본 + 인보이스 PDF 템플릿
+        Day 70: 대조/정확도 테스트 50건 + Evidence Binder 업데이트
+
+work:
+  claude:
+    - id: C-32
+      title: Pricing & Refund Policy · Customer Comms
+      deliverables:
+        - docs/pricing_policy.md, docs/refund_policy.md
+        - ops/billing_comms_templates.md (업/다운/취소/던닝 메일)
+      acceptance:
+        - KR VAT/환불/중도해지 정책 반영, 템플릿 6종
+    - id: C-33
+      title: Billing Runbook & Dispute SOP
+      deliverables:
+        - ops/runbook_billing.md, ops/sop_dispute_chargeback.md
+      acceptance:
+        - 월말 마감/대조/이상치 대응 절차·체크리스트
+
+risks:
+  - name: 프로레이션/세금 계산 오류
+    mitigation: 표준 테스트 세트(30+), 드리프트 리포트, 금액 라운딩 일관
+  - name: 던닝 오탐·과도한 제한
+    mitigation: grace 정책·메시지 명확화, 관리자 override
+  - name: 결제 제공사 이슈
+    mitigation: 어댑터 교체 가능 구조, 재시도/서킷브레이커

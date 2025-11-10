@@ -1,0 +1,74 @@
+meta:
+  version: v0.5.8a
+  date: 2025-11-06
+  status: locked
+  summary: "DocOps Hotfix: plan.md Gate-Scoped Upsert — 게이트별 섹션 분리 및 upsert 모드 적용 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "DocOps — Gate-Scoped Plan Sections"
+      mode: replace
+      content: |
+        목표: plan.md가 각 Gate의 마일스톤/액션을 영구 보존하도록 게이트별 섹션 분리 및 upsert 모드 도입.
+
+        문제점:
+          - 기존 wo_apply.py는 plan 섹션에 mode: replace 사용
+          - 새 Gate 적용 시 이전 Gate 내용이 덮어써짐
+          - 결과: plan.md에 최신 Gate 하나만 남음
+
+        해결책:
+          - 섹션명 변경: "Milestones" → "Milestones — Gate-XX"
+          - 모드 변경: replace → upsert
+          - upsert_section() 함수: ## 헤더 기준으로 해당 섹션만 갱신/추가
+          - apply_plan_patch() 함수: plan.md 전용 패치 핸들러
+
+        구현:
+          - wo_apply.py에 upsert_section() 추가 (H2 regex 패턴 매칭)
+          - apply_plan_patch() 추가 (upsert/append 모드 처리)
+          - 메인 루프에서 plan + upsert/append 조합 시 apply_plan_patch() 호출
+          - 기존 replace 모드는 하위 호환성 유지 (AUTOGEN 마커 사용)
+
+  plan:
+    - section: "Milestones — Gate-DocOps"
+      mode: upsert
+      content: |
+        - wo_apply.py에 upsert_section() + apply_plan_patch() 추가
+        - 메인 루프 plan 타겟 감지 로직 추가
+        - plan_migrate.py 스크립트로 기존 내용 게이트별 분리
+        - 모든 Gate work order 검증 및 테스트
+
+    - section: "Next Actions — Gate-DocOps"
+      mode: upsert
+      content: |
+        Day 191: wo_apply.py 수정 완료 (upsert 함수 + 라우팅)
+        Day 192: plan_migrate.py 작성 및 실행 (기존 내용 복원)
+        Day 193: 전체 Gate work order 재적용 테스트 (A~AH 37개)
+        Day 194: doc_guard.py 검증 통과
+        Day 195: 문서화 및 PR 체크리스트 완료
+
+work:
+  claude:
+    - id: C-97
+      title: DocOps Migration Guide
+      deliverables:
+        - docs/docops/migration_guide.md
+        - scripts/plan_migrate.py
+      acceptance:
+        - plan.md 게이트별 섹션 분리 절차 문서화
+        - 마이그레이션 스크립트로 기존 37개 Gate 내용 복원
+
+    - id: C-98
+      title: Work Order Format v2 Guide
+      deliverables:
+        - docs/work_orders/format_v2.md
+      acceptance:
+        - upsert 모드 사용법 및 섹션 네이밍 규칙
+        - techspec(AUTOGEN) vs plan(H2 섹션) 차이점 설명
+
+risks:
+  - name: 마이그레이션 중 기존 내용 손실
+    mitigation: plan.md 백업 필수, dry-run 모드로 사전 검증
+  - name: 기존 work order와 충돌
+    mitigation: 하위 호환성 유지 (replace 모드는 AUTOGEN 방식 사용)
+  - name: H2 섹션 파싱 오류
+    mitigation: 정규식 테스트 케이스 추가, 단위 테스트 작성

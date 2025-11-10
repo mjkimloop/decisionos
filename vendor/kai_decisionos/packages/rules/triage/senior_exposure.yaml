@@ -1,0 +1,11 @@
+name: senior_exposure
+version: 1.0.0
+rules:
+  - name: senior_loan_high
+    when: 'payload.get("senior_loan_amt", 0) > 0.6 * payload.get("estimated_value", 1)'
+    priority: 80
+    action:
+      class: review
+      reasons: ["high_senior_exposure"]
+      required_docs: ["senior_loan_statement"]
+

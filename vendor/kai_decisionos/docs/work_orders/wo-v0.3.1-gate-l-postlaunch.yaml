@@ -1,0 +1,108 @@
+meta:
+  version: v0.3.1
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑L: Post‑Launch — Adoption Analytics · NPS · Roadmap Backlog (No‑Gemini)"
+
+work:
+  codex:
+    - id: X-51
+      title: 이벤트 SDK & 수집기
+      deliverables:
+        - sdks/events/python.py
+        - sdks/events/js.js
+        - routers/analytics_events.py
+        - jobs/analytics_rollup.py
+      acceptance:
+        - "초당 100rps 버스트 처리, 유효성 검사·드롭률<0.1%"
+    - id: X-52
+      title: 퍼널·리텐션·리스크 API
+      deliverables:
+        - apps/analytics/funnel.py
+        - apps/analytics/retention.py
+        - apps/analytics/risk.py
+        - routers/analytics.py
+      acceptance:
+        - "온보딩 퍼널·W1/W4 리텐션·리스크 리스트 반환"
+    - id: X-53
+      title: NPS/Feedback 라우트·분류기
+      deliverables:
+        - routers/nps.py
+        - routers/feedback.py
+        - apps/feedback/classifier_v1.py
+      acceptance:
+        - "NPS 유효성 검사, 분류카테고리 정확도≥80%(샘플 라벨 기준)"
+    - id: X-54
+      title: 대시보드 1차본
+      deliverables:
+        - web/analytics/index.html
+      acceptance:
+        - "기간/플랜/테넌트 필터·이미지 캡처 스크립트 제공"
+    - id: X-55
+      title: Backlog API & RICE 스코어러
+      deliverables:
+        - apps/backlog/service.py
+        - routers/backlog.py
+        - apps/backlog/rice.py
+      acceptance:
+        - "생성/리스트/스코어 동작, 주간 분류 보고서 생성"
+    - id: P-10
+      title: dosctl 확장(analytics/backlog)
+      deliverables:
+        - "cli/dosctl/main.py: analytics track"
+        - "cli/dosctl/main.py: analytics funnels|retention|risk"
+        - "cli/dosctl/main.py: backlog create|score|list"
+      acceptance:
+        - "로컬에서 end‑to‑end 확인 가능"
+
+risks:
+  - name: 측정 편향/샘플링 오류
+    mitigation: SDK 기본 이벤트만 필수, 기타는 선택. 샘플링/중복 필터
+  - name: NPS 피로도/응답률 저조
+    mitigation: 빈도 제한, 단문형, 인앱 우선·이메일 보조
+  - name: 개인정보 리스크
+    mitigation: user_id 해시, PII 금지, vault 토큰 외부 노출 금지
+
+patches:
+  techspec:
+    - section: "Adoption Analytics"
+      mode: replace
+      content: |
+        제품 분석(v0.3.1):
+        - SDK: 서버/프론트 이벤트 수집, 샘플링/중복 필터
+        - Ingest: /analytics/events, 유효성 검사/드롭률<0.1%
+        - API: 퍼널/리텐션/리스크 반환, 기간/플랜/테넌트 필터
+        - Dashboard: web/analytics/index.html(차트 5종)
+    - section: "NPS & Feedback"
+      mode: replace
+      content: |
+        NPS/피드백(v0.3.1):
+        - NPS 라우트, 유효성 검사, 응답률 관리
+        - Feedback 분류기 v1(rule/키워드), 정확도≥80%(샘플 라벨 기준)
+    - section: "Roadmap & Backlog"
+      mode: replace
+      content: |
+        로드맵 백로그(v0.3.1):
+        - Backlog API, RICE 스코어링, 주간 분류 보고서
+        - 수집→스코어→게이트 배정→진척 관리
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑L 신규 엔드포인트:
+        - POST /api/v1/analytics/events
+        - GET  /api/v1/analytics?type=funnel|retention|risk
+        - POST /api/v1/nps, POST /api/v1/feedback
+        - GET/POST /api/v1/backlog
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑L: 출시 후 채택/활성화 분석, NPS 루프, 로드맵 백로그 운영
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 71: 이벤트 SDK/ingest/rollup
+        Day 72: 퍼널/리텐션/리스크 API
+        Day 73: NPS/Feedback + 분류기 v1
+        Day 74: Analytics 대시보드 1차본
+        Day 75: Backlog API + dosctl 확장

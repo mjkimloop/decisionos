@@ -1,0 +1,15 @@
+providers:
+  - id: local-a
+    type: local
+  - id: http-b
+    type: http
+    url: "https://judge-b.internal/judge"
+    timeout_ms: 2000
+    require_sig: true
+    key_id: "k1"
+  - id: http-c
+    type: http
+    url: "https://judge-c.internal/judge"
+    timeout_ms: 2000
+    require_sig: true
+    key_id: "k1"

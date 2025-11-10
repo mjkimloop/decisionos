@@ -1,0 +1,7 @@
+default:
+  model: rules-only
+  max_cost: 0
+lead_triage:
+  model: rules-only
+  max_cost: 0
+

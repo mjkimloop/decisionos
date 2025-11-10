@@ -1,0 +1,11 @@
+name: income_floor
+version: 1.0.0
+rules:
+  - name: income_too_low
+    when: 'payload.get("income_monthly", 0) < 2000'
+    priority: 85
+    action:
+      class: review
+      reasons: ["income_below_floor"]
+      required_docs: ["income_proof"]
+

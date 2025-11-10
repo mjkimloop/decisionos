@@ -1,0 +1,74 @@
+feat(gate_s): watermark/lateness handling + window-leak guard + report v2 (v0.5.11c)
+
+지연 이벤트 처리 및 윈도 누수 방지 완료.
+
+신규 파일:
+- apps/metering/watermark.py (669 bytes)
+  - WatermarkPolicy(max_lag_sec=900, drop_too_late=True)
+  - classify(event_ts, now) → 'on_time' | 'late_kept' | 'late_dropped'
+  - age 계산: (now - event_ts).total_seconds()
+  - 정책:
+    - age <= 0: on_time (미래 이벤트)
+    - 0 < age <= max_lag_sec: late_kept (허용 지연)
+    - age > max_lag_sec: late_dropped (drop_too_late=True일 때 드롭)
+
+수정 파일:
+- apps/metering/schema.py (+11줄)
+  - ReconcileCounters(duplicates, late_kept, late_dropped)
+  - ReconcileReportV2(buckets, counters)
+  - 기존 ReconcileReport 유지 (하위 호환)
+
+- apps/metering/reconcile.py (+37줄)
+  - aggregate_hourly_with_watermark(events, now, policy) 추가
+  - 기존 aggregate_hourly() 유지 (무중단)
+  - 윈도 누수 방지: 항상 이벤트 타임스탬프 기준 윈도 할당
+  - late_dropped 이벤트는 집계 제외
+  - late_kept 이벤트는 원래 윈도에 반영 + 카운터 증가
+
+테스트:
+- tests/gates/gate_s/test_watermark_lateness_v1.py (37줄)
+  - test_watermark_lateness_v1_drop_and_keep PASSED
+  - 시나리오:
+    - now = 2025-01-01 10:40:00
+    - max_lag_sec = 15분 (900초)
+    - c1 (10:35, age=5m): late_kept → 10:00 윈도
+    - c2 (10:10, age=30m): late_dropped → 집계 제외
+    - c3 (10:45, age=-5m): on_time → 10:00 윈도
+    - c1 dup (10:35:01): duplicates++
+  - 검증:
+    - counters: late_kept=1, late_dropped=1, duplicates=1
+    - 버킷: 1개 (10:00-11:00), count=2, sum=8.0, min=3.0, max=5.0
+
+전체 Gate-S 테스트 결과:
+✓ test_inmemory_idempotency_basic PASSED
+✓ test_sqlite_idempotency_persistent PASSED
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ test_watermark_lateness_v1_drop_and_keep PASSED
+✓ test_metering_contract_shape_seed XPASS (seed → 실제 통과!)
+
+4 passed, 1 xpassed in 0.51s
+
+기능:
+- Watermark 정책: 지연 이벤트 분류 및 처리
+- 윈도 누수 방지: 이벤트 타임스탬프 기준 (assign_original)
+- 카운터: duplicates/late_kept/late_dropped 분리
+- V2 리포트: ReconcileReportV2(기존 ReconcileReport 호환 유지)
+- 미래 이벤트(age < 0): on_time으로 처리
+
+설계 선택:
+- Watermark는 포함/드롭 결정만 담당
+- 윈도 할당은 항상 이벤트 타임스탬프 기준
+- drop_too_late=False: 한도 초과 이벤트도 유지 가능
+
+Work Order:
+- docs/work_orders/wo-v0.5.11c-gate-s-watermark.yaml
+- techspec: Gate-S — Watermark & Lateness 섹션 추가
+- plan: Milestones — Gate-S v1.2 추가
+
+다음 단계 (Day 220-221):
+- Day 220: rating/quota/cost_guard 연계 스펙 초안
+- Day 221: Gate-T Witness 대조 통합 테스트
+
+Gate-S 상태: Green + Watermark + Window-leak Guard
+
+No-Gemini. Claude Code 단독 구현.

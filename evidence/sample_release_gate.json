@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "version": "v0.5.11i",
+    "generated_at": "2025-11-10T00:00:00Z",
+    "tenant": "demo"
+  },
+  "witness": {
+    "csv_path": "witness.csv",
+    "csv_sha256": "demo",
+    "rows": 1
+  },
+  "usage": {
+    "buckets": {},
+    "deltas_by_metric": {}
+  },
+  "rating": {
+    "subtotal": 0.1,
+    "items": []
+  },
+  "quota": {
+    "decisions": {}
+  },
+  "budget": {
+    "level": "ok",
+    "spent": 0.1,
+    "limit": 1.0
+  },
+  "anomaly": {
+    "is_spike": false,
+    "ewma": 0.0,
+    "ratio": 0.0
+  },
+  "perf": {
+    "latency_ms": {
+      "p95": 800,
+      "p99": 1000
+    },
+    "error_rate": 0.005,
+    "count": 500
+  },
+  "integrity": {
+    "signature_sha256": "4c5038b4946d2dad2708b23f2ec4d39c766fc53723d7fae0d19669c4a77cda0f"
+  },
+  "perf_judge": {
+    "latency_ms": {
+      "p50": 90,
+      "p95": 850,
+      "p99": 1500
+    },
+    "availability": 0.999,
+    "error_rate": 0.001,
+    "signature_error_rate": 0.0001,
+    "count": 500
+  }
+}

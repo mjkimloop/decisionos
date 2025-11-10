@@ -1,0 +1,30 @@
+meta:
+  name: lending_pack
+  version: v0.1.0
+  domain: lending
+  owner: DecisionOS Core Team
+  description: "Lead triage starter pack with rules, contract, and evaluation set"
+  tags:
+    contract: lead_triage
+contracts:
+  - lead_triage
+rulesets:
+  - packages/rules/triage
+datasets:
+  - packages/samples/offline_eval.sample.csv
+simulators:
+  - lead_triage
+components:
+  - id: lead_triage_rules
+    kind: rule
+    path: packages/rules/triage
+  - id: lead_triage_contract
+    kind: schema
+    path: packages/contracts/lead_triage.contract.json
+  - id: offline_eval_dataset
+    kind: dataset
+    path: packages/samples/offline_eval.sample.csv
+checklist:
+  - lint_rules
+  - offline_eval
+  - consent_review

@@ -1,0 +1,93 @@
+meta:
+  version: v0.1.9
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-F: 멀티테넌트·멀티리전 Lite 초기화(Active-Passive, RLS, DR/Failover, 관측성 통합)"
+
+patches:
+  techspec:
+    - section: "Tenancy & Config"
+      mode: append
+      content: |
+        멀티테넌트 확장(v0.1.9):
+        - Tenant Directory: tenants/<tenant>/tenant.yaml → {rbac, budgets, connectors, secrets_ref, ip_allowlist}
+        - Request 스코핑: Header X-Tenant-ID 또는 경로 /api/v1/t/{tenant}/... (둘 다 지원)
+        - 데이터 스코프: Postgres **RLS(Row-Level Security)** on tenant_id (기본), 필요 시 schema-per-tenant 옵션
+        - 감사: audit.ndjson 모든 항목에 tenant_id 포함, Evidence Binder 테넌트 분리 보관
+    - section: "Data Partitioning"
+      mode: replace
+      content: |
+        파티셔닝 전략(v0.1.9):
+        - 기본: 공유 DB + RLS 정책 (POLICY: tenant_id = current_setting('app.tenant_id'))
+        - 인덱스: (tenant_id, ts) 복합 인덱스 공통 적용
+        - 선택: 대용량 테넌트는 schema-per-tenant로 승격 (마이그레이션 스크립트 제공)
+    - section: "Routing & Traffic"
+      mode: replace
+      content: |
+        라우팅/트래픽 정책:
+        - Region‑Aware Gateway: /api/v1/r/{region}/t/{tenant}/... (옵션 prefix)
+        - 기본: 단일 엔드포인트 + 내부 region 선호 설정(DOS_REGION=ap)
+        - Failover: primary 타임아웃/장애 시 **패시브 리전**으로 폴백 (쓰기 멈춤, 읽기 전용 허용)
+        - Rate Limit: tenant별 rpm/rps, region별 예산(budgets.region)
+    - section: "Deployment Profiles"
+      mode: append
+      content: |
+        배포 프로파일 추가(v0.1.9):
+        - mt-lite: gateway + worker + db(primary) + db(standby) + redis(optional)
+        - DR 파라미터: RPO=5m(로그 전송), RTO=60m(수동 승격) — PoV 한정 값
+    - section: "Disaster Recovery"
+      mode: replace
+      content: |
+        DR/Failover 절차(v0.1.9):
+        1) 백업: base backup 일 1회 + WAL/작업 로그 5분 회전
+        2) 검증: scripts/verify_replica.sh 해시/LSN 비교
+        3) 장애: scripts/failover_promote.sh(standby 승격) → apps/region/router failover flag 갱신
+        4) 복귀: scripts/failback_prepare.sh → 재동기화 후 원복
+        5) 감사: manifests/region/*.json에 타임라인 기록
+    - section: "Observability"
+      mode: append
+      content: |
+        글로벌 관측성:
+        - /api/v1/global/metrics: {region:{p95, error_rate, req_count, ingest_lag}, tenants:n}
+        - 구조화 로그에 region 라벨 추가, 회전/보존 기존 정책 준수
+        - 에러버짓: p95>800ms 또는 error_rate>1%가 10분 지속 시 경고 이벤트
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑F 성공 기준:
+        - 멀티테넌트: RLS 강제, 교차 테넌트 접근 0건(테스트로 증빙)
+        - 멀티리전: DR 리허설 통과(RTO<=60m, RPO<=5m) + Failover 드라이런 1회 성공
+        - 성능: /decide p95<800ms, /metrics 글로벌 응답 <300ms(캐시)
+        - 운영: Evidence Binder(테넌트/리전 섹션) 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑F 마일스톤(완료 조건):
+        - RLS 정책/마이그레이션 적용 + 교차 접근 차단 테스트 통과
+        - mt-lite docker-compose 구동 + standby 복제 동기화
+        - DR/Failover 리허설 1회 → 보고서 첨부
+        - 글로벌 /global/metrics 노출 + 테넌트/리전 라벨 검증
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 31: RLS 정책/스크립트 작성 + 테넌트 미들웨어 강화
+        Day 32: mt-lite compose 작성(standby DB 포함) + 백업/로그 전송 세팅
+        Day 33: 글로벌 메트릭스 엔드포인트 + 라우터 region 라벨링
+        Day 34: Failover/Failback 스크립트 + 드라이런 문서화
+        Day 35: 교차 테넌트 차단 테스트/리포트 + Evidence Binder 갱신
+
+work:
+  claude:
+    - id: C-13
+      title: DR/Failover Runbook & 고객 커뮤니케이션
+      deliverables:
+        - ops/runbook_dr.md, ops/comms_outage_templates.md
+      acceptance:
+        - RTO/RPO 수치/단계별 절차/롤백 포함, 알림 템플릿 2종
+    - id: C-14
+      title: 멀티테넌트 보안 정책 문서
+      deliverables:
+        - docs/security_multitenant.md(RLS, secrets, evidence 분리)
+      acceptance:
+        - 교차 접근 테스트 시나리오/증빙 캡처 요구사항 포함

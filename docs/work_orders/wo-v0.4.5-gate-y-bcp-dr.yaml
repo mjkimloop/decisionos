@@ -1,0 +1,139 @@
+meta:
+  version: v0.4.5
+  date: 2025-11-05
+  status: locked
+  summary: "Gate-Y: BCP/DR · Backups · Failover · Chaos Drills · RPO/RTO (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "BCP/DR — Architecture"
+      mode: replace
+      content: |
+        목표:
+          - P0 서비스 RPO ≤ 15m, RTO ≤ 60m (P1: RPO ≤ 60m, RTO ≤ 4h)
+          - 멀티리전 액티브-패시브(기본) + 일부 액티브-액티브(카탈로그/로그)
+        구성:
+          - DB: 물리복제(WAL/LSN) + PITR, 논리덤프 주기 백업
+          - 오브젝트 저장소: 버전닝 + Object Lock(WORM) + 크로스리전 복제
+          - 메타데이터: 카탈로그/정책/라인리지/빌링/사용량 스냅샷
+          - 비밀/키: KMS-backed, 주기적 회전 + DR-키 에스코(row)트
+          - 트래픽 전환: DNS/Traffic Manager + 헬스체크 + 카나리 검증
+          - 복구 관측: Gate-T 번레이트/SLO 게이팅과 연동
+    - section: "Backups — Strategy & Integrity"
+      mode: replace
+      content: |
+        유형/주기(기본값):
+          - DB 물리: 지속적 WAL, 베이스라인 24h, 보존 35d
+          - DB 논리: 1일 1회 pg_dump/스키마/권한, 보존 14d
+          - 오브젝트: 실시간 버전닝 + 주간 불변 스냅샷(보존 30d)
+          - 메타/설정: 6h 스냅샷
+        무결성:
+          - 백업 완료 후 자동 복원 리허설(샌드박스) + 체크섬 검증
+          - 샘플 테이블·카탈로그 비교, 정책/권한 드리프트 검사
+        보안/거버넌스:
+          - AES-256 at rest, TLS in transit, 키는 KMS + 외부 금고(sealed)
+          - 보존/파기 정책: ISMS-P 기준, 삭제는 지연삭제 + 감사체인
+    - section: "Disaster Recovery — Failover/Failback"
+      mode: replace
+      content: |
+        시나리오:
+          - 리전 장애, DB 손상, 스토리지 파손, 비밀/키 손상
+        절차:
+          - 선언(incident/IM) → 트래픽 중지/리드온리 → 데이터 경계 확인(Gate-W)
+          - DB 승격(스탠바이→프라이머리) → 앱/큐/배치 재바인드
+          - 헬스/SLI 패스 후 DNS 전환 → 모니터링/번레이트 정상화 확인
+          - Failback: 원리전 복구·재복제·검증 후 재전환
+        자동화:
+          - `/api/v1/dr/failover` 카나리 0→10→100 단계, 롤백 훅 포함
+    - section: "Chaos & GameDay"
+      mode: replace
+      content: |
+        혼란 주입:
+          - DB read-only, 노드 장애, 네트워크 블랙홀, 키 회전 실패
+        게임데이:
+          - 분기별 P0 풀 시나리오 1회, 월간 부분 시나리오 1회
+          - 각 시나리오마다 RPO/RTO 측정·증빙, 런북 업데이트
+    - section: "Residency/Policy Alignment"
+      mode: replace
+      content: |
+        - Residency=="KR" 데이터는 KR 내 백업/복구만(크로스리전 금지)
+        - 교차전송 필요 시 purpose-binding·승인 티켓·만료토큰 요구(Gate-W)
+        - 백업 접근은 최소권한(RBAC)·감사 라벨(trace_id, policy_id) 필수
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/dr/backup/run {type, scope}
+          - GET  /api/v1/dr/backup/status?id=
+          - POST /api/v1/dr/restore/validate {snapshot_id}
+          - POST /api/v1/dr/failover {service, mode[canary|full]}
+          - POST /api/v1/dr/failback {service}
+          - GET  /api/v1/dr/rpo_rto/report?period=
+        CLI(dosctl):
+          - `dosctl dr backup run --type db-physical|db-logical|meta|objects`
+          - `dosctl dr restore validate --snapshot <id>`
+          - `dosctl dr failover --service core --mode canary`
+          - `dosctl dr rpo-rto report --period 7d`
+    - section: "Dashboards/Runbooks/Evidence"
+      mode: replace
+      content: |
+        대시/리포트:
+          - 백업 성공율/복원시간, RPO 시계, DR 카나리 성공율
+        런북:
+          - IM 절차, DR 선언, 권한/승인, 체크리스트(서비스별)
+        Evidence:
+          - 백업 무결성 리포트, RPO/RTO 실측, 게임데이 결과, 변경점 기록
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-Y 성공 기준:
+          - P0: RPO ≤ 15m, RTO ≤ 60m 2회 연속 실측 충족(게임데이 포함)
+          - 백업 복원 리허설 주 1회 자동 완료, 무결성 실패 ≤ 0.5%
+          - 오브젝트 불변성(Object Lock/WORM)·버전닝 활성 + 삭제보호 증빙
+          - Failover/Failback API e2e + DNS 전환/롤백 캡처
+          - Residency 위반 0, 접근/승인 모든 행위 감사 링크 100%
+          - Evidence Binder(BCP/DR) 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - 계층형 백업·무결성 검증 파이프라인
+        - DR 자동화(API/CLI)·트래픽 전환
+        - Chaos/GameDay 시나리오·운영 대시/리포트
+        - Residency/Policy 정합·감사 라벨·접근 통제
+        - RPO/RTO 실측 충족·증빙 번들
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 126: 백업 파이프라인(db 물리/논리, objects, meta)·무결성 검증 샌드박스
+        Day 127: DR API/CLI(failover/failback)·DNS/Traffic 연계·카나리 전환
+        Day 128: Chaos 주입기·게임데이 스크립트·대시/리포트 패널
+        Day 129: Residency/Policy 연동·접근권한·감사 라벨·자동 증빙
+        Day 130: P0/P1 게임데이 실행(RPO/RTO 실측)·런북/Evidence 확정
+
+work:
+  claude:
+    - id: C-64
+      title: DR Runbook & GameDay Playbook
+      deliverables:
+        - ops/runbook_dr.md, ops/gameday_dr.md
+      acceptance:
+        - P0/P1 시나리오 6종, 체크리스트/의사결정 트리 포함
+    - id: C-65
+      title: Backup/Restore SOP & Compliance
+      deliverables:
+        - ops/backup_restore_sop.md, docs/backup_retention_policy.md
+      acceptance:
+        - 보존/파기/불변성/WORM·감사 요구 충족 문서
+
+risks:
+  - name: 백업 손상/침투(랜섬웨어)
+    mitigation: WORM/불변성·오프라인 사본·무결성 검증·격리 계정
+  - name: DR 드리프트(구성 불일치)
+    mitigation: 정기 샌드박스 복원·구성 드리프트 검사·IaC 소스오브트루스
+  - name: 키/비밀 상실
+    mitigation: 듀얼컨트롤·외부 보관 금고·재난용 비상키 절차
+  - name: 비용 폭증
+    mitigation: 계층형 보존·압축/중복제거·코스트가드 경보(Gate-S)
+  - name: 레지던시 위반
+    mitigation: 정책 가드·목적구속·승인 티켓·감사 추적

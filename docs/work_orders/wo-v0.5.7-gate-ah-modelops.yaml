@@ -1,0 +1,137 @@
+meta:
+  version: v0.5.7
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AH: Model Ops v2 — Feature Store · Train/Serve Sync · Shadow/Canary · Skew/Drift (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Model Ops Architecture — Scope"
+      mode: replace
+      content: |
+        목표: 모델/피처/데이터/정책/결정(AG)의 일관 실행. 학습·배포·관측·개선 루프 표준화.
+        구성요소:
+          - Model Registry(재현성): 모델/아티팩트/환경/데이터스냅샷/계약.
+          - Feature Store: offline(batch) ↔ online(serving) 동형성 보장.
+          - Pipelines: 학습(batch/증분)·평가·패키징·서빙(REST/gRPC)·A/B/카나리.
+          - Skew/Drift: 입력/피처/라벨/출력 분포 차이·성능 드리프트 탐지.
+          - Rollout Controls: shadow→canary→blue/green, 자동 롤백·승급 규칙.
+          - Evidence/Lineage: Gate-P(라인리지), Gate-Q(레저), Gate-T(메트릭)에 연계.
+
+    - section: "Model Registry — Reproducibility"
+      mode: replace
+      content: |
+        레코드: model{id, name, semver, hash, framework, params, metrics, dataset_refs, feature_contract, env(manifest), policies}.
+        아티팩트: /models/{id}/(weights.bin|onnx|tokenizer|preproc), /env/{id}/conda.lock|dockerfile.
+        계약: DecisionContract v2(AG) 링크로 입력/출력/PII/Residency/SLA 보증.
+        재현성: build recipe + digest 검증, 재학습/재서빙 성공률 100% 목표.
+
+    - section: "Feature Store — Offline/Online Parity"
+      mode: replace
+      content: |
+        폴더: apps/feature_store/{registry.py, offline.py, online.py, parity_checker.py}
+        스키마: feature_set{id, version, entity_key, freshness_sla, ttl, pii/residency tags}.
+        매핑: AG-ontology mapping 사용, ETL/CDC 바인딩(Gate-O).
+        파리티: offline→online 샘플 10k 기준 수치형 Δ≤0.5%p, 범주형 JSD≤0.02.
+
+    - section: "Pipelines — Train/Eval/Package/Serve"
+      mode: replace
+      content: |
+        학습: jobs/train/{trainer.py, scheduler.py} — batch/증분, resume/checkpoint, cost budget(AC).
+        평가: apps/modelops/eval/{offline_eval.py, online_eval.py} — metric spec, slice, fairness stub.
+        패키징/서빙: apps/serving/{server.py (REST/gRPC), router_adapter.py}, autoscale, warmup/coldstart 관리.
+        배포전략: shadow(미러 트래픽)→canary(1→5→20→50%)→blue/green, 자동 롤백/승급.
+
+    - section: "Skew/Drift Detection"
+      mode: replace
+      content: |
+        스큐: train vs serve — PSI/JSD/KL, 임계 PSI≤0.2, 알림/차단 규칙.
+        드리프트: 라벨 지연 보정, 성능 드리프트 CUSUM/EWMA, 재학습 트리거.
+        대시: dashboards/modelops/{skew.json, drift.json}, 이벤트는 Gate-T.
+
+    - section: "Safety/Privacy/Residency Integration"
+      mode: replace
+      content: |
+        입력/출력 DLP/PII 스캔(AE/AD), 레지던시 훅(AF) — 리전 외 학습/서빙 차단.
+        정책: 고위험 모델 경로는 Router 하드닝(AE)·승인(HITL) 필요.
+        계약 위반시 배포 금지(AG·W), Q레저에 사유 기록.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/modelops/register {model, metrics, artifacts, env}
+          - POST /api/v1/modelops/deploy {id, strategy:shadow|canary|bluegreen}
+          - POST /api/v1/modelops/rollback {deployment_id}
+          - GET  /api/v1/modelops/health {id}
+          - GET  /api/v1/featurestore/parity?feature_set=...&version=...
+          - GET  /api/v1/modelops/skew?model_id=...
+          - GET  /api/v1/modelops/drift?model_id=...
+        CLI(dosctl):
+          - dosctl model register|deploy|promote|rollback|metrics
+          - dosctl feature parity|backfill|ttl
+          - dosctl model skew-check|drift-check
+
+    - section: "Dashboards & Evidence"
+      mode: replace
+      content: |
+        dashboards/modelops/{registry.json, rollout.json, serve_perf.json, cost.json}
+        Evidence(ModelOps): parity_report.csv, skew_matrix.csv, drift_report.json, rollout_decisions.json
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AH 성공 기준:
+          - Feature parity: 수치 Δ≤0.5%p, 범주 JSD≤0.02(@10k) — 실패시 배포 중지
+          - Train-Serve skew: PSI≤0.2 유지, 위반시 경보/카나리 동결
+          - Shadow→Canary 승급: 에러Δ≤1.0%p, p95 지연 Δ≤+10%, 안전사건 0건
+          - 실패시 자동 롤백 TTR ≤ 10분, 롤백 재현 로그 100%
+          - Registry 재현성: 재서빙/재학습 성공률 100%
+          - Evidence Binder(ModelOps) 업데이트
+
+  plan:
+    - section: "Milestones — Gate-AH"
+      mode: upsert
+      content: |
+        - 레지스트리/계약(AG 링크) · 환경 재현
+        - 피처스토어(offline/online) · 파리티 체커
+        - 학습/평가/패키징/서빙 파이프라인
+        - 스큐/드리프트 감지 · 롤아웃/롤백 자동화
+        - 대시/증빙 · SLO 측정
+    - section: "Next Actions — Gate-AH"
+      mode: upsert
+      content: |
+        Day 186: Model Registry/Env manifest · DecisionContract v2 연결(AG)
+        Day 187: Feature Store offline/online 스캐폴드 · parity_checker
+        Day 188: Train/Eval/Serve 파이프라인 · router_adapter
+        Day 189: Skew/Drift detectors · alerts · retrain triggers
+        Day 190: Shadow/Canary/BlueGreen · API/CLI · 대시/증빙 · SLO 측정
+
+work:
+  claude:
+    - id: C-95
+      title: Model Ops Playbook & Rollout Policies
+      deliverables:
+        - docs/modelops/playbook.md
+        - docs/modelops/rollout_policies.md
+      acceptance:
+        - 섀도/카나리 승급·중단 기준·롤백 절차·사례 포함
+
+    - id: C-96
+      title: Feature Contracts & Eval Specs
+      deliverables:
+        - docs/feature_store/contracts.md
+        - docs/eval/metric_specs.md
+      acceptance:
+        - 피처/라벨 정의·TTL/신선도·슬라이스/페어니스 기준
+risks:
+  - name: 오프라인/온라인 파이프라인 불일치
+    mitigation: 동일 피처 정의·파리티 체커 게이트·CI 드리프트 검사
+  - name: 카나리 실패/사용자 영향
+    mitigation: 소량→점증 트래픽·자동 롤백·세이프가드 임계
+  - name: 성능 드리프트 탐지 지연
+    mitigation: 라벨 지연 모델링·추정 지표·조기 경보(EWMA/CUSUM)
+  - name: 비용 급증(복수 경로/섀도)
+    mitigation: Gate-AC 한도·배치/캐시·테넌트별 예산 가드
+  - name: 컴플라이언스 위반(PII/국경)
+    mitigation: AD/AF 훅 강제·위반시 배포 차단·레저 기록

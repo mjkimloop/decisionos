@@ -1,0 +1,117 @@
+meta:
+  version: v0.3.7
+  date: 2025-11-03
+  status: locked
+  summary: "Gate-Q: Guardrails v2 · Explainability · Model Audit Trails (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Guardrails v2 (Runtime)"
+      mode: replace
+      content: |
+        구성요소(v0.3.7):
+        - Input Validators: schema/PII redaction, prompt-injection/RCE 패턴, max_tokens/entropy 한도
+        - Output Validators: type/constraint, toxicity/PHI, leakage(scan: API keys/PII), policy denylist
+        - Policy Enforcer: DecisionContract 전/후 훅(pre/post), allow|review|block, HITL 큐 연계
+        - Canary & Shadow: perc% 샘플을 shadow 모델/정책으로 병행평가, 이탈 시 alarm
+        - Rollout: staged(1%→5%→25%→100%), 자동 롤백(오탐/미탐 임계 초과)
+        측정:
+        - 공격 차단율(Injection/Leak) ≥ 99.5%, 오탐 ≤ 1.0%, p95 오버헤드 ≤ 120ms
+    - section: "Decision Explainability"
+      mode: replace
+      content: |
+        설명 레이어(v0.3.7):
+        - Rule Trace: 규칙기반 결정의 매칭 규칙/스코어/임계값·불만족 규칙 목록
+        - Reason Codes: 표준화 코드셋(credit/risk) + 인간가독 메시지(ko)
+        - Feature/Factor Attribution: 모델형 결정은 surrogate(샘플링·simple tree/shap-lite)로 기여도 요약
+        - Evidence Pack: 입력 요약, 사용 정책/버전, 데이터 계약/온톨로지 링크, 유사 결정 3건
+        - Export: PDF/JSON, 고객제출용(민감항목 자동 마스킹)
+        품질:
+        - Fidelity(rule) = 1.0, Fidelity(model surrogate) ≥ 0.9 (val set), 민감정보 노출 0
+    - section: "Model Audit Trails & Replay"
+      mode: replace
+      content: |
+        감사/재현(v0.3.7):
+        - Audit Log(append-only, hash chain): {ts, model_id, version, policy_id, input_hash, output_hash, features_hash, reason_code[], latency, actor, corr_id, prev_hash}
+        - Artifact Store: 모델 카드(model_card.yaml), 모델/정책/컨피그 아카이브, 샘플 입출력 스냅샷
+        - Replay Runner: 동일 아티팩트/시드/정책으로 재실행 → 해시일치 검증
+        - Access: /audit, /replay API + RBAC( auditor, security_admin ) 전용
+        SLO: 재현 성공률 100%(동일 아티팩트), 감사 누락 0, 무결성 위변조 탐지 100%
+    - section: "Monitoring & Drift"
+      mode: replace
+      content: |
+        모니터링/드리프트:
+        - Metrics: accuracy@pilot, denial/approval rate by segment, reject inference rate, latency, guardrail hit rate
+        - Drift: feature popshift(jsd/psi), reason_code distribution drift, data_contract violations
+        - Alerts: 임계 초과 시 Slack/Webhook, 자동 canary/roll-back 트리거
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API:
+        - POST /api/v1/guardrails/check {stage:pre|post, payload}
+        - POST /api/v1/decisions/explain {decision_id|payload}
+        - GET  /api/v1/audit/logs?from=&to=&actor=&model_id=
+        - POST /api/v1/replay/run {decision_id|artifact_refs}
+        - GET  /api/v1/monitor/metrics | GET /api/v1/monitor/drift
+        CLI(dosctl):
+        - `dosctl guardrails test|enable|rollout|rollback`
+        - `dosctl explain --decision <id> --export pdf|json`
+        - `dosctl audit ls|show --model <id>`
+        - `dosctl replay run --decision <id>`
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑Q 성공 기준:
+        - 공격 차단율 ≥ 99.5%, 오탐 ≤ 1.0%, p95 오버헤드 ≤ 120ms 증빙
+        - Rule Trace·Reason Codes·Attribution e2e, fidelity ≥ 0.9(모델), 민감노출 0
+        - 감사 해시체인 무결성·재현 100%, 누락 0
+        - Drift 탐지/경보 동작, 자동 canary·롤백 증빙
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑Q 마일스톤(완료 조건):
+        - Guardrails v2(입출력 검증·정책·롤아웃) + /guardrails API/CLI
+        - Explainability(Trace/Reason/Attribution/Evidence Export) + /decisions/explain
+        - Audit Trail(해시체인) + Replay Runner + /audit, /replay
+        - Drift 모듈·대시보드 + 알림/롤백 연동
+        - Evidence Binder(Model) 섹션 업데이트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 86: guardrails validators/enforcer + canary/rollout + /guardrails API
+        Day 87: rule trace/reason codes 스키마 + explain API + PDF/JSON exporter
+        Day 88: audit hash-chain logger + model_card 저장 + replay runner
+        Day 89: drift metrics/alerts + monitor API + 대시보드
+        Day 90: 성능/보안 시험·SLO 증빙 + Evidence Binder(Model) 업데이트
+
+work:
+  claude:
+    - id: C-42
+      title: Reason Codes & Messaging
+      deliverables:
+        - docs/reason_codes_ko.md(코드표·문구), templates/explain_export.md
+      acceptance:
+        - 신용/리스크 도메인 코드셋·가이드·예시 30개
+    - id: C-43
+      title: Guardrails/Drift Runbooks
+      deliverables:
+        - ops/runbook_guardrails.md, ops/runbook_drift.md
+      acceptance:
+        - 사고 대응 매트릭스(P0/P1), 롤백 절차, 드리프트 조사 체크리스트
+    - id: C-44
+      title: Model Card Template
+      deliverables:
+        - docs/model_card_template.yaml
+      acceptance:
+        - 데이터/성능/한계/윤리·편향 항목 포함
+
+risks:
+  - name: 과도한 오탐으로 업무 중단
+    mitigation: review 모드→soft block 단계 적용, 히트율 기반 자동 튜닝, 예외 화이트리스트
+  - name: 설명 산출물의 민감정보 누출
+    mitigation: export 전 PHI/PII 마스킹 필수, 정책 기반 필드 제거
+  - name: 해시체인 손상/누락
+    mitigation: 일별 앵커 해시 외부 보관, 백업 검증 크론, 경보
+  - name: 성능 저하(추가 오버헤드)
+    mitigation: 비동기 검증·배치 검사, 캐시/샘플링, hot path 최소화

@@ -1,0 +1,5 @@
+stages: [1, 5, 10, 25, 50, 100]
+hold_minutes: 10
+max_parallel: 1
+rollback_on_fail: true
+hash_key: "header:X-Canary-Key"

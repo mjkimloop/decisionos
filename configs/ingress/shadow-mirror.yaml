@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: judge-gateway
+  namespace: decisionos
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary-Key"
+    nginx.ingress.kubernetes.io/canary-weight: "25"
+    nginx.ingress.kubernetes.io/upstream-vhost: judge-api.decisionos.svc.cluster.local
+    nginx.ingress.kubernetes.io/mirror-target: judge-api-canary
+spec:
+  rules:
+    - host: judge.decisionos.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: judge-api
+                port:
+                  number: 80

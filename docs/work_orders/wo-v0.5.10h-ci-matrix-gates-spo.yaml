@@ -1,0 +1,26 @@
+meta:
+  version: v0.5.10h
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-S/P/O 테스트 시드 추가 및 CI 매트릭스 확장 (xfail 기반)"
+
+patches:
+  techspec:
+    - section: "Testing — Gate Seeds"
+      mode: upsert
+      content: |
+        - Gate-S(결제/메터링/레이팅/한도), Gate-P(검색/카탈로그/라인리지), Gate-O(커넥터/ETL/CDC/데이터 계약) 테스트 시드를 추가.
+        - 초기 상태는 @pytest.mark.xfail(strict=False)로 안전하게 통과시킨다.
+        - 구현 진행에 따라 xfail 제거 → 실제 어설션/피쳐 검증 추가.
+  plan:
+    - section: "Milestones — CI Matrix Expand"
+      mode: upsert
+      content: |
+        - tests/gates/gate_s/*, gate_p/*, gate_o/* 시드 파일 생성
+        - CI matrix: gate_s, gate_p, gate_o 추가
+        - 최초 파이프라인 green 확인
+    - section: "Next Actions — Gates S/P/O"
+      mode: upsert
+      content: |
+        Day 216: 시드 테스트 반영 및 CI 확장
+        Day 217+: 각 게이트 모듈 작성 시 xfail → assert 전환, 커버리지 목표 상향

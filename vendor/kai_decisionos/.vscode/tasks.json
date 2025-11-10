@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "dev:up", "type": "shell", "command": "uvicorn apps.gateway.main:app --host 0.0.0.0 --port 8000" },
+    { "label": "dos:simulate", "type": "shell", "command": "python cli/dosctl/main.py simulate lead_triage" },
+    { "label": "test:rule", "type": "shell", "command": "pytest apps/rule_engine -q" },
+    { "label": "docs:guard", "type": "shell", "command": "python scripts/doc_guard.py" },
+    { "label": "docs:bump:patch", "type": "shell", "command": "python scripts/bump_version.py --mode patch --summary \"문서 업데이트\"" },
+    { "label": "docs:bump:minor", "type": "shell", "command": "python scripts/bump_version.py --mode minor --summary \"기능적 변경\"" },
+    { "label": "docs:bump:major", "type": "shell", "command": "python scripts/bump_version.py --mode major --summary \"파괴적 변경\"" }
+    ,{ "label": "wo:apply:gate-a", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.2-gate-a.yaml" }
+    ,{ "label": "wo:apply:gate-b", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.3-gate-b.yaml" }
+    ,{ "label": "wo:apply:gate-b-nogem", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.4-gate-b-nogem.yaml" }
+    ,{ "label": "wo:apply:reality-seal", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.5-reality-seal.yaml" }
+    ,{ "label": "wo:apply:gate-c-pov", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.6-gate-c-pov.yaml" }
+    ,{ "label": "wo:apply:gate-d-pov-client", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.7-gate-d-pov-client.yaml" }
+    ,{ "label": "wo:apply:gate-e-billing", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.8-gate-e-billing.yaml" }
+    ,{ "label": "wo:apply:gate-f-mt", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.1.9-gate-f-mt.yaml" }
+    ,{ "label": "wo:apply:gate-g-autofailover", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.2.0-gate-g-autofailover.yaml" }
+    ,{ "label": "wo:apply:gate-h-observability", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.2.1-gate-h-observability.yaml" }
+    ,{ "label": "wo:apply:gate-i-policy", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.2.2-gate-i-policy.yaml" }
+    ,{ "label": "wo:apply:gate-j-playbooks", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.2.3-gate-j-playbooks.yaml" }
+    ,{ "label": "wo:apply:gate-k-launch", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.0-gate-k-launch.yaml" }
+    ,{ "label": "wo:apply:gate-l-postlaunch", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.1-gate-l-postlaunch.yaml" }
+    ,{ "label": "wo:apply:gate-m-billingv2", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.2-gate-m-billingv2.yaml" }
+    ,{ "label": "wo:apply:gate-n-sso-rbac", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.3-gate-n-sso-rbac.yaml" }
+    ,{ "label": "wo:apply:gate-o-connectors", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.4-gate-o-connectors.yaml" }
+    ,{ "label": "wo:apply:gate-p-catalog", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.5-gate-p-catalog.yaml" }
+    ,{ "label": "wo:apply:gate-p-catalog-v036", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.6-gate-p-catalog-search-lineage.yaml" }
+    ,{ "label": "wo:apply:gate-s", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.9-gate-s-tenant-billing-usage.yaml" }
+    ,{ "label": "wo:apply:gate-s:scaffold", "type": "shell", "command": "python scripts/wo_apply.py docs/work_orders/wo-v0.3.9-gate-s-tenant-billing-usage.yaml --scaffold" }
+  ]
+}

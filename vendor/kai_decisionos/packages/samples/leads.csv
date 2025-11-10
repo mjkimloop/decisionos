@@ -1,0 +1,8 @@
+org_id,credit_score,dti,income_verified,converted
+orgA,720,0.30,True,1
+orgA,540,0.40,True,0
+orgB,610,0.50,False,0
+orgB,680,0.42,True,1
+orgC,700,0.60,True,0
+orgC,640,0.38,True,1
+

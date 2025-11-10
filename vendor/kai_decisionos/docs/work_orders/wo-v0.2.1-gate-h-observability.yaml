@@ -1,0 +1,117 @@
+meta:
+  version: v0.2.1
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑H: Observability·Tracing·Cost Sentry·Vendor v2 (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-19
+      title: Observability Guide & PII Scrub Map
+      deliverables:
+        - docs/observability_guide.md
+        - docs/pii_scrub_map.md
+      acceptance:
+        - 로그/트레이스 필드별 스크럽 규칙·예시·테스트 케이스 포함
+    - id: C-20
+      title: Vendor Error Taxonomy & Playbook
+      deliverables:
+        - docs/vendor_error_taxonomy.md
+        - docs/vendor_playbook.md
+      acceptance:
+        - 오류→조치 매핑표, 롤백/폴백 절차 포함
+
+  codex:
+    - id: X-34
+      title: Tracing & Correlation
+      deliverables:
+        - apps/observability/tracing.py
+        - apps/gateway/middleware/correlation.py
+        - apps/gateway/routers/traces.py
+      acceptance:
+        - X‑Corr-ID 주입/전파, 대표 트레이스 3건 리포지토리 보관
+    - id: X-35
+      title: Cost Sentry
+      deliverables:
+        - apps/costs/sentry.py
+        - apps/gateway/middleware/budget_enforcer.py
+      acceptance:
+        - 예산 초과 시 폴백 또는 차단, 드리프트 ≤1%
+    - id: X-36
+      title: Vendor Abstraction v2
+      deliverables:
+        - apps/switchboard/provider_base.py
+        - apps/switchboard/registry.py
+        - apps/switchboard/adapters/{local_v2.py,openai_v2.py,mock_v2.py}
+        - config/providers.yaml
+      acceptance:
+        - capabilities/estimate/invoke 동작, 오류 분류/재시도 정책 통일
+    - id: X-37
+      title: Metrics & Admin APIs
+      deliverables:
+        - apps/gateway/routers/costs.py
+        - apps/gateway/routers/vendors.py
+        - apps/gateway/routers/admin_sampling.py
+      acceptance:
+        - /costs/summary, /vendors/capabilities, /admin/sampling 응답 검증
+    - id: P-06
+      title: dosctl 확장(traces/costs/vendors)
+      deliverables:
+        - cli/dosctl/main.py: "traces get"
+        - cli/dosctl/main.py: "costs summary"
+        - cli/dosctl/main.py: "vendors list"
+      acceptance:
+        - 로컬에서 end‑to‑end 확인 가능
+
+risks:
+  - name: 관측성 오버헤드로 성능 저하
+    mitigation: 샘플링 10%, 비동기 export, 필드 화이트리스트
+  - name: PII 누출(로그/트레이스)
+    mitigation: scrub map 강제, CI에서 PII 패턴 스캐너
+  - name: 비용 예측 불일치
+    mitigation: price_table 버저닝, e2e 리그레션, 초과 시 보수적 차단
+
+patches:
+  techspec:
+    - section: "Observability & Tracing"
+      mode: replace
+      content: |
+        분산추적/관측성(v0.2.1):
+        - Correlation: X‑Corr‑ID 주입/전파, 요청‑결정‑모델 호출 상관관계 저장
+        - Sampling: 기본 10%, 오류/슬로우 100%
+        - Export: traces.ndjson 또는 OTLP(옵션)
+        - Scrub: pii_scrub_map에 따른 로그/트레이스 필드 스크럽
+    - section: "Cost Sentry"
+      mode: replace
+      content: |
+        비용 감시(v0.2.1):
+        - 사전 비용예측 → 예산 검사 → 폴백/차단, 드리프트 ≤1% 목표
+        - budget_enforcer 미들웨어로 X‑Budget-* 및 tenant budgets 적용
+    - section: "Vendor Abstraction v2"
+      mode: replace
+      content: |
+        ProviderBase/Registry(v0.2.1):
+        - adapters: local_v2/openai_v2/mock_v2
+        - 공통 인터페이스: capabilities/estimate/invoke, 오류 분류/재시도 정책 통일
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑H 신규 엔드포인트:
+        - GET /api/v1/traces/{id}
+        - GET /api/v1/costs/summary
+        - GET /api/v1/vendors/capabilities
+        - POST /api/v1/admin/sampling
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑H: Observability·Tracing·Cost Sentry·Vendor v2 도입
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 41: Correlation 미들웨어 + 추적 Export
+        Day 42: Cost Sentry 예산 가드 + 드리프트 테스트
+        Day 43: Provider v2 registry/adapter 통합
+        Day 44: Metrics/Admin APIs 배포
+        Day 45: dosctl traces/costs/vendors 점검
+

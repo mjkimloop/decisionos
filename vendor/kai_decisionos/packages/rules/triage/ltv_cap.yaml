@@ -1,0 +1,12 @@
+name: ltv_cap
+version: 1.0.0
+rules:
+  - name: ltv_cap_high
+    when: 'payload.get("target_amt", 0) > 0.8 * payload.get("estimated_value", 1)'
+    priority: 90
+    stop: true
+    action:
+      class: review
+      reasons: ["ltv_above_cap"]
+      required_docs: ["appraisal_report"]
+

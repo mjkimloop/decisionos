@@ -1,0 +1,8 @@
+{
+  "org_id": "org_gamma",
+  "payload": {
+    "credit_score": 685,
+    "dti": 0.40,
+    "income_verified": true
+  }
+}

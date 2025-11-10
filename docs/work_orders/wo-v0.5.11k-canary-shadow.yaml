@@ -1,0 +1,67 @@
+meta:
+  version: v0.5.11k
+  date: 2025-11-10
+  status: locked
+  summary: "카나리/블루-그린 라우팅 · 섀도 트래픽 수집 · 증빙 비교 · 카나리 SLO 판정 · 자동 롤백"
+
+patches:
+  techspec:
+    - section: "Gate-AH — Experiment Harness v2 (Traffic Controller)"
+      mode: upsert
+      content: |
+        - 모듈: apps/experiment/controller.py
+          - 기능: 카나리/블루-그린 라우팅, 점진 증분(1%→5%→10%→25%→50%), 해시 고정(sticky) 세션 라우팅
+          - 해시 키: X-Canary-Key 헤더(or cookie) 또는 (tenant|user|path) 해시
+          - 가드: kill-switch(즉시 0%), 단계별 증분 실패 시 자동 롤백
+          - 정책: configs/rollout/policy.yaml (단계/대기시간/최대 동시 단계/허용 실패율)
+    - section: "Gate-T — Shadow Traffic Witness"
+      mode: upsert
+      content: |
+        - 모듈: apps/obs/witness/shadow.py
+          - 실트래픽 복제 비동기 전송(파이어-앤-포겟), PII 마스킹용 플러그(hooks/redactor.py)
+          - 샘플링율: configs/shadow/config.yaml (e.g., sample=0.1)
+          - 산출: control/canary 각각 reqlog CSV, diff CSV (응답코드/지연/페이로드 크기)
+    - section: "Evidence — canary block"
+      mode: upsert
+      content: |
+        - Evidence.canary:
+          - control_perf: {p50,p95,p99,error_rate,count}
+          - canary_perf:  {p50,p95,p99,error_rate,count}
+          - deltas: {p95_rel, error_delta, sig_error_delta}
+        - build_snapshot(..., perf_judge, canary)로 병합, 무결성 서명 포함
+    - section: "SLO-as-Code — Canary Policy"
+      mode: upsert
+      content: |
+        - slo-canary.json:
+          - thresholds:
+              max_p95_rel_increase: 0.15
+              max_error_abs_delta:  0.01
+              max_sig_error_delta:  0.0005
+          - min_sample_count: 1000
+          - guardband_minutes: 10
+    - section: "Gate-AJ — Judge (Canary Checks)"
+      mode: upsert
+      content: |
+        - slo_judge.canary_check(evidence.canary, slo_canary)
+        - 실패 사유 태그: canary.p95_rel_over, canary.error_delta_over, canary.sig_error_delta_over, canary.sample_insufficient
+        - fail-closed: 하나라도 위반 시 단계 중단 + 롤백 트리거
+    - section: "CI — Release Gate (Canary)"
+      mode: upsert
+      content: |
+        - 샘플 control/canary 로그 생성 → witness_judge_perf + canary_compare → Evidence 병합
+        - dosctl judge quorum --slo configs/slo/slo-canary.json --evidence var/evidence/latest.json --quorum 2/3 --attach-evidence
+        - exit code==0만 통과
+
+  plan:
+    - section: "Milestones — v0.5.11k"
+      mode: upsert
+      content: |
+        - M1: controller/shadow/compare 스켈레톤 + 정책 파일
+        - M2: Evidence.canary 병합 + Judge canary 판정
+        - M3: 통합/E2E + CI release gate
+    - section: "Next Actions — v0.5.11k"
+      mode: upsert
+      content: |
+        Day 232: controller.py, shadow.py, compare.py, 정책/샘플 CSV
+        Day 233: evidence.canary 병합, slo-canary.json, judge 확장
+        Day 234: 통합/E2E/CI 파이프라인, strict infra gate on

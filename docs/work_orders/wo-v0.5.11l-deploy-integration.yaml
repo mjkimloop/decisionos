@@ -1,0 +1,59 @@
+meta:
+  version: v0.5.11l
+  date: 2025-11-10
+  status: open
+  summary: "실트래픽 배포 파이프라인 연결(카나리/블루그린), 로그→Evidence 자동화, 운영 게이트/런북"
+
+patches:
+  techspec:
+    - section: "Deployment — Traffic Controller Integration"
+      mode: upsert
+      content: |
+        목표: release 파이프라인에서 카나리/블루그린을 실트래픽에 연결.
+        옵션A(K8s): Argo Rollouts(steps:25/50/100, maxUnavailable=0), shadow=Ingress mirror.
+        옵션B(NGINX/VM): mirror_location으로 shadow, upstream weight로 canary step.
+        게이트: dosctl shadow_capture → canary_compare → judge quorum(Infra+Canary SLO) 통과 시 promote.
+    - section: "Evidence — Auto-Harvest from Prod Logs"
+      mode: upsert
+      content: |
+        reqlog(ingress/app), judgelog(원격저지) 수집 → apps/cli/dosctl/witness_perf.py, witness_judge_perf.py로 변환 →
+        Evidence.merge(perf, perf_judge, canary). 저장소: object storage(s3://decisionos-evidence/YYYY/MM/DD/…).
+        보존: 90일(핵심 필드 해시 포함).
+    - section: "Security — Keys & Secrets Ops"
+      mode: upsert
+      content: |
+        HMAC 멀티키 KMS 연동(활성/예비/만료), 키수명 90일, 키 롤테이션 시 서명/검증 동시 허용 기간 14일.
+        ReplayStore: Redis(프로드), SQLite(스테이징). RBAC PEP 필수 정책: judge.run, rollout.promote.
+    - section: "Operations — SLO Burn-rate & Runbooks"
+      mode: upsert
+      content: |
+        SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, canary regression.
+        알람→슬랙/이메일. 런북: SLO 위반시 자동 freeze(rollout.pause) 및 증빙 링크 첨부.
+  plan:
+    - section: "Milestones — v0.5.11l"
+      mode: upsert
+      content: |
+        Day 1-2: 배포 파이프라인 훅 연결(옵션A/B 중 택1), 환경변수/시크릿 배선
+        Day 3: 로그→Evidence 자동화(Job/Cron) + 보존정책
+        Day 4: KMS 키 로테이션 드라이런 + RBAC 정책 배포
+        Day 5: SLO 알람/런북 + CI 릴리스 게이트 확장(운영 스텝)
+    - section: "Next Actions — v0.5.11l"
+      mode: upsert
+      content: |
+        • pipeline/release: canary_step.sh, promote.sh, abort.sh 추가
+        • configs/: ingress-mirror.* 또는 rollouts/*.yaml 추가
+        • jobs/: evidence_harvest_{reqlog,judgelog}.py + cron 스케줄
+        • docs/ops/: RUNBOOK-SLO.md, RUNBOOK-ROLLBACK.md, CLI-DEPLOY.md
+  acceptance_criteria:
+    - section: "Acceptance — v0.5.11l"
+      mode: upsert
+      content: |
+        - 카나리 단계(최소 25/50/100)에서 shadow_capture→canary_compare→judge quorum 2/3 통과 시만 promote
+        - reqlog/judgelog로부터 Evidence(perf, perf_judge, canary) 자동 생성·업로드, SHA256 무결성 검증
+        - KMS 키 로테이션 드라이런 성공(활성/예비 교대, 만료키 거부, 로그 남김)
+        - SLO 알람 트리거 시 rollout 자동 pause 및 증빙 링크 포함 알림
+  out_of_scope:
+    - section: "Out of Scope — v0.5.11l"
+      mode: upsert
+      content: |
+        - Gate-O/P 기능 본개발(별도 v0.5.12에서 착수)

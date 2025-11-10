@@ -1,0 +1,121 @@
+meta:
+  version: v0.4.8a
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-S Codex Sync: Tenancy models+RLS/CLS, Metering pipeline split, Rating/Proration, TokenBucket, Cost-Guard(EWMA), Invoice Draft"
+
+patches:
+  techspec:
+    - section: "Tenancy Model & Isolation"
+      mode: replace
+      content: |
+        계층: org → project → workspace → user/service-account.
+        모델(코드): apps/tenancy/models.py (Pydantic) · 정책/슬러그/소유권은 service.py.
+        DB: db/migrations/tenancy.sql — 파티셔닝(org_id), RLS(tenant_id), CLS(residency).
+        조인키: tenant_id, residency. in-memory 사전은 tenancy.service 레이어로 캡슐화(추후 영속화 전환).
+
+    - section: "Usage & Metering — Pipeline Split"
+      mode: replace
+      content: |
+        모듈: apps/metering/{schema.py, ingest.py, reconcile.py}
+        스키마: JSON Schema+Pydantic 동시 검증.
+        멱등키: hash(tenant_id|metric|corr_id). 워터마크: ISO8601 ts + source.
+        Edge(X): ingest.apply_event에서 source별 지연 허용 차등, 병합 전략 포함.
+        정합성: reconcile.build_report가 Observability(T) 대비 ±1% 검증.
+
+    - section: "Rating · Plans · Proration"
+      mode: replace
+      content: |
+        정의: apps/rating/{plans.py, engine.py, proration.py}
+        플랜: Basic/Pro/Ent — 포함량/계층단가. 환율/세율 프리셋: configs/billing/pricing.yaml.
+        출력: dashboards/billing/{usage.json, costs.json} — 코스트 카드.
+
+    - section: "Quota/Throttling · Cost-Guard v1"
+      mode: replace
+      content: |
+        quota.py: 소프트/하드 한도. throttle.py: 토큰버킷(초/분), 버스트, tenant 라운드로빈.
+        cost_guard: apps/cost_guard/{budget.py, anomaly.py(EWMA), actions.py}
+        모든 조치: ticket_id/trace_id 의무, Evidence(Billing/Cost) 링크.
+
+    - section: "Invoice Drafts"
+      mode: replace
+      content: |
+        apps/invoice/{draft.py, pdf.py}: usage→라인→세금 계산(택스 어댑터 훅).
+        REST: apps/gateway/routers/invoice.py, CLI: dosctl billing 하위 커맨드.
+        크레딧 노트 반영. (결제/환불은 Gate-U).
+
+    - section: "APIs/CLI · PEP/ABAC"
+      mode: replace
+      content: |
+        routers 추가: apps/gateway/routers/{meter.py, rating.py, quota.py, cost.py, invoice.py}
+        정책: Depends(enforce_policy("billing.read|write")), ABAC(Gate-W) 연계, 마스킹 Hook 재사용.
+        CLI: apps/cli/dosctl/main.py에 meter/rating/quota/cost/invoice 서브커맨드.
+
+    - section: "Tests & Evidence"
+      mode: replace
+      content: |
+        tests/test_gate_s_*: 멱등/워터마크, proration, token-bucket p95, freeze/unfreeze.
+        fixtures: Gate-T 카운터 모킹.
+        리포트: reports/billing/{usage_vs_obs.csv, cost_guard_events.json}, invoice PDF 샘플 5종.
+        Evidence Binder(Billing/Cost) 업데이트.
+
+  plan:
+    - section: "Next Actions (delta)"
+      mode: replace
+      content: |
+        D+0: apps/tenancy/models.py/service.py 스캐폴드 · db/migrations/tenancy.sql 초안
+        D+1: apps/metering/{schema,ingest,reconcile} · ingest.apply_event(source-aware lag)
+        D+2: rating {plans,engine,proration} · configs/billing/pricing.yaml · dashboards/billing/*
+        D+3: limits {quota,throttle} · cost_guard {budget,anomaly(EWMA),actions} · Evidence 훅
+        D+4: invoice {draft,pdf} · routers/* · dosctl billing · tests/test_gate_s_* · 리포트/증빙 생성
+
+work:
+  codex:
+    - id: X-127a
+      title: Tenancy Models + RLS/CLS
+      deliverables:
+        - apps/tenancy/{models.py, service.py}
+        - db/migrations/20251106_01_tenancy.sql
+      acceptance:
+        - org/project/ws/user 계층·슬러그/소유권 정책 분리·RLS/CLS 적용
+
+    - id: X-128a
+      title: Metering Pipeline Split
+      deliverables:
+        - apps/metering/{schema.py, ingest.py, reconcile.py}
+        - apps/meter/__init__.py (래퍼 유지, 경로 전환)
+      acceptance:
+        - 멱등/워터마크·Edge 지연 허용 차등·±1% 정합 리포트
+
+    - id: X-129a
+      title: Rating/Proration + Pricing Presets
+      deliverables:
+        - apps/rating/{plans.py, engine.py, proration.py}
+        - configs/billing/pricing.yaml, dashboards/billing/{usage.json, costs.json}
+      acceptance:
+        - 업/다운 일할·계층단가 계산·코스트 카드 출력
+
+    - id: X-130a
+      title: Quota/Throttle(TokenBucket) + Cost-Guard(EWMA)
+      deliverables:
+        - apps/limits/{quota.py, throttle.py}
+        - apps/cost_guard/{budget.py, anomaly.py, actions.py}
+      acceptance:
+        - token-bucket p95≤20ms · 예산50/80/100%·급증 탐지·freeze/override e2e
+
+    - id: X-131a
+      title: Invoice Draft JSON/PDF + Routers/CLI
+      deliverables:
+        - apps/invoice/{draft.py, pdf.py}
+        - apps/gateway/routers/{meter.py, rating.py, quota.py, cost.py, invoice.py}
+        - apps/cli/dosctl/main.py (billing 서브커맨드)
+      acceptance:
+        - invoice_draft.json/PDF 5종·크레딧 노트·CLI/API e2e
+
+risks:
+  - name: 경로 전환 중 레그시 충돌
+    mitigation: apps/meter 래퍼 유지·Deprecated 경고·점진 전환 가이드
+  - name: RLS/CLS 오구성
+    mitigation: 마이그 전 검증 스크립트·권한 테스트·드라이런
+  - name: 과금 정합 오류
+    mitigation: Gate-T 대조 리포트·수동 조정 절차·증빙 로그

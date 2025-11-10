@@ -1,0 +1,142 @@
+meta:
+  version: v0.5.3
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AD: Data Privacy Ops — Discovery/Consent/Retention/DSAR/Legal Hold (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Privacy Architecture — Scope"
+      mode: replace
+      content: |
+        목표: 테넌트별 개인정보 처리의 합법성/최소화/목적제한/보존·삭제/권리행사(DSAR) 보장.
+        구성: discovery(classify) · consent/purpose · retention/lifecycle · dsar · redaction · legal_hold · privacy_vault(tokenize) · evidence.
+
+    - section: "Data Discovery & Classification"
+      mode: replace
+      content: |
+        스캐너: apps/privacy/discovery/{scanner.py, classifiers.py}
+        규칙: 정규식/국가별 식별자(주민/전화/계좌/카드/이메일), ML-stub(이름/주소 문맥).
+        민감도: P0(민감), P1(식별), P2(준식별), P3(비식별). 스키마/컬럼/샘플링 1k행.
+        출력: catalog.tagging(prv.pii=type, prv.sensitivity), evidence/map.json.
+        오탐제어: 샘플 수동확인 큐(허용오차 ≤ 1.0%).
+
+    - section: "Consent & Purpose Limitation"
+      mode: replace
+      content: |
+        모델: consent{subject_id, purposes[], scopes[], lawful_basis, ts, expiry?}
+        목적: marketing/analytics/service/contract/legal 등. 정책ID(Gate-W)와 링크.
+        검증: API 호출 시 PEP가 consent/purpose 교차·만료 검증, 비합치 시 차단/마스킹.
+        기록: consent_id를 decision ledger(Gate-Q) reason_codes에 포함.
+
+    - section: "Retention & Deletion Lifecycle"
+      mode: replace
+      content: |
+        정책: retention_rule{dataset, sensitivity, ttl, action[delete|anonymize|tokenize], legal_basis}
+        스케줄러: apps/privacy/retention/scheduler.py — 일일 배치, dry-run → 승인 → 실행.
+        삭제: soft→hard 단계, 종속 관계/참조 무결성 처리, 연결 시스템(O) 전파.
+        익명화/토큰화: reversible(privacy_vault) vs irreversible(redaction) 선택.
+
+    - section: "Privacy Vault (Tokenization/KMS)"
+      mode: replace
+      content: |
+        vault: apps/privacy/vault/{service.py, kms_adapter.py}
+        토큰화: det/randomizable 해시·포맷보존(FPE) 스텁. 키는 KMS(내부/외부)로 관리.
+        접근: ABAC 최소권한, 토큰→원문 복구는 승인형(HITL/4-eyes) 플로우로 제한.
+
+    - section: "DSAR/SAR — Intake · Verify · Fulfill"
+      mode: replace
+      content: |
+        파이프라인: intake → identity verify(KYC-lite) → scope resolve → collect → redact → export → fulfill.
+        엔진: apps/privacy/dsar/{engine.py, exporter.py, redactor.py, verifiers.py}
+        산출: subject_export.zip(JSON+CSV+PDF 요약), 타임라인/출처/동의/정책 링크 포함.
+        SLA: 법정 30일 내, 내부 목표 7일 내. 진행상태/통지 템플릿 포함.
+
+    - section: "Legal Hold"
+      mode: replace
+      content: |
+        legal_hold{id, scope(datasets|subjects|cases), reason, start, end?}
+        효과: 삭제/수정 정지, 실행 로그·증빙 필요. 해제 시 보류기간 동안 누락된 보존 동기화.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/privacy/discovery/run {scope}
+          - POST /api/v1/privacy/consents/set {subject_id, purposes[], scopes[]}
+          - GET  /api/v1/privacy/consents/{subject_id}
+          - POST /api/v1/privacy/retention/policy {rule}
+          - POST /api/v1/privacy/retention/run {dry_run|apply}
+          - POST /api/v1/privacy/dsar/create {subject_claim}
+          - GET  /api/v1/privacy/dsar/{id}/status
+          - POST /api/v1/privacy/dsar/{id}/fulfill
+          - POST /api/v1/privacy/legal_hold/set {scope}
+          - POST /api/v1/privacy/legal_hold/release {id}
+        CLI(dosctl):
+          - dosctl privacy discover|tag
+          - dosctl privacy consent set|get
+          - dosctl privacy retention policy|run --apply
+          - dosctl privacy dsar create|status|fulfill
+          - dosctl privacy legal-hold set|release
+
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        암호화: 저장 AES-256, 전송 TLS1.2+, 키는 KMS. 접근: ABAC(Gate-W), 필드레벨 마스킹.
+        감사: 모든 privacy 이벤트는 Gate-Q ledger에 요약 링크. Residency/국가별 경계 준수.
+        DSAR export/redaction 시 PII 최소화·3자 정보 제거·검토 승인 로그.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AD 성공 기준:
+          - DSAR 평균 처리 ≤ 7일, 법정 30일 초과 0건
+          - 삭제 전파(커넥터 포함) TTD p95 ≤ 72h, 누락 0.5% 미만
+          - 분류 정밀도 ≥ 99.0%, 재현정합성(태깅) ≥ 98.5%
+          - 동의/목적 위반 차단 100%, 위반 시 차단 로그/증빙 존재
+          - Evidence Binder(Privacy) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Discovery/Classification · 태깅/맵
+        - Consent/Purpose · PEP 연동
+        - Retention/Lifecycle · Vault(Tokenization)
+        - DSAR 엔진/Redactor/Exporter · 통지
+        - Legal Hold · API/CLI · Evidence/대시
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 166: discovery 스캐너/분류기 · 카탈로그 태깅/맵 산출
+        Day 167: consent/purpose 모델·PEP 훅 · 정책 교차검증
+        Day 168: retention 스케줄러·삭제/익명화·vault 토큰화
+        Day 169: dsar 엔진/검증/레닥터/익스포터 · 통지 템플릿
+        Day 170: legal_hold · API/CLI · SLO 측정 · Evidence(Privacy)
+
+work:
+  claude:
+    - id: C-85
+      title: Privacy Policy Pack & ROPA/DPIA Templates
+      deliverables:
+        - docs/privacy/policy_ko.md, docs/privacy/ropa_template.md, docs/privacy/dpia_template.md
+      acceptance:
+        - 처리목적/법적근거/보존/권리/국경이전·DPIA 체크리스트 포함
+
+    - id: C-86
+      title: DSAR Playbook & Notices (ko)
+      deliverables:
+        - ops/dsar_playbook.md, notice_templates/{ack_ko.md, fulfill_ko.md, extend_ko.md}
+      acceptance:
+        - SLA/예외/연장통지/항소 경로·법무 코멘트 반영
+risks:
+  - name: 과탐/오탐으로 인한 운영비용 증가
+    mitigation: 샘플 검수 큐·민감도 임계 재조정·화이트리스트/블랙리스트
+  - name: 삭제 전파 누락(커넥터 지연)
+    mitigation: 재시도/지연큐·워터마크·미전파 경보·수동 재실행
+  - name: DSAR 남용/사칭
+    mitigation: KYC-lite·요청률 제한·법무 승인·로그 전면 캡처
+  - name: Vault 키 관리 리스크
+    mitigation: KMS/회전·듀얼컨트롤(4-eyes)·키접근 감사
+  - name: 데이터 경계/수출 규제
+    mitigation: Residency 라벨·경계 검증 훅·목적 제한 강제

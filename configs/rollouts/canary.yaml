@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: judge-api
+  namespace: decisionos
+spec:
+  replicas: 6
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: judge-api
+  template:
+    metadata:
+      labels:
+        app: judge-api
+    spec:
+      containers:
+        - name: judge-api
+          image: registry.example.com/judge-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DECISIONOS_ROLLOUT_STAGE_FILE
+              value: /var/run/decisionos/desired_stage.txt
+  strategy:
+    canary:
+      canaryMetadata:
+        annotations:
+          decisionos.io/rollout: canary
+      stableMetadata:
+        annotations:
+          decisionos.io/rollout: stable
+      trafficRouting:
+        istio:
+          virtualService:
+            name: judge-gateway
+            routes:
+              - primary
+      steps:
+        - setWeight: 25
+        - pause: {duration: 10m}
+        - analysis:
+            templates:
+              - templateName: judge-canary-health
+        - setWeight: 50
+        - pause: {duration: 10m}
+        - analysis:
+            templates:
+              - templateName: judge-canary-health
+        - setWeight: 100
+        - pause: {duration: 5m}
+        - analysis:
+            templates:
+              - templateName: judge-canary-health
+      maxUnavailable: 0
+      maxSurge: 1
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: judge-canary-health
+  namespace: decisionos
+spec:
+  args:
+    - name: stage
+  metrics:
+    - name: canary-gate
+      interval: 5m
+      successCondition: result == 0
+      failureLimit: 1
+      provider:
+        job:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: canary-gate
+                    image: ghcr.io/decisionos/dosctl:latest
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - >-
+                        pipeline/release/canary_step.sh {{args.stage}}
+                restartPolicy: Never

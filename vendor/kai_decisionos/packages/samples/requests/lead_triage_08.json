@@ -1,0 +1,11 @@
+{
+  "org_id": "orgD",
+  "payload": {
+    "credit_score": 530,
+    "dti": 0.65,
+    "income_verified": true,
+    "employment_type": "self_employed",
+    "region": "BSN"
+  }
+}
+

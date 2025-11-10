@@ -1,0 +1,128 @@
+meta:
+  version: v0.2.3
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-J: Playbooks·Decision Templates·Domain Packs — 표준·레지스트리·스캐폴딩·시뮬레이션"
+
+patches:
+  techspec:
+    - section: "Content Registry"
+      mode: replace
+      content: |
+        레지스트리(v0.2.3):
+        - 구조: registry/
+          - playbooks/<name>/<version>/playbook.yaml
+          - templates/decision/<name>/<version>/template.yaml
+          - domain_packs/<domain>/<version>/{README.md, datasets/, rules/, playbooks/, templates/}
+        - 메타스키마: registry/meta.yaml {name, version, domain, owner, license, min_os_version, hash}
+        - 배포: zip(tar.gz) + 서명(.sig), 해시 검증 필수
+        - 호환성: min_os_version 불일치 시 import 차단(dry-run 옵션)
+    - section: "Playbook Spec"
+      mode: replace
+      content: |
+        Playbook YAML 스키마(v0.2.3):
+        kind: playbook
+        version: v1
+        meta: {name, domain, owner, kpis[], risk_level}
+        trigger: {route: decide|ingest|alert, match:{tenant?, labels?, threshold?}}
+        inputs: [{name, type, required, source}]
+        actions:
+          - type: policy.apply | hitl.require | notify | route.set | throttle | enrich
+            params: {...}
+        guardrails: {error_budget_max, budget_max_usd, timeout_ms}
+        kpis: {leading:[...], lagging:[...]}
+        tests: [{name, fixture, expect:{decision, kpi_delta?}}]
+        docs: {summary, steps[], rollback}
+    - section: "Decision Template Spec"
+      mode: replace
+      content: |
+        Decision Template YAML(v0.2.3):
+        kind: decision_template
+        version: v1
+        graph:
+          nodes:
+            - id: ingest|validate|policy|hitl|execute|notify|end
+              spec: {policy_ref?, rule_ref?, template?, retries?, timeout_ms?}
+          edges: [{from, to, when?}]
+        defaults: {policy_set, reason_codes, sla: {p95_ms, hitl_sla_min}}
+        simulate: {fixtures: [path], asserts: [expr]}
+    - section: "Domain Packs"
+      mode: replace
+      content: |
+        도메인 팩(v0.2.3):
+        - 최소 구성: README.md(문맥/가정/범위), datasets/(synthetic_csv), rules/(yaml), playbooks/(yaml), templates/(yaml)
+        - 예시 도메인(초기 제공):
+          1) lending_brokerage v0.1 — 리드 트리아지·서류체크·부적합 컷 플레이북 포함
+          2) collections v0.1 — 채무상담 우선순위·연락 빈도 조절 템플릿
+          3) insurance_underwriting v0.1 — 서류 누락 감지·HITL 라우팅
+          4) ecommerce_fraud v0.1 — 고위험 주문 차단·리뷰 요청
+          5) healthcare_intake v0.1 — 민감정보 처리·동의 라우팅
+          6) logistics_routing v0.1 — SLA 기반 라우팅·우회 규칙
+        - 호환성 테스트: Reality‑Seal·Policy/HITL 연동·PII Vault 준수 필수
+    - section: "Tooling"
+      mode: replace
+      content: |
+        도구체인:
+        - Scaffolder: dosctl scaffold {playbook|template|domain} --name --domain --version
+        - Import/Export: dosctl pack import|export <path-or-url>
+        - Lint/Validate: dosctl pack validate <path> (스키마+lints)
+        - Simulate: dosctl simulate --pack <path> --fixtures datasets/
+        - Docs Build: scripts/build_docs.py → docs/site/ (mkdocs 호환)
+    - section: "Interfaces"
+      mode: append
+      content: |
+        관리 API:
+        - POST /api/v1/packs/import (multipart, sig 검증)
+        - GET  /api/v1/packs/list
+        - POST /api/v1/packs/enable {name, version}
+        - POST /api/v1/packs/disable {name}
+        - POST /api/v1/simulate/pack {name, fixtures}
+    - section: "SLO & KPIs"
+      mode: replace
+      content: |
+        Gate‑J 성공 기준:
+        - 레지스트리/스키마/린터/시뮬레이터 동작
+        - 초기 도메인 팩 ≥2개 공개(리포지토리/서명 포함)
+        - PoV 한 곳에서 팩 1개 이상 적용(시뮬레이션→드라이런→운영)
+        - Time‑to‑Launch: 새 팩 도입 ≤ 5일(스캐폴딩→운영)
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑J 마일스톤(완료 조건):
+        - 스키마/린터/시뮬레이터/스캐폴더 제공
+        - packs API/dosctl 연동 → import/enable/disable 동작
+        - 초기 도메인 팩 3종 발행(lending, collections, ecommerce)
+        - Reality‑Seal 재실행 + 도메인별 증빙
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 51: 스키마 정의/린터/밸리데이터 구현
+        Day 52: 스캐폴더/임포트·서명 검증/레지스트리 메타
+        Day 53: 시뮬레이터(drivers) + /packs API + dosctl pack/ scaffold
+        Day 54: 도메인 팩 3종 시드 작성 + datasets 합성
+        Day 55: PoV 대상에 lending_brokerage 팩 적용 드라이런 + Reality‑Seal
+
+work:
+  claude:
+    - id: C-24
+      title: 도메인 팩 3종 문서/서명
+      deliverables:
+        - registry/domain_packs/{lending_brokerage,collections,ecommerce_fraud}/v0.1/README.md
+        - SIGNING.md(서명/검증 절차), LICENSE
+      acceptance:
+        - 가정/범위/한계 명시, 해시·서명 파일 포함
+    - id: C-25
+      title: 플레이북/템플릿 예제·가이드
+      deliverables:
+        - docs/playbook_guide.md, docs/decision_template_guide.md
+      acceptance:
+        - 예제 3개 이상, 테스트 픽스처 포함
+
+risks:
+  - name: 도메인별 규제·책임 범위 혼선
+    mitigation: README에 "참고용"/책임범위 표기, HITL 기본 on
+  - name: 호환성 지옥(버전)
+    mitigation: min_os_version 강제, 시맨틱 버저닝, 마이그레이션 가이드
+  - name: 데이터 품질·픽스처 부족
+    mitigation: 합성 데이터 제네레이터 제공, 최소 N=1k 확보

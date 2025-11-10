@@ -1,0 +1,139 @@
+meta:
+  version: v0.4.4
+  date: 2025-11-05
+  status: locked
+  summary: "Gate-X: Edge/Offline · Store-and-Forward · Sync/Conflict · Local Policy · Secure Cache (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Edge/Offline — Architecture"
+      mode: replace
+      content: |
+        구성요소:
+          - edge_agent: 경량 실행기(결정 호출 프록시, 로컬 큐/캐시, 정책 집행)
+          - syncd: 증분 동기화 데몬(배치프레임, 서명검증, 재전송)
+          - secure_store: SQLite(WAL) + AES-GCM-at-rest (OS keyring/KMS로 키 보호)
+          - pkg signer: 엣지 번들(바이너리/정책/설정) 서명·검증
+        운영모드:
+          - online: 클라우드 우선, 로컬 캐시 히트/미스 관리
+          - offline: 로컬 규칙/계약만으로 결정 수행, 큐 적재 후 연결 시 재전송
+        타깃:
+          - OS: Linux(x64/arm64), Windows, macOS
+          - 배포: 압축 번들 + 서명(sig) + 해시(manifest.json)
+    - section: "Store-and-Forward & Sync Protocol"
+      mode: replace
+      content: |
+        큐:
+          - outbox{ id, corr_id, type, payload_blob, retries, next_at, status }
+          - 전송 전략: 지수백오프(<= 5m), 최대 재시도 12, 멱등키 = corr_id
+        동기화:
+          - 채널: configs, policies, catalogs, decisions_logs, usage
+          - 프레임: seq_no, range_hash, items[], sig
+          - 무결성: 해시-체인 검증, 틀림 발생 시 범위 재동기화
+        충돌해결:
+          - 기본 LWW + policy guard(deny 우선)
+          - 로그/케이스류: vector clock 기반 merge, 불가 시 HITL 큐로 에스컬레이션
+    - section: "Local Policy (ABAC Subset) & Break-Glass"
+      mode: replace
+      content: |
+        정책:
+          - Gate-W의 Cedar-lite 서브셋을 edge용 바이트코드로 컴파일
+          - 평가 캐시 TTL=60s, p95 ≤ 10ms
+        브레이크글라스:
+          - offline_override ≤ 2h, 사유/티켓 필수, 모든 행위 감사 라벨 포함
+          - 온라인 복귀 즉시 리포트 업로드·심사 대기열
+    - section: "Secure Cache · Data Minimization"
+      mode: replace
+      content: |
+        캐시:
+          - decision_cache: key(hash(DecisionRequest.contract+features)), value, ttl
+          - 최대항목/TTL 플랜별 상한(Free/Pro/Ent)
+          - PII/비밀 필드 마스킹 후 저장(마지막4자리 등)
+        최소수집:
+          - 필요 필드만 저장, 로그/메트릭은 압축+샘플링(헤드10%/테일 p95)
+    - section: "Device Lifecycle & Attestation"
+      mode: replace
+      content: |
+        등록:
+          - device_enroll: CSR 제출 → mTLS 발급 → org/project 스코프 부여
+        상태:
+          - heartbeat: 버전/디스크/큐/오류 카운터 보고
+        폐기:
+          - remote_revoke: 인증서 폐기·키 와이프·데이터 파쇄(보존정책 예외만 남김)
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/edge/enroll {device_info} → cert
+          - GET  /api/v1/edge/config?device_id=
+          - POST /api/v1/edge/heartbeat {status}
+          - POST /api/v1/edge/revoke {device_id}
+          - GET  /api/v1/edge/outbox?device_id=
+        CLI(dosctl):
+          - `dosctl edge enroll --device <name>`
+          - `dosctl edge status --device <id>`
+          - `dosctl edge sync --push|--pull`
+          - `dosctl edge revoke --device <id>`
+          - `dosctl edge pkg verify --file bundle.tgz --sig bundle.sig`
+    - section: "Observability & Billing Integration"
+      mode: replace
+      content: |
+        관측성(Gate-T):
+          - trace_id/corr_id 전파, 로컬 스풀 → 온라인 시 일괄 업로드
+          - synthetic probe: edge-health(큐 적재율, 지연 p95)
+        빌링(Gate-S):
+          - usage 이벤트 오프라인 적재 → 월간/일별 집계로 병합(idempotent)
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-X 성공 기준:
+          - 48h 완전 오프라인 운영: 데이터 손실 0, 큐 자동 배출(재시도 완료)
+          - 동기화 무결성: 해시-체인 검증 실패 ≤ 0.1%, 자동 재동기화 성공
+          - 정책 평가: p95 ≤ 10ms(엣지), 브레이크글라스 로그 100% 업로드
+          - 결정 레이턴시: 온라인 대비 +≤ 15% (엣지 경로)
+          - 보안: 캐시 평문 저장 금지, 키 파기/원격폐기 증빙
+          - Evidence Binder(Edge/Offline) 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - edge_agent + secure_store + pkg signer/verify
+        - store-and-forward 큐 + syncd(증분/해시체인/재전송)
+        - ABAC-subset 컴파일러 + edge 정책 평가기 + break-glass
+        - 관측성/빌링 연동 + 디바이스 수명주기(등록/폐기)
+        - e2e 테스트/게임데이(48h 오프라인) + 증빙 번들
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 121: edge_agent 골격, secure_store(AES-GCM), pkg 서명/검증
+        Day 122: outbox 큐, sync 프레임(해시/시그), 재시도/멱등, dosctl edge 기본
+        Day 123: ABAC-subset 컴파일/평가기, break-glass·감사 라벨
+        Day 124: heartbeat/attestation, obs/billing 적재, 24h 오프라인 리허설
+        Day 125: 48h 오프라인 게임데이, 성능/무결성 리포트, Evidence 정리
+
+work:
+  claude:
+    - id: C-62
+      title: Edge Security & Offline Ops Guide
+      deliverables:
+        - docs/edge_security_guide.md, ops/runbook_offline_ops.md
+      acceptance:
+        - 키관리/원격폐기/오프라인 절차·체크리스트 포함
+    - id: C-63
+      title: Sync/Conflict Spec & Test Plan
+      deliverables:
+        - docs/sync_protocol.md, tests/sync/test_plan.md
+      acceptance:
+        - 프레임/해시/충돌정책 정의·테스트 시나리오 20+
+
+risks:
+  - name: 데이터 무결성/중복 전송
+    mitigation: 해시-체인/범위 재동기화·멱등키·드리프트 감시
+  - name: 평문 캐시/키 유출
+    mitigation: AES-GCM·키링/KMS·파일권한·원격폐기
+  - name: 충돌 폭증/손실 병합
+    mitigation: LWW+정책가드, 벡터클록 로그병합, HITL 에스컬
+  - name: 비용/디스크 폭주
+    mitigation: TTL/쿼터/압축, 코스트가드 경보(Gate-S 연동)
+  - name: 성능 오버헤드
+    mitigation: 비동기 전송·배치, 샘플링/캐시, 경량화 빌드

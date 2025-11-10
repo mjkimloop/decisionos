@@ -1,0 +1,105 @@
+meta:
+  version: v0.2.3
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑J: Playbooks · Decision Templates · Domain Packs — 표준화 및 배포 (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-24
+      title: 도메인 팩 3종 문서/서명
+      deliverables:
+        - registry/domain_packs/{lending_brokerage,collections,ecommerce_fraud}/v0.1/README.md
+        - SIGNING.md
+        - LICENSE
+      acceptance:
+        - 가정/범위/한계 명시, 해시·서명 파일 포함
+    - id: C-25
+      title: 플레이북/템플릿 예제·가이드
+      deliverables:
+        - docs/playbook_guide.md
+        - docs/decision_template_guide.md
+      acceptance:
+        - 예제 3개 이상, 테스트 픽스처 포함
+
+  codex:
+    - id: X-42
+      title: 스키마/린터/밸리데이터
+      deliverables:
+        - apps/packs/schema.py
+        - apps/packs/lints.py
+        - apps/packs/validator.py
+      acceptance:
+        - 잘못된 스키마/필수 필드 누락 시 에러, 단위테스트 20+
+    - id: X-43
+      title: 스캐폴더/임포트·서명 검증
+      deliverables:
+        - cli/dosctl/scaffold.py
+        - apps/packs/signature.py
+        - apps/gateway/routers/packs.py
+      acceptance:
+        - pack import 시 서명·호환성 검사 통과 필수
+    - id: X-44
+      title: 시뮬레이터 드라이버
+      deliverables:
+        - apps/packs/simulator.py
+        - apps/gateway/routers/simulate_pack.py
+      acceptance:
+        - 실패시 상세 diff 출력, HTML 리포트 옵션
+    - id: X-45
+      title: 도메인 팩 시드 3종
+      deliverables:
+        - registry/domain_packs/{lending_brokerage,collections,ecommerce_fraud}/v0.1/*
+      acceptance:
+        - simulate 통과, Reality‑Seal 품질게이트 유지
+    - id: P-08
+      title: dosctl 확장(pack)
+      deliverables:
+        - "cli/dosctl/main.py: pack scaffold|import|list|enable|disable|simulate"
+      acceptance:
+        - 로컬에서 end‑to‑end 동작
+
+risks:
+  - name: 도메인별 규제·책임 범위 혼선
+    mitigation: README에 "참고용"/책임범위 표기, HITL 기본 on
+  - name: 호환성 지옥(버전)
+    mitigation: min_os_version 강제, 시맨틱 버저닝, 마이그레이션 가이드
+  - name: 데이터 품질·픽스처 부족
+    mitigation: 합성 데이터 제네레이터 제공, 최소 N=1k 확보
+
+patches:
+  techspec:
+    - section: "Playbooks & Templates"
+      mode: replace
+      content: |
+        운영 플레이북·결정 템플릿(v0.2.3):
+        - Playbooks: 운영/장애/보안/DR 절차 표준화
+        - Decision Templates: 계약/규칙/모델/훅 조합의 베이스라인
+        - Registry: packs/registry에 메타/서명/호환성 관리
+    - section: "Domain Packs"
+      mode: replace
+      content: |
+        도메인 팩 표준(v0.2.3):
+        - 구조: meta.yaml, README, fixtures/, datasets/, signatures/
+        - 필수 필드: id, name, version, min_os_version, compatibility, checks[]
+        - 서명/해시: SIGNING.md 절차 준수, 해시·서명 파일 포함
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑J 신규/확장 인터페이스:
+        - /api/v1/packs/import|list|enable|disable
+        - /api/v1/packs/simulate
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑J: 운영 플레이북·결정 템플릿·도메인 팩 표준화 및 배포
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 51: 스키마 정의/린터/밸리데이터 구현
+        Day 52: 스캐폴더/임포트·서명 검증/레지스트리 메타
+        Day 53: 시뮬레이터(drivers) + /packs API + dosctl pack/ scaffold
+        Day 54: 도메인 팩 3종 시드 작성 + datasets 합성
+        Day 55: PoV 대상에 lending_brokerage 팩 적용 드라이런 + Reality‑Seal
+

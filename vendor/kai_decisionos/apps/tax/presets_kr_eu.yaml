@@ -1,0 +1,19 @@
+KR:
+  currency: KRW
+  label: VAT
+  default_rate: 0.1
+  categories:
+    digital: 0.1
+    services: 0.1
+EU:
+  currency: EUR
+  label: VAT
+  default_rate: 0.2
+  categories:
+    reduced: 0.1
+US:
+  currency: USD
+  label: Sales Tax
+  default_rate: 0.0
+  categories:
+    digital: 0.0

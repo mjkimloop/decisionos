@@ -1,0 +1,40 @@
+meta:
+  version: v0.5.11d
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-S — Rating(요금계산) / Quota(한도) / Cost-Guard(예산/이상징후) v1"
+
+patches:
+  techspec:
+    - section: "Gate-S — Rating v1"
+      mode: upsert
+      content: |
+        - 입력: ReconcileReport(V1/V2) buckets (metric별 사용량 sum).
+        - 계획(Plan): metric별 포함량(included), 초과단가(overage_rate) 단순 테이블.
+        - 출력: subtotal, overage_units, details[].
+        - 단위/환율/세금은 v1에서 제외(후속 단계).
+    - section: "Gate-S — Quota v1"
+      mode: upsert
+      content: |
+        - per-tenant, per-metric soft/hard quota.
+        - soft 초과시 'throttle' 권고, hard 초과시 'deny'.
+        - InMemory 상태 저장(후속: pluggable store).
+    - section: "Gate-S — Cost-Guard v1"
+      mode: upsert
+      content: |
+        - BudgetPolicy: 월간 한도와 경보 임계(0.8, 1.0).
+        - EWMA 기반 급증 탐지(알파/임계치) — 간단 모델.
+        - 조치: alert/freeze/none (fail-closed는 상위 게이트에서).
+  plan:
+    - section: "Milestones — Gate-S v1.3"
+      mode: upsert
+      content: |
+        - rating/ plans.py + engine.py
+        - limits/ quota.py
+        - cost_guard/ budget.py + anomaly.py (+ actions stub)
+        - 단위 테스트 3종 Green
+    - section: "Next Actions — Gate-S"
+      mode: upsert
+      content: |
+        Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering)
+        Day 222: Cost-Guard 조치의 Evidence(치명 로그) 연동 및 RBAC hook

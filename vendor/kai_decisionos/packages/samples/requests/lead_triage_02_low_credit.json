@@ -1,0 +1,8 @@
+{
+  "org_id": "org_alpha",
+  "payload": {
+    "credit_score": 520,
+    "dti": 0.42,
+    "income_verified": true
+  }
+}

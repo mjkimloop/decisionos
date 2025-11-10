@@ -1,0 +1,8 @@
+{
+  "org_id": "org_beta",
+  "payload": {
+    "credit_score": 680,
+    "dti": 0.72,
+    "income_verified": true
+  }
+}

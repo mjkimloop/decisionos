@@ -1,0 +1,71 @@
+meta:
+  version: v0.1.5
+  date: 2025-11-02
+  status: locked
+  summary: "Reality‑Seal 테스트/가드 도입(재현성·커버리지·조기신호·보안증빙) — No‑Gemini"
+
+work:
+  claude:
+    - id: C-04
+      title: Leading KPI Extractor + HTML 템플릿
+      deliverables:
+        - apps/analytics/leading_kpis.py
+        - apps/rule_engine/templates/seal_report.html
+      acceptance:
+        - 샘플 로그 입력으로 HTML 생성, 상담시간/재요청률/Reject Precision 수치 반영
+    - id: C-05
+      title: DLP 익명화 유틸리티
+      deliverables:
+        - apps/security/anonymizer.py
+      acceptance:
+        - seal_run.py 산출 JSON/HTML에 PII 노출 0건(주민/계좌/연락처 마스킹)
+
+  codex:
+    - id: X-07
+      title: Reality‑Seal 러너/가드
+      deliverables:
+        - scripts/seal_run.py
+        - scripts/seal_guard.py
+        - tests/test_seal.py
+      acceptance:
+        - reports/seal_report_*.json/html 생성, 임계치 미달 시 비0 종료
+    - id: X-08
+      title: dosctl 확장(seal)
+      deliverables:
+        - cli/dosctl/main.py (`seal run`, `seal report`)
+      acceptance:
+        - 로컬에서 seal run → report 파일 생성
+    - id: X-09
+      title: PR/CI 통합
+      deliverables:
+        - .git/hooks/pre-commit 업데이트(rule_linter + seal_guard)
+        - scripts/ci_local.sh (옵션)
+      acceptance:
+        - pre-commit 실패 시 커밋 차단, 로컬 CI 스크립트 성공
+
+risks:
+  - name: 샘플 로그 부족으로 KPI 산출 불가
+    mitigation: apps/analytics에 synthetic generator 추가, 최소 N=200 보장
+  - name: 커버리지 85% 미달
+    mitigation: 린터 경고 차단 수준으로 상향, 테스트 추가
+  - name: PII 노출 리스크
+    mitigation: anonymizer 강제 적용, 리포트에 PII 스니펫 금지
+
+patches:
+  techspec:
+    - section: Open Issues
+      mode: append
+      content: |
+        - Reality‑Seal: 재현성/커버리지/조기신호/보안증빙 자동 리포트
+    - section: Security Controls
+      mode: ensure
+      content: |
+        - 리포트 산출 경로에 DLP/익명화 필수 적용
+  plan:
+    - section: Next Actions
+      mode: replace
+      content: |
+        Day 11: seal_run.py/guard.py 구현 + dosctl seal 서브커맨드 추가
+        Day 12: Rule Coverage/Leading KPI 추출기 연동 → HTML 리포트 템플릿 완성
+        Day 13: pre-commit/CI 파이프라인 연결 → 첫 번째 Reality‑Seal 리포트 산출
+

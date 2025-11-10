@@ -1,0 +1,145 @@
+meta:
+  version: v0.4.8
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-S: Multi-Tenancy · Usage/Metering/Rating · Quota/Throttling · Cost-Guard v1 · Invoicing Stubs (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Tenancy Model & Isolation"
+      mode: replace
+      content: |
+        계층: org → project → workspace → user/service-account.
+        식별: tenant_id, project_id, ws_id, subject_id(ABAC 연계).
+        격리: 데이터 파티셔닝(org_id, residency), RLS/CLS(Gate-W) 의무.
+        네임스페이스: slug 규칙·충돌 방지·소유권 이전/병합 정책.
+        빌링 스코프: org 단위 청구(기본), project별 cost center 태깅.
+
+    - section: "Usage & Metering"
+      mode: replace
+      content: |
+        과금단위 v1:
+          - decisions.count, rules.eval.ms, storage.gb_month, egress.gb,
+            plugins.cpu_min, webhooks.deliveries, catalog.assets, lineage.ops.
+        이벤트 규격(meter_event):
+          - {id, ts, tenant_id, project_id?, product, metric, value, corr_id, source, signature}
+        수집:
+          - 실시간 스트림 + 배치 수합, 멱등키=hash(tenant_id|metric|corr_id).
+          - 지연/중복/역전 처리(워터마크+재계산), Edge(X) 업로드 병합.
+        정합:
+          - 관측(T) 카운터와 샘플 대조, 오차 허용 ±1%.
+
+    - section: "Rating · Plans · Proration"
+      mode: replace
+      content: |
+        플랜(기본): Basic/Pro/Ent(Gate-Z/AA 동기).
+        Rating 규칙:
+          - 월 구독(포함량) + 초과분(단가/계층형).
+          - 지역별 통화·세율 프리셋(결제는 U에서).
+          - 일할계산(proration): 업/다운그레이드 시 일수 기준.
+        Add-on: 플러그인/리소스 버킷(Ext-V) 단위 추가 과금.
+
+    - section: "Quota & Throttling"
+      mode: replace
+      content: |
+        쿼터: 플랜/애드온 기준 하드/소프트 한도.
+        스로틀: 토큰버킷(초당/분당) + 버스트 허용, 공정성(tenant 라운드로빈).
+        초과 처리:
+          - soft: 경고 + 코스트가드 경보, grace 윈도우.
+          - hard: 429/스로틀 + 기능 단계적 비활성화(읽기전용 전환 등).
+
+    - section: "Cost-Guard v1 (Budgets/Anomaly/Freeze)"
+      mode: replace
+      content: |
+        예산: 월/일 기준 budget{amount, currency, notify_thresholds}.
+        경보: 예산 50/80/100%, 급격한 사용량 변화(EWMA 6x, p95 이상).
+        조치: 이메일/웹훅/슬랙·플래그, 일시중지(freeze), 일회성 한도 상향(승인필요).
+        증빙: 모든 조치에 ticket_id/trace_id, Evidence(Billing/Cost) 링크.
+
+    - section: "Invoicing (Stub) & Artifacts"
+      mode: replace
+      content: |
+        산출물: invoice_draft.json + PDF 렌더(고객명/기간/항목/세금/잔액).
+        환불/수납/영수는 Gate-U에서. 여기서는 드래프트/조정/크레딧 노트만.
+        세금: KR/EU 기본 VAT 필드 포함(계산은 외부 택스 엔진 어댑터로 위임 가능).
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/meter/ingest {events[]}
+          - GET  /api/v1/meter/usage?tenant_id=&period=
+          - POST /api/v1/rating/run {tenant_id, period}
+          - POST /api/v1/quota/set {tenant_id, metric, hard, soft}
+          - POST /api/v1/throttle/override {tenant_id, ttl}
+          - POST /api/v1/cost/budget {tenant_id, amount, currency}
+          - POST /api/v1/cost/freeze {tenant_id, reason, ttl}
+          - POST /api/v1/invoice/draft {tenant_id, period}
+          - GET  /api/v1/invoice/{id}
+        CLI(dosctl):
+          - dosctl meter ingest|usage
+          - dosctl rating run --tenant ... --period ...
+          - dosctl quota set|get
+          - dosctl cost budget|freeze|unfreeze|status
+          - dosctl invoice draft|show
+
+    - section: "Security/Compliance Alignment"
+      mode: replace
+      content: |
+        ABAC(W)로 빌링 데이터 접근 통제. PII 최소화(해시/가명).
+        Residency 준수: 사용량/인보이스 저장 지역은 데이터 경계에 따름.
+        감사 라벨: 모든 요금 결정에 policy_id/consent_id 링크(해당 시).
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-S 성공 기준:
+          - 메터링 정합 오차 |usage(obs)-usage(bill)| / usage ≤ 1% (샘플 대비)
+          - 스로틀 응답 p95 ≤ 20ms, 과금 경계 초과 시 차단 TTD ≤ 60s
+          - 코스트가드 알림 TTD ≤ 90s, freeze/unfreeze e2e 동작
+          - 인보이스 드래프트 생성/조정/크레딧 노트 e2e
+          - 증빙 번들(Billing/Cost) 제출
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - 테넌시/격리/네임스페이스 · 빌링 스코프
+        - 메터링 수집/정합 파이프라인 · 오차 검증
+        - 레이팅/플랜/프레이싱 · 프러레이션
+        - 쿼터/스로틀/코스트가드 v1
+        - 인보이스 드래프트 · API/CLI · 증빙 번들
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 141: tenancy 모델/스키마/RLS 매핑 · billing scope 태그
+        Day 142: meter_event 스키마/수집·멱등/워터마크 · usage(obs) 대조
+        Day 143: rating 엔진 · 플랜/계층단가/프레이션 · 대시 카드
+        Day 144: quota/throttle/guard · 예산/알림 · freeze/override
+        Day 145: invoice draft JSON/PDF · SLO 검수 · Evidence(Billing/Cost)
+
+work:
+  claude:
+    - id: C-73
+      title: Billing Policy & Plan Matrix
+      deliverables:
+        - docs/billing/policies.md, docs/billing/plan_matrix.md
+      acceptance:
+        - 플랜/포함량/초과단가/애드온·지역 규칙·FAQ 포함
+    - id: C-74
+      title: Metering/Anomaly Guide & Evidence
+      deliverables:
+        - docs/metering_spec.md, ops/cost_guard_runbook.md
+      acceptance:
+        - 멱등/지연/역전 처리와 경보·대응 절차
+risks:
+  - name: 과금 정합 오류(과/소과금)
+    mitigation: 관측(T) 대조, 샘플링 리포트, 수동 조정/크레딧 노트 플로
+  - name: 사용량 급증/오용
+    mitigation: 스로틀/예산/알림/프리즈, Add-on 구입 경로 명확화
+  - name: 엣지 업로드 지연/중복
+    mitigation: 워터마크/멱등키/지연 윈도우, 재계산 배치
+  - name: 지역/세금 처리 복잡성
+    mitigation: 택스 어댑터 추상화, Gate-U에서 결제 시점 계산
+  - name: 데이터 경계 위반
+    mitigation: Residency 태깅·경계 검사(W)·증빙 라벨

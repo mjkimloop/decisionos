@@ -1,0 +1,133 @@
+meta:
+  version: v0.3.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑M: Usage‑Pricing v2 · Seat/Role Billing · Self‑Serve Upgrade/Cancel (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-32
+      title: Pricing & Refund Policy · Customer Comms
+      deliverables:
+        - docs/pricing_policy.md
+        - docs/refund_policy.md
+        - ops/billing_comms_templates.md
+      acceptance:
+        - "KR VAT/환불/중도해지 정책 반영, 템플릿 6종"
+    - id: C-33
+      title: Billing Runbook & Dispute SOP
+      deliverables:
+        - ops/runbook_billing.md
+        - ops/sop_dispute_chargeback.md
+      acceptance:
+        - "월말 마감/대조/이상치 대응 절차·체크리스트"
+
+  codex:
+    - id: X-56
+      title: Ratebook & Rater/Prorater
+      deliverables:
+        - config/ratebook.yaml
+        - apps/billing/rater.py
+        - apps/billing/prorate.py
+      acceptance:
+        - "티어/세금/할인 적용, 좌석 일할 계산 정확도 테스트 30+"
+    - id: X-57
+      title: Entitlements & Enforcement v2
+      deliverables:
+        - config/entitlements.yaml
+        - apps/billing/entitlements.py
+        - apps/gateway/middleware/entitlement_guard.py
+      acceptance:
+        - "초과/만료 시 가드 동작, 로그/알림 연동"
+    - id: X-58
+      title: Self‑Serve API & UI
+      deliverables:
+        - apps/gateway/routers/billing_selfserve.py
+        - web/billing/index.html
+      acceptance:
+        - "업/다운/취소/재개/결제/쿠폰 e2e, RBAC/HMAC 통과"
+    - id: X-59
+      title: Payments Adapter & Webhook
+      deliverables:
+        - apps/payments/base.py
+        - apps/payments/adapters/pg_local.py
+        - apps/payments/adapters/stripe_opt.py
+        - apps/gateway/routers/billing_webhook.py
+        - apps/payments/dunning.py
+      acceptance:
+        - "결제/환불/실패 이벤트 처리, 던닝 일정 자동화"
+    - id: X-60
+      title: Invoicer & Reconciler
+      deliverables:
+        - apps/billing/invoice.py
+        - apps/billing/reconcile.py
+      acceptance:
+        - "드리프트 ≤ 1%, 증빙 리포트 출력"
+    - id: P-11
+      title: dosctl 확장(billing)
+      deliverables:
+        - "cli/dosctl/main.py: billing upgrade|downgrade|cancel|resume|invoices|simulate-proration"
+      acceptance:
+        - "로컬에서 시나리오 6종 자동 리허설"
+
+risks:
+  - name: 프로레이션/세금 계산 오류
+    mitigation: 표준 테스트 세트(30+), 드리프트 리포트, 금액 라운딩 일관
+  - name: 던닝 오탐·과도한 제한
+    mitigation: grace 정책·메시지 명확화, 관리자 override
+  - name: 결제 제공사 이슈
+    mitigation: 어댑터 교체 가능 구조, 재시도/서킷브레이커
+
+patches:
+  techspec:
+    - section: "Usage‑Pricing v2"
+      mode: replace
+      content: |
+        사용량 과금 v2(v0.3.2):
+        - Ratebook: tier/seat/role 단가, 할인/쿠폰, KR VAT 10% 라인 분리
+        - Proration: 업/다운/취소/재개 시 일할/프로레이션 규칙
+        - Accuracy: 인보이스↔원천사용량/원가 대조 드리프트 ≤ 1%
+    - section: "Entitlements v2"
+      mode: replace
+      content: |
+        권한/집행 v2(v0.3.2):
+        - entitlements.yaml: feature/rate_limits/caps/flags
+        - Enforcement: 초과 시 소프트캡→하드캡, 결제 실패 유예 7일 후 단계적 제한
+    - section: "Self‑Serve Billing"
+      mode: replace
+      content: |
+        셀프서브(v0.3.2):
+        - 업/다운/취소/재개, 결제수단 관리, 쿠폰 적용
+        - 정책: 프로레이션/환불 규칙 적용, RBAC/HMAC 검증
+    - section: "Payments & Dunning"
+      mode: replace
+      content: |
+        결제/던닝(v0.3.2):
+        - 어댑터: pg_local/stripe_opt, 웹훅(HMAC·멱등)
+        - 던닝: 0/3/7/10/20일 일정, 알림/락 단계
+    - section: "Invoicer & Reconciler"
+      mode: replace
+      content: |
+        청구/대조(v0.3.2):
+        - invoicer: PDF 인보이스 생성, 요약/라인아이템
+        - reconciler: usage/billing 대조, 드리프트 리포트
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑M 신규/확장 엔드포인트:
+        - POST /api/v1/billing/selfserve (upgrade/downgrade/cancel/resume)
+        - POST /api/v1/billing/webhook (HMAC)
+        - GET  /api/v1/billing/invoices, GET /api/v1/billing/invoices/{id}
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑M: Usage‑Pricing v2 · Seat/Role Billing · Self‑Serve Upgrade/Cancel
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 81: ratebook/rater/prorater 스캐폴드 + 테스트 10개
+        Day 82: entitlements v2 + entitlement_guard 연결
+        Day 83: self‑serve 라우트/페이지 + 프로레이션 시뮬레이터
+        Day 84: payments 어댑터/웹훅 + 던닝 워크플로
+        Day 85: invoicer/reconciler + dosctl billing 시나리오 6종

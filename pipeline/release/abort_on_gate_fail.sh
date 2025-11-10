@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# 게이트 실패 시 stage=stable 원자 롤백
-echo "[abort] release gate failed. rolling back to stable..."
-python - <<'PY'
-import os
-from apps.experiment.stage_file import write_stage_atomic
 
-stage_path = os.environ.get("STAGE_PATH", "var/rollout/desired_stage.txt")
-write_stage_atomic("stable", stage_path)
-print("[abort] stage=stable written")
+SLO="${1:-configs/slo/slo-judge-infra.json}"
+EVIDENCE="${2:-var/evidence/latest.json}"
+PROVIDERS="${3:-var/providers-local.yaml}"
+QUORUM="${4:-2/3}"
+
+python - <<'PY'
+import sys
+from apps.policy.pep import PEP
+
+if not PEP().enforce("deploy:abort"):
+    print("[rbac] deploy:abort denied", file=sys.stderr)
+    sys.exit(3)
 PY
-# TODO: Slack/Email webhook 자리
-exit 1
+
+echo "[abort-gate] running judge quorum (slo=$SLO, evidence=$EVIDENCE)"
+set +e
+python -m apps.cli.dosctl.judge_quorum \
+  --slo "$SLO" \
+  --evidence "$EVIDENCE" \
+  --providers "$PROVIDERS" \
+  --quorum "$QUORUM"
+rc=$?
+set -e
+
+if [[ $rc -ne 0 ]]; then
+  echo "[abort-gate] judge failed (rc=$rc) → invoking abort.sh"
+  bash pipeline/release/abort.sh || true
+  exit 2
+fi
+
+echo "[abort-gate] judge passed"

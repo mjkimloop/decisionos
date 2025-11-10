@@ -1,0 +1,139 @@
+meta:
+  version: v0.5.1
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AB: Academy · Certification · Labs (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Academy Architecture — Scope"
+      mode: replace
+      content: |
+        목적: 고객/파트너가 제품을 '안전하게' 익혀 KPI를 개선하도록 표준 커리큘럼·평가·증빙을 제공.
+        구성요소:
+          - Course/Module/Lesson(콘텐츠), Lab(실습), Exam(평가), Badge/Certificate(인증), Partner Tracks.
+          - Storage: academy_bucket(콘텐츠), item_bank(문항), lab_kits(데이터/시나리오).
+          - Policy/Consent: Gate-W 스코프 라벨, 개인정보 최소화.
+          - Evidence: 학습/시험/랩 로그를 Evidence(Academy)에 보관, Gate-Q 레저에 요약 레코드 링크.
+
+    - section: "Learning Objects & Content Types"
+      mode: replace
+      content: |
+        콘텐츠 타입: mdx(텍스트/코드 포함), 영상 링크, 인터랙티브 위젯(퀴즈/체크리스트).
+        메타: locale, level(101/201/301), estimated_time, prerequisites, outcomes.
+        접근성: 캡션/대체텍스트, 색대비 기준 준수.
+
+    - section: "Labs (Hands-on) — Safe Sandbox"
+      mode: replace
+      content: |
+        Lab Kit: 입력CSV/JSON(합성 데이터), 목표/채점 규칙, 솔루션 워크북.
+        실행: apps/academy/labs/{runner.py, grader.py}, 샌드박스 토큰(테넌트 격리).
+        금융 도메인 예시: 리드 triage 정확도 65% 달성, 규칙 튜닝, Evidence 번들 제출.
+        보안: 실데이터 금지, 합성/익명화 강제, 업로드 파일 AV 스캔.
+
+    - section: "Certification & Proctoring (Stub)"
+      mode: replace
+      content: |
+        Exam Engine: item_bank(객관/서술/실습), 난이도/Blueprint, 시간제한, 무작위화.
+        Proctor Stub: 웹캠/브라우저 잠금은 '미포함', 대신 행동로그/탭 전환 탐지·세션 감사.
+        합격선: 101(70%), 201(75%), 301(80%). 재응시 정책/대기기간.
+        발급: Badge/Certificate(JSON+PDF), 만료/갱신 규칙.
+
+    - section: "Partner Enablement & Tracks"
+      mode: replace
+      content: |
+        트랙: Partner-L1(구축 기초), L2(통합/보안), L3(성능/감사). Gate-AA 등급(S/G/P)과 매핑.
+        요건: 코스/랩/시험 조합, 실적/레퍼런스 제출, 연간 갱신.
+        리드 정책: 인증 등급별 공동세일즈/리드쉐어 한도.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/academy/course {meta, assets[]}
+          - POST /api/v1/academy/enroll {user_id, track|course_id}
+          - POST /api/v1/academy/exam/assign {user_id, exam_id}
+          - POST /api/v1/academy/exam/submit {exam_id, answers}
+          - POST /api/v1/academy/lab/submit {lab_id, artifacts}
+          - GET  /api/v1/academy/badge/{id}
+          - GET  /api/v1/academy/report?org_id=&period=
+        CLI(dosctl):
+          - dosctl academy course|enroll|exam assign|exam grade|lab run|badge issue|report
+
+    - section: "Analytics & PQL/Partner Hooks"
+      mode: replace
+      content: |
+        지표: 등록→수료율, 최초수료 TTV, 랩 통과율, 시험 재응시율, 코호트별 KPI(현장 전환/시간감소).
+        Hook:
+          - 수료/배지 취득 → Gate-AA PQL 점수 가산/세일즈 라우팅 우선순위 상향.
+          - 파트너 등급 승인/다운그레이드 자동화, Evidence(Academy) 링크.
+
+    - section: "Security/Privacy/Compliance"
+      mode: replace
+      content: |
+        PII 최소수집, 학습 로그는 2년 보존(기본). 시험 답안/랩 산출물은 1년(연장 옵션).
+        Gate-W ABAC로 접근제어, 지역경계 준수. 시험 부정행위 탐지 로그는 Gate-Q 레저 요약 기록.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AB 성공 기준:
+          - 101 코스 수료율 ≥ 60%(초기 코호트 90일), 최초수료 TTV p50 ≤ 14일
+          - 랩 자동채점·재현 성공률 ≥ 99%, 업로드 AV 스캔 100%
+          - 시험 엔진 채점 p95 ≤ 800ms(객관식), 결과/배지 발급 1분 내
+          - PQL/파트너 훅 e2e 동작(증빙 번들 첨부)
+          - Evidence Binder(Academy) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - 커리큘럼/템플릿/금지표현 정리(법무 리뷰)
+        - Lab Runner/Grader·합성 데이터 키트·샌드박스 토큰
+        - Exam Engine·Item Bank·배지/증서 발급
+        - Partner Tracks·PQL/세일즈 라우팅 Hook
+        - 대시보드/리포트·Evidence(Academy)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 156: 커리큘럼 아웃라인·템플릿·금지표현(ko)·법무 리뷰
+        Day 157: Lab runner/grader·합성 데이터셋·자동채점 기준
+        Day 158: Exam 엔진·문항은행·배지/증서 템플릿(JSON/PDF)
+        Day 159: Partner 트랙 요건·PQL/세일즈 라우팅 Hook(e2e)
+        Day 160: 대시보드·레포트·SLO 측정·Evidence(Academy)
+
+work:
+  claude:
+    - id: C-80
+      title: Curriculum & Templates (ko)
+      deliverables:
+        - docs/academy/curriculum_outline.md
+        - docs/academy/templates/{lesson.md, lab.md, case_study.md}
+        - docs/academy/banned_claims.md
+      acceptance:
+        - 레벨별 학습목표/선수지식/평가기준 포함, 금지표현 법무 코멘트
+
+    - id: C-81
+      title: Partner Tracks & Policy
+      deliverables:
+        - docs/academy/partner_tracks.md
+        - ops/partner_enablement_playbook.md
+      acceptance:
+        - L1/L2/L3 요건·갱신·리드정책·증빙 규정
+
+    - id: C-82
+      title: Exam Blueprints & Item Bank Seed
+      deliverables:
+        - docs/academy/exam_blueprints.md
+        - content/item_bank/seed_ko.json
+      acceptance:
+        - 101/201/301 블루프린트·난이도/출제비율·샘플 문항 50+
+risks:
+  - name: 콘텐츠 품질/현실성 부족
+    mitigation: 현장 케이스 확보·케이스스터디 템플릿·정기 리뷰·피드백 루프
+  - name: 부정행위/대리시험
+    mitigation: Proctor Stub 로그·탭전환 탐지·무작위화·재응시 정책·HITL 감사 샘플
+  - name: PII 노출
+    mitigation: 합성 데이터 강제·업로드 검증·ABAC/레드액션·단기 보존
+  - name: 과도한 복잡성
+    mitigation: 101→201→301 단계적 론칭·Non-blocking Hook(실패 시 격리)

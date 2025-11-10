@@ -1,0 +1,52 @@
+obs: golden trace calibration suite + docs (v0.5.10c)
+
+C-193 구현 완료:
+
+새 파일:
+- apps/obs/calibration/golden_trace.py (345줄)
+- apps/obs/calibration/__init__.py
+- docs/obs/golden_trace.md (완전한 사용 가이드)
+
+기능:
+- 합성 이벤트 생성 (--n, --p95, --err, --cost, --seed)
+- Dual exporter (exporter_x/c) 동시 실행
+- Δ 허용치 기반 일관성 검증 (from slo.json)
+- Witness 아티팩트 출력 (--output)
+
+교차검증 완료:
+✓ Step 1: Golden trace 생성 → [PASS] 5/5 metrics within tolerance
+✓ Step 2: Judge X/C 검증 → PASS (Eligibility_Path_A)
+✓ Step 3: Quorum (2/3) → PASS
+
+테스트 시나리오:
+- evidence/golden_001: 고부하 (p95=900ms) → Judge FAIL (예상대로)
+- evidence/golden_002: SLO 준수 (p95=700ms) → Judge PASS
+
+허용치 (from slo.json):
+- latency_p95: ≤2% delta
+- err_rate: ≤0.1pp delta
+- cost_krw: ≤1% delta
+- citation_cov: ≤0.5pp delta
+- parity_delta: ≤0.2pp delta
+
+실측 결과 (golden_002):
+- latency_p95: Δ=0.09% [PASS]
+- err_rate: Δ=0.00pp [PASS]
+- cost_krw: Δ=0.00% [PASS]
+- citation_cov: Δ=0.00pp [PASS]
+- parity_delta: Δ=0.00pp [PASS]
+
+문서:
+- 3단계 교차검증 예시
+- CLI 파라미터 전체 설명
+- CI/CD 통합 가이드
+- 트러블슈팅 섹션
+
+연관:
+- Gate-AJ (v0.5.10a): Judge quorum
+- Gate-T (v0.5.10b): Witness schema
+- apps/obs/witness/{exporter_x,exporter_c}.py
+- apps/expops/{judge_x,judge_c,quorum}.py
+- configs/slo/slo.json
+
+No-Gemini. Claude Code 단독 구현.

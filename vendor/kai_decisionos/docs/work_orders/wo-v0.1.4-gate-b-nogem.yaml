@@ -1,0 +1,103 @@
+meta:
+  version: v0.1.4
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑B(No‑Gemini) — 조기신호 2/3 + 보안 문서화 + PoV Runbook + 실벤더 라우팅(OpenAI)"
+
+work:
+  claude:
+    - id: C-03
+      title: Rule Coverage Reporter + HTML
+      deliverables:
+        - apps/rule_engine/coverage_reporter.py
+        - apps/rule_engine/templates/rule_coverage.html
+      acceptance:
+        - 규칙별 hit/miss, 우선순위 충돌 리포트 HTML 생성
+        - pre-commit에서 임계치 미달 시 경고
+    - id: L-02
+      title: Lending 엣지 규칙 4개 추가
+      deliverables:
+        - packages/rules/triage/{region_guard.yaml,purpose_check.yaml,senior_exposure.yaml,dsr_guard.yaml}
+      acceptance:
+        - 린터 경고 0, simulate 리포트 수치 변동 기록
+    - id: DOC-01
+      title: 보안 문서화 & 위험분담표
+      deliverables:
+        - docs/security_controls.md
+        - docs/risk_allocation.md
+      acceptance:
+        - 보안 6/6 체크표(설계/구현/테스트 증빙 링크) 완비
+
+  codex:
+    - id: X-03
+      title: Consent API + Auditor 확장
+      deliverables:
+        - apps/gateway/routers/consent.py
+        - apps/executor/audit_verifier.py
+      acceptance:
+        - /consent/* e2e 3건 통과, /explain에 consent snapshot 첨부
+    - id: X-04
+      title: Metrics 엔드포인트
+      deliverables:
+        - apps/gateway/routers/metrics.py
+      acceptance:
+        - /metrics JSON(p95, error_rate, req_count), /metrics/healthz 200
+    - id: X-05
+      title: Switchboard openai 어댑터(실)
+      deliverables:
+        - apps/switchboard/adapters/openai.py
+      acceptance:
+        - 정책: max_cost_usd, timeout_ms, retries, fallback(local)
+        - 타임아웃/초과비용 시 로컬 폴백, 단위테스트 10+
+    - id: X-06
+      title: 감사 로그 유지보수(체인 검증 + 회전)
+      deliverables:
+        - apps/audit_ledger/verify.py
+        - scripts/rotate_manifests.py
+      acceptance:
+        - 손상 시 경고 리턴, 회전 파일 생성 확인
+    - id: P-02
+      title: dosctl 확장(consent/metrics)
+      deliverables:
+        - cli/dosctl/main.py 서브커맨드 2종 추가
+      acceptance:
+        - 로컬 호출 캡처 포함
+
+risks:
+  - name: 리소스 재배치로 일정 지연
+    mitigation: Codex 작업량 집중 → Day 9~10 1일 버퍼 확보
+  - name: OpenAI 비용 초과
+    mitigation: max_cost_usd 기본 0.02, OPENAI_API_KEY 없으면 local 고정
+  - name: 커버리지 리포트 임계치 미달
+    mitigation: pre-commit 경고 + Gate‑B 머지 차단 규칙 추가
+
+patches:
+  techspec:
+    - section: Open Issues
+      mode: replace
+      content: |
+        - Gate‑B(No‑Gemini): 조기신호 2/3 달성 계획 수립 및 추적
+        - Consent API 문서화 + 감사 연계 스냅샷
+        - Switchboard 실벤더(OpenAI) 라우팅(예산/폴백 정책) 정식화
+        - Metrics 엔드포인트(p95/error_rate/req_count) 공개
+    - section: Security Controls
+      mode: ensure
+      content: |
+        - API Key 필수 + RBAC 3계층(admin/agent/auditor)
+        - OAuth2(+MFA 옵션) 개발 토큰 엔드포인트 문서화
+        - DLP/마스킹(주민/계좌/연락처), CSV Export 제한 고지
+        - Consent API(/grant|/revoke|/list) + 감사 로그
+        - OPENAI_API_KEY 미설정 시 모든 추론 경로 local 고정
+  plan:
+    - section: Milestones
+      mode: replace
+      content: |
+        - Gate‑A: /decide e2e + Offline Eval 리포트
+        - Gate‑B(No‑Gemini): 조기신호 2/3 + 보안 문서화 + PoV Runbook + 실벤더 라우팅(OpenAI)
+    - section: Next Actions
+      mode: append
+      content: |
+        - Day 8: Consent API /grant|/revoke|/list 구현 + RBAC 라우트 보호
+        - Day 9: OpenAI 어댑터(실 호출 제한/예산) + 폴백 테스트
+        - Day 10: PoV Runbook 초안(운영절차/장애대응/데이터보호) + 위험분담표 완성
+

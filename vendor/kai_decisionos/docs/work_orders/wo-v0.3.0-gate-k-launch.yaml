@@ -1,0 +1,140 @@
+meta:
+  version: v0.3.0
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑K: Launch Readiness — Docs·Trials·Pricing·Support·Status (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-26
+      title: Legal Docs (KR/EN)
+      deliverables:
+        - docs/legal/ToS_ko.md
+        - docs/legal/Privacy_ko.md
+        - docs/legal/DPA_ko.md
+        - docs/legal/ToS_en.md
+        - docs/legal/Privacy_en.md
+      acceptance:
+        - "책임/면책/해지/환불/분쟁/데이터처리 범위 명시, PDF 변환 가능"
+    - id: C-27
+      title: Support Runbooks & Status Templates
+      deliverables:
+        - ops/runbook_support.md
+        - ops/comms_incident_templates.md
+      acceptance:
+        - "P1~P4 응답/해소 절차·체크리스트 포함"
+    - id: C-28
+      title: Launch Deck & One‑Pager
+      deliverables:
+        - slides/launch_readout.pptx
+        - docs/onepager.md
+      acceptance:
+        - "가격/가치/ROI/리스크배분 요약, 고객 발표 가능 상태"
+
+  codex:
+    - id: X-46
+      title: Docs Site & Builder
+      deliverables:
+        - docs/mkdocs.yml
+        - scripts/build_docs.py
+        - nginx/docs.conf
+      acceptance:
+        - "/public/docs 제공, 내비에 TechSpec/Plan 반영"
+    - id: X-47
+      title: Signup & Tenant Bootstrap
+      deliverables:
+        - apps/gateway/routers/signup.py
+        - apps/tenant/bootstrap.py
+        - templates/welcome_email.md
+      acceptance:
+        - "POST /signup → tenant 생성/키 발급/기본 budgets·flags 저장"
+    - id: X-48
+      title: Status Service
+      deliverables:
+        - apps/gateway/routers/status.py
+        - web/status/index.html
+        - storage/incidents.json
+      acceptance:
+        - "/status 표시, incident 등록/표시, 보존 정책 동작"
+    - id: X-49
+      title: Pricing Calculator
+      deliverables:
+        - web/pricing/index.html
+        - apps/gateway/routers/pricing.py
+      acceptance:
+        - "usage_summary 연동, VAT/할인/캡 반영한 예상치 산출"
+    - id: X-50
+      title: Support Intake & SLA Metrics
+      deliverables:
+        - apps/support/intake_email.py
+        - apps/support/triage.py
+        - apps/gateway/routers/support.py
+      acceptance:
+        - "메일→큐 적재, SLA 시계 시작/종료, 통계 노출"
+    - id: P-09
+      title: dosctl 확장(onboard/status)
+      deliverables:
+        - "cli/dosctl/main.py: onboard signup"
+        - "cli/dosctl/main.py: tenant bootstrap"
+        - "cli/dosctl/main.py: status"
+      acceptance:
+        - "로컬에서 샌드박스 온보딩 e2e 가능"
+
+risks:
+  - name: 법무 문서 미비/해석 리스크
+    mitigation: 책임제한·참고용 고지·PoV 범위 명확화
+  - name: 이메일 스팸/딜리버러빌리티
+    mitigation: 도메인 검증/DMARC 안내, 확인메일 더블옵트인
+  - name: 트라이얼 남용
+    mitigation: rate limit/캡, 전화번호·도메인 화이트리스트, HITL 승인 옵션
+
+patches:
+  techspec:
+    - section: "Docs Site & Builder"
+      mode: replace
+      content: |
+        문서 사이트(v0.3.0):
+        - 빌더: mkdocs 기반 정적 사이트, build_docs.py
+        - 배포: /public/docs 제공(nginx/docs.conf)
+        - 내비: TechSpec/Plan 자동 반영
+    - section: "Trials & Onboarding"
+      mode: replace
+      content: |
+        트라이얼·온보딩(v0.3.0):
+        - /signup → tenant bootstrap(키 발급, budgets/flags 저장)
+        - SKU: Sandbox/PoV/Pilot, HITL 옵션
+        - rate limit/캡, 승인 흐름 문서화
+    - section: "Support & Status"
+      mode: replace
+      content: |
+        지원·상태(v0.3.0):
+        - Status: /status, incidents.json 보존 정책
+        - Support: 메일 인테이크/트리아지/SLA 계측
+        - 템플릿: 커뮤니케이션/인시던트 템플릿
+    - section: "Legal Pack"
+      mode: replace
+      content: |
+        법무팩(v0.3.0):
+        - ToS/Privacy/DPA 초안(KR/EN)
+        - DSAR/삭제 플로우, 책임/면책/해지/환불/분쟁 범위 명시
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑K 신규/확장 엔드포인트:
+        - POST /signup
+        - GET /status, POST /status/incident
+        - GET /pricing/calc
+        - GET /support/tickets, POST /support/intake
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑K: 출시준비 — 문서·트라이얼·가격·지원·상태페이지
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 61: mkdocs/builder 구성·배포
+        Day 62: /signup 온보딩 플로우·키 발급·budgets 저장
+        Day 63: /status 서비스·incident JSON 보존 정책
+        Day 64: Pricing 계산기·usage_summary 연동
+        Day 65: Support intake/SLA 계측·dosctl 온보딩 명령

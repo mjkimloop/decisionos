@@ -1,0 +1,134 @@
+meta:
+  version: v0.3.4
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑O: Connectors · ETL/CDC · Data Contracts v1 (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-37
+      title: Connector/CDC Runbooks
+      deliverables:
+        - ops/runbook_connectors.md
+        - ops/runbook_cdc_backfill.md
+      acceptance:
+        - "장애 유형별 대응(지연/중복/역행), 백필 플레이북"
+    - id: C-38
+      title: Ontology Mapping Handbook
+      deliverables:
+        - docs/ontology_mapping.md
+        - config/map_ontology.yaml
+      acceptance:
+        - "Applicant/Asset/Loan/Decision 필수키 명세·예제"
+
+  codex:
+    - id: X-66
+      title: Connector SDK & Registry
+      deliverables:
+        - apps/connectors/sdk.py
+        - apps/connectors/registry.py
+        - apps/gateway/routers/connectors.py
+      acceptance:
+        - "등록/테스트/실행 API·CLI, 샘플 커넥터 2종 동작"
+    - id: X-67
+      title: CDC Ingest & Stream Drivers
+      deliverables:
+        - apps/cdc/postgres.py
+        - apps/stream/kafka_consumer.py
+        - apps/ingest/idempotency.py
+      acceptance:
+        - "p95 지연 ≤5s, 중복 드롭율 ≥99.99%"
+    - id: X-68
+      title: Data Contracts v1
+      deliverables:
+        - apps/contracts/schema.py
+        - apps/contracts/validator.py
+        - apps/contracts/compat.py
+        - apps/gateway/routers/contracts.py
+      acceptance:
+        - "등록/검증/호환성 API·CLI, 위반시 quarantine 레코드 저장"
+    - id: X-69
+      title: ETL Transforms & Pipelines
+      deliverables:
+        - apps/etl/transforms/cleanse.py
+        - apps/etl/transforms/pii_mask.py
+        - apps/etl/transforms/map_ontology.py
+        - apps/pipelines/service.py
+        - apps/gateway/routers/pipelines.py
+      acceptance:
+        - "create/run/backfill 동작, 온톨로지 매핑 → DecisionContract 입력 생성"
+    - id: X-70
+      title: Quality Metrics & Dash
+      deliverables:
+        - apps/quality/metrics.py
+        - apps/gateway/routers/quality.py
+        - web/quality/index.html
+      acceptance:
+        - "freshness/completeness/distinctness/violation 비주얼, SLO 계산"
+    - id: P-13
+      title: dosctl 확장(connectors/contracts/pipelines)
+      deliverables:
+        - "cli/dosctl/main.py: connectors add|ls|test"
+        - "cli/dosctl/main.py: contracts register|lint|compat"
+        - "cli/dosctl/main.py: pipelines scaffold|run|backfill"
+      acceptance:
+        - "로컬에서 e2e 제어 가능"
+
+risks:
+  - name: 스키마 드리프트/호환성 붕괴
+    mitigation: compat 검사 강제, dry-run·카나리, 위반 격리/알림
+  - name: PII 누락 마스킹·로그 유출
+    mitigation: pii_mask 변환 선행, Vault 토큰화, 로그 스크럽 검사
+  - name: CDC 이벤트 중복/순서역행
+    mitigation: idempotency 키·윈도우 정렬, 재처리/백필 플레이북 적용
+  - name: 비용 폭증(백필/대용량)
+    mitigation: 샘플링·시간창 분할·스케줄 창 제어, 비용 예측(코스트 센트리 연동)
+
+patches:
+  techspec:
+    - section: "Connectors & CDC"
+      mode: replace
+      content: |
+        커넥터/CDC(v0.3.4):
+        - Connector SDK/Registry, 등록/테스트/실행 API
+        - CDC: Postgres logical, Kafka consumer, dedupe/idempotency
+        - 목표: p95 ≤ 5s, 중복 드롭 ≥ 99.99%
+    - section: "Data Contracts v1"
+      mode: replace
+      content: |
+        데이터 컨트랙트(v0.3.4):
+        - schema/validator/compat, 등록/검증/호환성 API
+        - 위반 레코드 quarantine, 알림/대시보드 연동
+    - section: "ETL & Ontology Mapping"
+      mode: replace
+      content: |
+        ETL 파이프라인(v0.3.4):
+        - cleanse/pii_mask/map_ontology 변환 체인
+        - 매핑: config/map_ontology.yaml 기반 → DecisionContract 입력 생성
+    - section: "Quality Gates"
+      mode: replace
+      content: |
+        품질 게이트(v0.3.4):
+        - freshness/completeness/distinctness/violation
+        - SLO 계산 및 대시보드(web/quality)
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑O 신규/확장 엔드포인트:
+        - /api/v1/connectors/*
+        - /api/v1/contracts/*
+        - /api/v1/pipelines/*
+        - /api/v1/quality/*
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑O: 커넥터/ETL·CDC 파이프라인, 데이터 컨트랙트 v1, 온톨로지 매핑·품질게이트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 101: Connector SDK/Registry + 샘플 2종
+        Day 102: CDC ingest/stream + idempotency
+        Day 103: Data Contracts v1(schema/validator/compat)
+        Day 104: ETL transforms + pipelines(run/backfill)
+        Day 105: Quality metrics/dash + dosctl 확장

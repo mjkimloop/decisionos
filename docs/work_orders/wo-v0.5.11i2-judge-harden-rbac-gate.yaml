@@ -1,0 +1,45 @@
+meta:
+  version: v0.5.11i.2
+  date: 2025-11-10
+  status: locked
+  summary: "분산 저지 하드닝: 키 로테이션·RBAC 강제·리플레이 스토어 플러그인화·릴리스 게이트"
+
+patches:
+  techspec:
+    - section: "Security — Judge Key Rotation v1"
+      mode: upsert
+      content: |
+        - 다중 키(Map) 지원: {"k1":"<base64>","k2":"<base64>"}.
+        - 발신: X-Key-Id로 사용 키 지정, 수신: kid별 검증 허용(롤링 기간 중 k1,k2 동시 허용).
+        - 키 롤링 절차: Add(k2)→Dual-Sign 기간→Deprecate(k1)→Remove(k1).
+    - section: "Security — Replay Store Plugins"
+      mode: upsert
+      content: |
+        - 인터페이스 ReplayStoreABC(seen_or_insert, purge_expired).
+        - 구현: SQLite(default), Redis(optional).
+        - TTL=600s, skew=±120s. 저장소 오류=fail-closed.
+    - section: "Gate-AJ — RBAC Enforcement v1"
+      mode: upsert
+      content: |
+        - 정책: action 'judge.run' / resource 'slo:<name>'.
+        - env DECISIONOS_ENFORCE_RBAC=1일 때 필수. 거부 시 exit 3.
+        - PEP 인터페이스 enforce(policy, actor, resource, context).
+    - section: "CI — Release Gate (SLO strict)"
+      mode: upsert
+      content: |
+        - Step 'release_gate': dosctl judge quorum --slo configs/slo/slo-billing-strict-v2.json --evidence var/evidence/latest.json --providers configs/judge/providers.yaml --quorum 2/3 --attach-evidence
+        - 종료코드 0=통과, 2/3=차단.
+  plan:
+    - section: "Milestones — v0.5.11i.2"
+      mode: upsert
+      content: |
+        - crypto: multi-key loader, provider: key resolver
+        - replay: ABC+Redis 구현, 설정 스키마 확장
+        - rbac: PEP 스텁→실행 경로 연결(dosctl, HTTP provider)
+        - CI release_gate 잡 추가
+    - section: "Next Actions — v0.5.11i.2"
+      mode: upsert
+      content: |
+        Day 226: crypto/key-rotation, replay plugins
+        Day 227: RBAC enforce + 단위/통합 테스트
+        Day 228: CI release_gate + 문서/샘플 갱신

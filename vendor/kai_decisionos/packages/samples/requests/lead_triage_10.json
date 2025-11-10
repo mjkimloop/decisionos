@@ -1,0 +1,12 @@
+{
+  "org_id": "orgF",
+  "payload": {
+    "credit_score": 780,
+    "dti": 0.25,
+    "income_verified": true,
+    "employment_type": "salaried",
+    "region": "SEO",
+    "purpose": "home_purchase"
+  }
+}
+

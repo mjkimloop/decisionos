@@ -34,7 +34,9 @@ def parse_reqlog_csv(f: TextIO) -> List[Req]:
     reader = csv.DictReader(f)
     reqs = []
     for row in reader:
-        ts = dt.datetime.fromisoformat(row["ts"].strip())
+        raw_ts = row["ts"].strip()
+        normalized_ts = raw_ts.replace("Z", "+00:00") if raw_ts.endswith("Z") else raw_ts
+        ts = dt.datetime.fromisoformat(normalized_ts)
         status = int(row["status"].strip())
         latency_ms = float(row["latency_ms"].strip())
         reqs.append(Req(ts=ts, status=status, latency_ms=latency_ms))

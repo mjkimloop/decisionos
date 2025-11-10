@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/decision_contract.schema.json",
+  "title": "DecisionContract",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema_version": { "type": "string", "enum": ["v1"] },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string" },
+    "rule_path": { "type": "string" },
+    "input_schema": { "type": "string" },
+    "request_schema": { "type": "string" },
+    "response_schema": { "type": "string" },
+    "label_key": { "type": ["string", "null"] }
+  },
+  "required": ["name", "version", "rule_path"],
+  "additionalProperties": true
+}
+

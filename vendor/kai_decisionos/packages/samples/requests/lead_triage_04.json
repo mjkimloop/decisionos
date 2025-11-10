@@ -1,0 +1,11 @@
+{
+  "org_id": "orgB",
+  "payload": {
+    "credit_score": 660,
+    "dti": 0.40,
+    "income_verified": false,
+    "employment_type": "contract",
+    "region": "ICN"
+  }
+}
+

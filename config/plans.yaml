@@ -1,0 +1,548 @@
+# DecisionOS Pricing Plans Configuration
+# Version: 1.0.0
+# Last Updated: 2025-11-03
+# Owner: Product & Pricing Team
+#
+# This file defines all pricing plans, entitlements, quotas, and rate cards.
+# Changes to this file require approval from Product & Finance teams.
+#
+# Validation: Run `python scripts/validate_plans.py config/plans.yaml`
+
+---
+
+# ============================================================================
+# PLAN DEFINITIONS
+# ============================================================================
+
+plans:
+
+  # ==========================================================================
+  # FREE PLAN
+  # ==========================================================================
+  free:
+    name: "Free"
+    display_name: "Free Forever"
+    description: "Perfect for individual developers and hobbyists exploring DecisionOS"
+    price:
+      base_monthly: 0           # USD (or ₩0 if KRW)
+      currency: USD
+      billing_cycle: null       # No billing (free forever)
+
+    # ------------------------------------------------------------------------
+    # Entitlements (feature access)
+    # ------------------------------------------------------------------------
+    entitlements:
+      # Catalog
+      - catalog.read
+      - catalog.search
+
+      # Lineage
+      - lineage.read
+      - lineage.graph_view
+
+      # Decisions
+      - decisions.run.basic      # Rule-based decisions only (no ML)
+
+      # API
+      - api.read                 # Read-only API access
+
+    # ------------------------------------------------------------------------
+    # Quotas (usage limits)
+    # ------------------------------------------------------------------------
+    quotas:
+      # Decision calls
+      decisions_per_day:
+        included: 200
+        soft_limit: 160          # Warn at 80%
+        hard_limit: 200          # Strict cap (no overage)
+        period: daily
+        overage_allowed: false
+
+      # Storage
+      storage_gb:
+        included: 5
+        soft_limit: 4
+        hard_limit: 5
+        period: total            # Cumulative (not monthly)
+        overage_allowed: false
+
+      # Data connectors
+      connectors:
+        included: 2
+        soft_limit: 2
+        hard_limit: 2
+        period: total
+        overage_allowed: false
+
+      # API requests (rate limit)
+      api_requests_per_min:
+        included: 10
+        soft_limit: 10
+        hard_limit: 10
+        period: per_min          # Sliding 60-second window
+        overage_allowed: false
+
+      # Users
+      users:
+        included: 1              # Single user only
+        soft_limit: 1
+        hard_limit: 1
+        period: total
+        overage_allowed: false
+
+      # Projects
+      projects:
+        included: 1
+        soft_limit: 1
+        hard_limit: 1
+        period: total
+        overage_allowed: false
+
+    # ------------------------------------------------------------------------
+    # Rate Card (overage pricing) — Not applicable for Free plan
+    # ------------------------------------------------------------------------
+    rate_card:
+      decision_call: null        # No overage allowed
+      storage_gb_month: null
+      hitl_case: null
+      additional_user: null
+      additional_project: null
+
+    # ------------------------------------------------------------------------
+    # Support
+    # ------------------------------------------------------------------------
+    support:
+      email: true                # Email support (48-hour SLA)
+      chat: false
+      phone: false
+      sla_hours: 48
+      availability: business_hours
+
+    # ------------------------------------------------------------------------
+    # Limits & Restrictions
+    # ------------------------------------------------------------------------
+    limits:
+      max_file_upload_mb: 10     # Max file size for uploads
+      max_api_payload_mb: 1      # Max API request body size
+      export_formats: [json]     # Only JSON export (no PDF)
+      data_retention_days: 30    # Data deleted after 30 days of inactivity
+
+  # ==========================================================================
+  # PRO PLAN
+  # ==========================================================================
+  pro:
+    name: "Pro"
+    display_name: "Pro Plan"
+    description: "For small teams and startups needing full platform access"
+    price:
+      base_monthly: 100          # USD (or ₩100,000 if KRW)
+      currency: USD
+      billing_cycle: monthly
+
+    # ------------------------------------------------------------------------
+    # Entitlements
+    # ------------------------------------------------------------------------
+    entitlements:
+      # Catalog (full access)
+      - catalog.*                # Shorthand for all catalog.* permissions
+
+      # Lineage (full access)
+      - lineage.*
+
+      # Decisions (including ML)
+      - decisions.run             # Includes .basic + .ml
+      - decisions.run.ml
+
+      # Pipelines
+      - pipelines.run
+      - pipelines.schedule
+
+      # Guardrails
+      - guardrails.v1
+      - guardrails.v2             # Advanced guardrails (PII, policy)
+
+      # HITL (Human-in-the-Loop)
+      - hitl.basic                # Review queue, case management
+
+      # API (full access)
+      - api.read
+      - api.write
+
+    # ------------------------------------------------------------------------
+    # Quotas
+    # ------------------------------------------------------------------------
+    quotas:
+      # Decision calls
+      decisions_per_day:
+        included: 5000
+        soft_limit: 4000         # Warn at 80%
+        hard_limit: 10000        # Allow overage up to 10K, then reject
+        period: daily
+        overage_allowed: true    # Charge per call beyond 5K
+
+      # Storage
+      storage_gb:
+        included: 200
+        soft_limit: 160
+        hard_limit: 500          # Hard cap at 500 GB
+        period: total
+        overage_allowed: true
+
+      # Data connectors
+      connectors:
+        included: 10
+        soft_limit: 10
+        hard_limit: 20
+        period: total
+        overage_allowed: false   # Must upgrade to Enterprise for >10
+
+      # API requests (rate limit)
+      api_requests_per_min:
+        included: 100
+        soft_limit: 100
+        hard_limit: 100
+        period: per_min
+        overage_allowed: false   # Strict rate limit
+
+      # Users
+      users:
+        included: 10
+        soft_limit: 10
+        hard_limit: 50
+        period: total
+        overage_allowed: true    # ₩10,000 per additional user/month
+
+      # Projects
+      projects:
+        included: 10
+        soft_limit: 10
+        hard_limit: 50
+        period: total
+        overage_allowed: true    # ₩5,000 per additional project/month
+
+      # HITL cases
+      hitl_cases_per_month:
+        included: 500
+        soft_limit: 400
+        hard_limit: 2000
+        period: monthly
+        overage_allowed: true    # ₩500 per additional case
+
+    # ------------------------------------------------------------------------
+    # Rate Card (overage pricing)
+    # ------------------------------------------------------------------------
+    rate_card:
+      decision_call: 0.002       # USD per call (or ₩2 if KRW)
+      storage_gb_month: 0.08     # USD per GB/month (or ₩80 if KRW)
+      hitl_case: 0.5             # USD per case (or ₩500 if KRW)
+      additional_user: 10        # USD per user/month (or ₩10,000 if KRW)
+      additional_project: 5      # USD per project/month (or ₩5,000 if KRW)
+
+    # ------------------------------------------------------------------------
+    # Support
+    # ------------------------------------------------------------------------
+    support:
+      email: true                # 4-hour SLA
+      chat: true                 # Business hours
+      phone: true                # Business hours
+      sla_hours: 4
+      availability: business_hours
+
+    # ------------------------------------------------------------------------
+    # Limits
+    # ------------------------------------------------------------------------
+    limits:
+      max_file_upload_mb: 100
+      max_api_payload_mb: 10
+      export_formats: [json, csv, pdf]
+      data_retention_days: 365   # 1 year retention
+
+  # ==========================================================================
+  # ENTERPRISE PLAN
+  # ==========================================================================
+  enterprise:
+    name: "Enterprise"
+    display_name: "Enterprise Plan"
+    description: "For large organizations with custom needs and SLA requirements"
+    price:
+      base_monthly: negotiated   # Custom pricing
+      currency: USD
+      billing_cycle: annual      # Typically annual contract
+
+    # ------------------------------------------------------------------------
+    # Entitlements (everything)
+    # ------------------------------------------------------------------------
+    entitlements:
+      - "*"                      # Wildcard: All features
+
+      # Explicitly listed for documentation:
+      - custom_models.upload
+      - custom_models.deploy
+      - sla.99_9                 # 99.9% uptime SLA
+      - compliance.soc2
+      - compliance.iso27001
+      - dedicated_support
+      - on_premise               # On-premise deployment option
+      - white_label              # Remove DecisionOS branding
+
+    # ------------------------------------------------------------------------
+    # Quotas (negotiated, typical defaults)
+    # ------------------------------------------------------------------------
+    quotas:
+      # Decision calls
+      decisions_per_day:
+        included: 200000
+        soft_limit: 160000
+        hard_limit: 500000       # Soft cap (negotiable)
+        period: daily
+        overage_allowed: true
+
+      # Storage
+      storage_gb:
+        included: 2000           # 2 TB
+        soft_limit: 1600
+        hard_limit: 10000        # 10 TB hard cap (negotiable)
+        period: total
+        overage_allowed: true
+
+      # Data connectors
+      connectors:
+        included: 100
+        soft_limit: 100
+        hard_limit: null         # Unlimited (null = no limit)
+        period: total
+        overage_allowed: true
+
+      # API requests (rate limit)
+      api_requests_per_min:
+        included: 1000
+        soft_limit: 1000
+        hard_limit: 1000
+        period: per_min
+        overage_allowed: false
+
+      # Users
+      users:
+        included: null           # Unlimited
+        soft_limit: null
+        hard_limit: null
+        period: total
+        overage_allowed: false
+
+      # Projects
+      projects:
+        included: null           # Unlimited
+        soft_limit: null
+        hard_limit: null
+        period: total
+        overage_allowed: false
+
+      # HITL cases
+      hitl_cases_per_month:
+        included: 10000
+        soft_limit: 8000
+        hard_limit: 50000
+        period: monthly
+        overage_allowed: true
+
+    # ------------------------------------------------------------------------
+    # Rate Card (negotiated, typical)
+    # ------------------------------------------------------------------------
+    rate_card:
+      decision_call: negotiated  # Typically 0.001-0.0015 USD (volume discount)
+      storage_gb_month: 0.06     # USD per GB/month (volume discount)
+      hitl_case: negotiated      # Typically 0.3-0.4 USD per case
+      additional_user: 0         # Unlimited users included
+      additional_project: 0      # Unlimited projects included
+
+    # ------------------------------------------------------------------------
+    # Support
+    # ------------------------------------------------------------------------
+    support:
+      email: true                # 30-min SLA
+      chat: true                 # 24/7
+      phone: true                # 24/7
+      dedicated_csm: true        # Dedicated Customer Success Manager
+      qbr: true                  # Quarterly Business Reviews
+      sla_hours: 0.5             # 30 minutes
+      availability: 24_7
+
+    # ------------------------------------------------------------------------
+    # Limits
+    # ------------------------------------------------------------------------
+    limits:
+      max_file_upload_mb: 1000   # 1 GB
+      max_api_payload_mb: 100
+      export_formats: [json, csv, pdf, parquet, avro]
+      data_retention_days: 2555  # 7 years (regulatory compliance)
+
+# ============================================================================
+# ENTITLEMENT REGISTRY
+# (Maps entitlement strings to human-readable descriptions)
+# ============================================================================
+
+entitlements:
+  # Catalog
+  catalog.read:
+    description: "View data catalog entries"
+    category: catalog
+  catalog.write:
+    description: "Create and update catalog entries"
+    category: catalog
+  catalog.delete:
+    description: "Delete catalog entries"
+    category: catalog
+  catalog.*:
+    description: "Full catalog access (read + write + delete)"
+    category: catalog
+
+  # Lineage
+  lineage.read:
+    description: "View lineage graphs"
+    category: lineage
+  lineage.write:
+    description: "Create lineage relationships"
+    category: lineage
+  lineage.graph_view:
+    description: "Interactive lineage graph visualization"
+    category: lineage
+  lineage.impact_analysis:
+    description: "Impact analysis (what-if scenarios)"
+    category: lineage
+  lineage.*:
+    description: "Full lineage access"
+    category: lineage
+
+  # Decisions
+  decisions.run.basic:
+    description: "Run rule-based decision models (no ML)"
+    category: decisions
+  decisions.run.ml:
+    description: "Run ML-based decision models"
+    category: decisions
+  decisions.run.custom:
+    description: "Deploy and run custom ML models"
+    category: decisions
+  decisions.run:
+    description: "Run decision models (basic + ML)"
+    category: decisions
+
+  # Guardrails
+  guardrails.v1:
+    description: "Basic guardrails (input validation)"
+    category: guardrails
+  guardrails.v2:
+    description: "Advanced guardrails (PII detection, policy enforcement)"
+    category: guardrails
+
+  # HITL
+  hitl.basic:
+    description: "Human-in-the-loop review queue"
+    category: hitl
+  hitl.advanced:
+    description: "Advanced HITL (custom workflows, SLA tracking)"
+    category: hitl
+
+  # Pipelines
+  pipelines.run:
+    description: "Run data pipelines"
+    category: pipelines
+  pipelines.schedule:
+    description: "Schedule automated pipeline runs"
+    category: pipelines
+
+  # API
+  api.read:
+    description: "Read-only API access"
+    category: api
+  api.write:
+    description: "Write API access (create, update, delete)"
+    category: api
+  api.admin:
+    description: "Admin API access (manage orgs, users, billing)"
+    category: api
+
+  # Custom Models
+  custom_models.upload:
+    description: "Upload custom ML models"
+    category: custom_models
+  custom_models.deploy:
+    description: "Deploy custom models to production"
+    category: custom_models
+
+  # SLA & Compliance
+  sla.99_9:
+    description: "99.9% uptime SLA with financial penalties"
+    category: sla
+  compliance.soc2:
+    description: "SOC 2 compliance reports"
+    category: compliance
+  compliance.iso27001:
+    description: "ISO 27001 compliance reports"
+    category: compliance
+
+  # Enterprise Features
+  dedicated_support:
+    description: "Dedicated support engineer (CSM)"
+    category: support
+  on_premise:
+    description: "On-premise deployment option"
+    category: deployment
+  white_label:
+    description: "White-label UI (remove branding)"
+    category: customization
+
+  # Wildcard
+  "*":
+    description: "All features (Enterprise only)"
+    category: all
+
+# ============================================================================
+# VERSIONING & DEPRECATION
+# ============================================================================
+
+deprecated_plans:
+  # Legacy plans (grandfathered, not available to new customers)
+  - plan_id: legacy_pro
+    name: "Legacy Pro"
+    deprecated_on: "2025-06-01"
+    replacement: pro
+    notes: "Existing customers can keep this plan. Price: $80/month (vs new Pro: $100/month)."
+
+# ============================================================================
+# METADATA
+# ============================================================================
+
+metadata:
+  version: "1.0.0"
+  last_updated: "2025-11-03"
+  approved_by: "Product Team + Finance Team"
+  effective_date: "2025-11-01"
+  next_review_date: "2026-02-01"  # Quarterly review
+
+# ============================================================================
+# VALIDATION RULES
+# ============================================================================
+
+validation:
+  # Ensure all plans have required fields
+  required_fields:
+    - name
+    - price
+    - entitlements
+    - quotas
+    - support
+
+  # Ensure quotas are consistent
+  quota_rules:
+    - name: "Soft limit must be <= hard limit"
+      check: "quotas.*.soft_limit <= quotas.*.hard_limit"
+    - name: "Included must be <= soft limit"
+      check: "quotas.*.included <= quotas.*.soft_limit"
+
+  # Ensure rate card exists if overage allowed
+  rate_card_rules:
+    - name: "Rate card required if overage allowed"
+      check: "quotas.*.overage_allowed == true → rate_card.* != null"
+
+# END OF FILE

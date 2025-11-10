@@ -1,0 +1,200 @@
+meta:
+  version: v0.4.9
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-U: Payments · Refunds · Tax/Receipts · Dunning · Chargeback · Reconciliation (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Payments Architecture — Scope & PCI Boundary"
+      mode: replace
+      content: |
+        목표: SAQ-A 범위 유지(민감 카드정보 저장 금지). PSP 토큰화/호스티드 결제폼 우선.
+        구성요소:
+          - pay_gateway: PSP 라우터(Stripe/Generic REST/KR-PG Stub)
+          - tax_adapter: VAT/국가별 세금 계산(외부 엔진 연동 포인트)
+          - receipter: 영수증/세금서류 PDF/JSON 생성
+          - dunning: 실패 결제 재시도·알림·Downgrade/Freeze 훅(Gate-S)
+          - reconcile: PSP 이벤트 ↔ invoice_draft( Gate-S ) 대사
+          - subledger: 더블엔트리(AR/Cash/Revenue/Tax/Refund/Chargeback)
+        PCI/보안: PAN/CSC 비보관, PSP 토큰만 저장. 3DS/SCA 지원. 웹훅 서명 검증/재생공격 방지.
+
+    - section: "Data Model — Billing Accounts & Payment Methods"
+      mode: replace
+      content: |
+        billing_account{org_id, currency, tax_profile_id, default_pm, delinquent, dunning_state}
+        payment_method{pm_id, org_id, psp, token, type[card/bank/wallet], brand,last4,exp, billing_addr}
+        tax_profile{org_id, country, region, vat_id?, tax_exempt[none/partial/exempt], evidence[]}
+        receipt{id, invoice_id, amount, tax, currency, pdf_url, issued_at}
+        chargeback{id, psp_ref, stage[notice/won/lost], amount, reason, due_at}
+        ledger_entry{id, ts, account, debit, credit, currency, tenant_id, ref(invoice/charge/refund)}
+
+    - section: "APIs — Charges/Refunds/Tax/Receipts/Webhooks"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/pay/charge {invoice_id|amount, currency, pm_id|payment_intent, idempotency_key}
+          - POST /api/v1/pay/refund {charge_id|invoice_id, amount?, reason}
+          - POST /api/v1/tax/calc {invoice_id|lines[]} -> {tax_total, breakdown}
+          - POST /api/v1/receipt/issue {invoice_id} -> {receipt_id, pdf_url}
+          - GET  /api/v1/reconcile/status?period=
+          - POST /api/v1/pay/dunning/run {org_id?}
+          - POST /api/v1/pay/chargeback/update {psp_ref, stage, evidence_url?}
+          - Webhooks: /api/v1/pay/webhook/stripe | /generic | /krpg
+        규범:
+          - 모든 write API는 Idempotency-Key 필수, 멱등키 중복 시 409 대신 기존 결과 리턴
+          - 결제 시 Gate-S quota/throttle/guard 체크 후 진행
+
+    - section: "PSP Adapters — Routing & Idempotency"
+      mode: replace
+      content: |
+        어댑터:
+          - stripe_adapter.py: PaymentIntent/Refund/Webhooks/3DS
+          - generic_psp_adapter.py: REST/OpenAPI 매핑, 서명검증 훅
+          - kr_pg_stub.py: 카드/계좌이체/가상계좌 시뮬레이터(샌드박스)
+        라우팅 전략:
+          - Geo/플랜/SLA 기반 PSP 우선순위, 장애 시 페일오버
+        멱등성:
+          - corr_id 기반 PSP키 매핑, 재시도 안전
+
+    - section: "Dunning & Collections — Policy"
+      mode: replace
+      content: |
+        재시도 일정(기본): 0h → 24h → 72h → 7d → 14d
+        알림 채널: 이메일/슬랙/웹훅, 인앱 배너
+        조치:
+          - 72h 실패: 플랜 제한(soft), 14d 실패: freeze( Gate-S ), PQL/시퀀스에 알림( Gate-AA )
+        해제:
+          - 성공 결제 시 자동 정상화, 실패 누적 카운트 리셋
+        로깅:
+          - 모든 단계 ticket_id/trace_id, Evidence(Billing/Cost)
+
+    - section: "Refunds & Credits — Rules"
+      mode: replace
+      content: |
+        환불 유형: 전액/부분/라인별. PoV Fee 환급 규칙(Gate-Z/AA 실험 반영).
+        크레딧 노트: invoice 조정( Gate-S ), 차월 상계.
+        Anti-fraud:
+          - 환불 윈도우, 고액 환불 HITL 승인(Gate-Q 예정), 중복 환불 차단(멱등키)
+
+    - section: "Tax & Receipts — Minimal Viable"
+      mode: replace
+      content: |
+        세금:
+          - tax_adapter: 국가/지역 코드·VAT율 로딩, 역외 과세/면세 처리, 증빙 필드(vat_id)
+        영수증:
+          - invoice_draft → receipt PDF 렌더(금액/세액/품목/기간/사업자정보)
+        지역정책:
+          - KR/EU 프리셋, 최종 전자세금계산서/현금영수증 정식 연동은 후속 Gate 제안
+
+    - section: "Reconciliation — Matching & Settlement"
+      mode: replace
+      content: |
+        대사:
+          - PSP 이벤트(charge/refund/payout) ↔ invoice/ledger 매칭(금액/통화/시점)
+          - 불일치: pending_report로 큐잉, 수동 조정/조사 라우팅
+        정산:
+          - 입금 스케줄/수수료 반영, 수익/세금/수수료 분개 자동화
+
+    - section: "Subledger — Double-Entry"
+      mode: replace
+      content: |
+        계정:
+          - AR(미수금), Cash(현금), Revenue(수익), TaxPayable(부가세), Refunds, Chargebacks, Fees
+        트랜잭션 예:
+          - 청구 결제 성공: AR↓, Cash↑, Revenue↑, Tax↑
+          - 환불: Revenue↓, Tax↓, Cash↓, Refunds↑
+          - 차지백: Cash↓, Chargebacks↑ (승소 시 반대분개)
+        폐쇄:
+          - 월말 집계/시산표 산출, 외부 회계 연동 어댑터 훅
+
+    - section: "Security/Privacy/Compliance"
+      mode: replace
+      content: |
+        - SAQ-A: 카드정보 비저장, 토큰/지불의도만 보관
+        - 웹훅 서명검증·재생공격 방지(타임스탬프/nonce)
+        - ABAC(Gate-W): 결제/영수 레코드 접근 최소권한, 감사 라벨(policy_id/consent_id)
+        - Residency: 결제/인보이스 데이터 저장 위치는 지역 경계 준수
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-U 성공 기준:
+          - 결제 성공률(카드) ≥ 96% (승인거절 제외) / 웹훅 처리 성공 ≥ 99.9%
+          - 환불 API TAT p95 ≤ 800ms, 24h 내 환불 정산 반영
+          - 대사(gap) |psp - ledger| / ledger ≤ 0.5% (월간), 미해결 pending ≤ 0.2%
+          - Dunning 전환(성공 복구) ≥ 35% (초기 코호트), Freeze 해제 자동화 100%
+          - Chargeback 비율 < 1.0% 유지(월간), 증빙 업로드/결과 기록 100%
+          - Evidence Binder(Payments) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - PSP 어댑터/게이트웨이/웹훅 · 멱등/서명검증
+        - 세금 어댑터·영수증 렌더 · KR/EU 프리셋
+        - Dunning 파이프라인·Downgrade/Freeze 연동(Gate-S)
+        - 대사/정산·서브레저 · 리포트
+        - e2e 테스트/증빙 번들(결제/환불/세금/정산)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 146: pay_gateway(Stripe/Generic/KR-stub) · webhook 서명검증 · idempotency
+        Day 147: tax_adapter · receipt PDF/JSON · invoice_draft 연동(Gate-S)
+        Day 148: dunning 일정/알림/조치 훅 · downgrade/freeze 통합
+        Day 149: reconcile 매칭/불일치 큐 · subledger 분개 · 리포트 카드
+        Day 150: e2e 시나리오(성공/실패/환불/차지백) · SLO 측정 · Evidence 정리
+
+work:
+  codex:
+    - id: X-132
+      title: PSP Gateway & Webhooks
+      deliverables:
+        - apps/payments/{gateway.py, stripe_adapter.py, generic_psp_adapter.py, kr_pg_stub.py}
+        - routers/payments.py  # charge/refund/webhooks
+      acceptance:
+        - 멱등/서명검증/장애 페일오버, 단위/회귀 테스트 40+
+
+    - id: X-133
+      title: Tax Adapter & Receipter
+      deliverables:
+        - apps/tax/{adapter.py, presets_kr_eu.yaml}
+        - apps/receipts/{render.py, templates/receipt.html}
+      acceptance:
+        - invoice_draft → tax 계산·PDF/JSON 발행, 샘플 5종 통과
+
+    - id: X-134
+      title: Dunning Engine & Hooks
+      deliverables:
+        - apps/dunning/{engine.py, schedule.yaml, notifiers.py}
+        - jobs/dunning_runner.py
+      acceptance:
+        - 일정/알림/조치 훅 동작, 전환율/해제율 메트릭 표출
+
+    - id: X-135
+      title: Reconciliation & Subledger
+      deliverables:
+        - apps/reconcile/{matcher.py, pending_queue.py}
+        - apps/ledger/{postings.py, trial_balance.py}
+        - dashboards/finance/{payments.json, aging_ar.json}
+      acceptance:
+        - gap ≤ 0.5%, 월말 시산표 생성, 대시 카드 표출
+
+    - id: P-26
+      title: dosctl (payments)
+      deliverables:
+        - cli/dosctl/main.py: pay charge|refund|dunning run|reconcile report|receipt issue
+      acceptance:
+        - 로컬에서 전 경로 e2e 구동
+
+risks:
+  - name: PSP 장애/지연
+    mitigation: 다중 어댑터/페일오버·멱등 재시도·가용성 모니터링(Gate-T)
+  - name: 환불/차지백 남용
+    mitigation: 환불 제한/승인·분쟁 증빙·리스크 스코어·히트맵
+  - name: 세금 규정 복잡성
+    mitigation: 어댑터 추상화·법무 리뷰·KR/EU 프리셋 우선
+  - name: 대사 불일치/정산 지연
+    mitigation: 해시/금액/시점 매칭·불일치 큐·일일 재계산 배치
+  - name: 컴플라이언스/프라이버시
+    mitigation: SAQ-A·웹훅 서명·ABAC·Residency·감사 라벨

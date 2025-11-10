@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+dist/
+build/
+*.egg-info/
+.coverage
+.pytest_cache/
+# OS
+.DS_Store
+Thumbs.db
+# metering local data
+var/
+*.sqlite
+*.sqlite3

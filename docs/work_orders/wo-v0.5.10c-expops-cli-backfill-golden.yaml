@@ -1,0 +1,35 @@
+meta:
+  version: v0.5.10c
+  date: 2025-11-07
+  status: locked
+  summary: "Gate-AJ/T: CLI DSL Judge + Backfill Reconcile + Golden Trace harness"
+
+patches:
+  techspec:
+    - section: "Experiment Ops — CLI & Golden Trace"
+      mode: upsert
+      content: |
+        dosctl exp_judge는 witness JSON + ad-hoc DSL(<=,<,>=,>,==,!=, AND-only)을 평가하여 verdicts_cli.json을 산출한다.
+        기본 경로는 slo.json의 measurement_quorum_tolerances를 참조하며, --expr 모드에서는 단일 DSL에 대해 PASS/FAIL만 출력한다.
+        Golden Trace 스크립트는 evidence/golden/raw_events.jsonl + witness.json을 생성하고, downstream judge/backfill이 이를 참조하여 self-test를 수행한다.
+
+    - section: "Observability — Backfill Runner & Calibration"
+      mode: upsert
+      content: |
+        backfill_runner는기존 witness(primary)와 raw_events.jsonl를 입력으로 받아 재집계(witness exporter_x) → measurement_quorum_tolerances 준수 여부를 평가한다.
+        산출물: backfill_report.json, discrepancies.csv. Fail 시 metrics별 delta/허용폭을 명시한다.
+        apps/obs/calibration/golden_trace.py는 가짜 분포를 합성하여 err/p95/coverage 목표에 맞춘 raw/witness 쌍을 생성하고 evidence/obs/golden_trace.md에 기록한다.
+
+  plan:
+    - section: "Milestones — Gate-AJ"
+      mode: upsert
+      content: |
+        - dosctl exp_judge DSL 모드 릴리스(기본 slo.json+ad-hoc)
+        - golden_trace self-test 번들(evidence/golden/*)
+        - verdicts_cli.json → witness 참조 자동화
+    - section: "Milestones — Gate-T"
+      mode: upsert
+      content: |
+        - backfill_runner CLI (witness+raw) + Δ 보고
+        - calibration/golden_trace.py 스크립트 및 문서
+        - daily cron에서 golden trace → backfill → judge 스모크 자동화

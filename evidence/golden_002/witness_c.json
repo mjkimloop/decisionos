@@ -1,0 +1,20 @@
+{
+  "period_start": "2025-11-07T10:12:23.219293",
+  "period_end": "2025-11-07T11:12:23.219293",
+  "sample_n": 500,
+  "coverage_ratio": 1.0,
+  "dropped_spans": 0,
+  "latency_p95": 667.6806468980342,
+  "latency_p99": 1135.082509704019,
+  "err_rate": 0.004,
+  "cost_krw": 50.047776233924466,
+  "citation_cov": 0.798,
+  "parity_delta": 0.0030004051135238225,
+  "watermark_ts": 1762481543,
+  "clock_skew_ms": 0,
+  "build_id": "golden-trace",
+  "commit_sha": "calibration",
+  "source_id": "exporter_c",
+  "sha256": "9e5b4f40b5c5ea8e3a9c7451bf1dd56d00e1af755597baa5fe26a058740d0a07",
+  "q_ledger_ref": null
+}

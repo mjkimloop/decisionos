@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "witness_primary": "evidence/golden/witness.json",
+  "raw_events": "evidence/golden/raw_events.jsonl",
+  "metrics": [
+    {
+      "metric": "latency_p95",
+      "primary": 1093.6832935786556,
+      "candidate": 1093.6832935786556,
+      "delta": 0.0,
+      "allowed_delta": 21.873665871573113,
+      "status": "PASS"
+    },
+    {
+      "metric": "err_rate",
+      "primary": 0.014,
+      "candidate": 0.014,
+      "delta": 0.0,
+      "allowed_delta": 0.1,
+      "status": "PASS"
+    },
+    {
+      "metric": "cost_krw",
+      "primary": 278.5758,
+      "candidate": 278.5758,
+      "delta": 0.0,
+      "allowed_delta": 2.7857580000000004,
+      "status": "PASS"
+    },
+    {
+      "metric": "citation_cov",
+      "primary": 0.981,
+      "candidate": 0.981,
+      "delta": 0.0,
+      "allowed_delta": 0.5,
+      "status": "PASS"
+    },
+    {
+      "metric": "parity_delta",
+      "primary": 0.004956631953154498,
+      "candidate": 0.004956631953154498,
+      "delta": 0.0,
+      "allowed_delta": 0.2,
+      "status": "PASS"
+    }
+  ]
+}

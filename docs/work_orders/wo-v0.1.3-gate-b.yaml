@@ -1,0 +1,66 @@
+meta:
+  version: v0.1.3
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-B 준비: 조기신호 2/3·보안 문서화·PoV Runbook·실벤더 라우팅"
+
+patches:
+  techspec:
+    - section: "Security Controls"
+      mode: replace
+      content: |
+        최소 통제 6/6 (v0.1.3 기준) — 구현 + 문서화
+        1) at-rest 암호화(AES-256 키랩퍼 스텁) — audit.ndjson, export/* 마스킹
+        2) in-transit 보호(TLS dev 예외, API Key 필수) — prod는 TLS 강제
+        3) RBAC 3계층(admin/agent/auditor) — 라우트별 접근표 첨부
+        4) OAuth2(+MFA 옵션) dev 토큰 발급 — /auth/token(mock)
+        5) DLP/마스킹(주민/계좌/연락처), CSV export 제한 — 패턴/샘플 포함
+        6) 동의/철회/파기 API + 감사 로그 — /api/v1/consent/*
+    - section: "Interfaces — API/CLI"
+      mode: append
+      content: |
+        추가 엔드포인트(v0.1.3):
+        - POST /api/v1/consent/grant {subject_id, doc_hash, scope, ttl}
+        - POST /api/v1/consent/revoke {subject_id, doc_hash}
+        - GET  /api/v1/consent/{subject_id}
+        - GET  /api/v1/metrics (uptime, req_count, p95_latency, error_rate)
+        - GET  /api/v1/metrics/healthz
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        조기신호(leading): 상담시간 평균 −20%, Reject Precision ≥0.80, 서류 재요청률 −25%
+        후행지표(lagging): 상위30% 리드 전환율 +6%p 또는 접촉시간 비중 +15%p (둘 중 1개)
+        Gate‑B 판정: 조기신호 ≥2/3 충족 + 보안 6/6 문서화 + PoV Runbook 승인
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑B 마일스톤(현행):
+        - 조기신호 3개 중 2개 달성(2주 관찰 윈도)
+        - 보안 6/6 **문서화** 및 점검표 서명본
+        - PoV Runbook, 위험분담표, 롤백계획 완성
+        - 실벤더 라우팅(모의→실) 드라이런 1회
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 6–7: 메트릭 수집/노출(/metrics), 감사 리플레이 강화
+        Day 8: Consent API /grant|/revoke|/list 구현 + RBAC 라우트 보호
+        Day 9: Switchboard openai 어댑터(실 호출 제한/예산) + 폴백 테스트
+        Day 10: PoV Runbook 초안(운영절차/장애대응/데이터보호) + 위험분담표 완성
+
+work:
+  claude:
+    - id: C-03
+      title: Rule Coverage Reporter + HTML
+      deliverables:
+        - apps/rule_engine/coverage_reporter.py
+        - templates/rule_coverage.html
+      acceptance:
+        - 규칙별 hit/miss, 우선순위 충돌 리포트 HTML 생성
+        - pre-commit에서 경고 출력(임계치 설정)
+    - id: L-02
+      title: Lending 엣지 규칙 4개 추가
+      deliverables:
+        - packages/rules/triage/{region_guard.yaml,purpose_check.yaml,senior_exposure.yaml,dsr_guard.yaml}
+      acceptance:
+        - 린터 경고 0, simulate 리포트 수치 변동 기록

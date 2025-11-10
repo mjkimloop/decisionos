@@ -1,0 +1,188 @@
+meta:
+  version: v0.4.1
+  date: 2025-11-04
+  status: locked
+  summary: "Gate-U: Payments & KYC · PG Integration · Settlement · Refunds/Adjustments (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Payments — Architecture"
+      mode: replace
+      content: |
+        목표:
+          - Gate-S의 인보이스/사용량을 실제 결제로 연결
+          - 다중 PG 어댑터, 안전한 웹훅, 정산/대사, 환불·조정
+        구성:
+          - adapters/: pg별 모듈(토큰화, auth/capture/refund/void, webhooks)
+          - payments_core/: 결제 세션, 결제 의도, 영수증, 결제 상태머신
+          - settlement/: 정산 배치, 대사 엔진(내부 원장 vs PG 정산 파일)
+          - taxes/: VAT/세율 룰, 인보이스 라인별 세금 계산 훅
+          - disputes/: 차지백/분쟁 수신·응답 스텁
+        통화/지역:
+          - 기본 KRW, 멀티통화 설계(ISO-4217) + 환율 스냅샷 테이블
+
+    - section: "PG Adapters & Flows"
+      mode: replace
+      content: |
+        표준 인터페이스(IPayAdapter):
+          - create_payment_intent(amount, currency, customer_ref, meta)
+          - confirm/authorize(intent_id, payment_method)
+          - capture(charge_id, amount?) / void(intent_id)
+          - refund(charge_id, amount?, reason)
+          - webhook_verify(headers, payload) → event
+        제공 어댑터(초기):
+          - manual_stub(테스트), stripe_stub(맵핑), generic_pg(서명검증/웹훅 공통)
+        상태머신:
+          - intent: created → authorized → captured → settled
+          - 실패: requires_action(3DS 등), canceled, charge_failed, refund_pending → refunded
+        웹훅:
+          - events: payment_succeeded/failed, refund_succeeded/failed, chargeback_open/closed
+          - 재시도: idempotency_key·리플레이 방지 해시
+
+    - section: "KYC / AML — Collection & Verification"
+      mode: replace
+      content: |
+        대상:
+          - 개인고객: 이름, 생년월일, 이메일/전화, 신분증 스캔(스텁), 셀피(옵션)
+          - 사업자: 상호/사업자번호, 대표자, 사업자등록증(스캔), 통신판매업번호(옵션)
+        프로세스:
+          - risk_tier 평가(low/med/high) → 요구 서류 다름
+          - 검증: 외부 KYC provider 스텁(adapter_kyc_stub) + 수동 검토(HITL queue)
+          - 결과: verified|needs_more|rejected, 유효기간 및 재검증 주기(예: 12개월)
+        보존/보안:
+          - 원본은 암호화 저장(AES-256), 썸네일/PII 마스킹, 접근 RBAC(billing_admin|auditor)
+          - 삭제요청은 보존정책 예외 저장소로 이관(감사 링크 유지)
+
+    - section: "Settlement & Reconciliation"
+      mode: replace
+      content: |
+        원장:
+          - ledger_txns{ id, org_id, invoice_id?, charge_id?, type[charge|refund|fee|payout],
+                         amount, currency, pg, status[pending|posted], ts }
+        정산:
+          - settlement_batches{ id, pg, period, file_uri, imported_at }
+          - 대사(recon): ledger vs settlement 파일 매칭 → 불일치 보고서(diff)
+        수수료:
+          - pg_fee, fx_fee, 플랫폼 수수료 라인 분리 → margin 계산과 연동(Gate-S)
+
+    - section: "Taxes & Invoicing"
+      mode: replace
+      content: |
+        VAT/세금:
+          - region_rules.yaml: 국가/지역별 세율/면세/과세구분
+          - invoice_lines에 tax_rate/tax_amount 계산/표기, 영수증에도 반영
+        영수증:
+          - receipts{ id, charge_id, org_id, total, tax_amount, issued_at, pdf_uri, json_uri }
+
+    - section: "Interfaces — API/CLI/Webhooks"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/payments/intent {org_id, amount, currency, customer_ref}
+          - POST /api/v1/payments/confirm {intent_id, payment_method}
+          - POST /api/v1/payments/capture {charge_id, amount?}
+          - POST /api/v1/payments/refund {charge_id, amount?, reason}
+          - GET  /api/v1/payments/charges/:id | GET /api/v1/payments/receipts/:id
+          - POST /api/v1/kyc/submit {org_id, type, docs[]}
+          - GET  /api/v1/kyc/status?org_id=
+          - POST /api/v1/webhooks/pg/{adapter}  # 서명검증
+        CLI(dosctl):
+          - `dosctl pay intent --org <id> --amount 100000 --ccy KRW`
+          - `dosctl pay confirm --intent <id> --pm tok_test`
+          - `dosctl pay refund --charge <id> --amount 50000`
+          - `dosctl kyc submit --org <id> --type business --docs ...`
+          - `dosctl kyc status --org <id>`
+        Webhooks(ours→partners):
+          - billing.invoice.issued, payment.charge.succeeded, refund.processed, kyc.updated
+
+    - section: "Security / Compliance"
+      mode: replace
+      content: |
+        - 카드 데이터 비저장(토큰만 저장), 웹훅 서명검증 필수, 재생공격 방지
+        - PII/문서 암호화, 접근 로깅, 7년 보존, 감사 해시체인 링크(Gate-Q)
+        - 차지백 알림 수신 → HITL 케이스 자동 생성(Gate-R)
+        - 권한: billing_admin, finance_ops, auditor 전용 API 분리
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-U 성공 기준:
+          - 결제 승인→매입 성공율(샌드박스) ≥ 98%, 환불 요청 처리 성공율 ≥ 99%
+          - 웹훅 검증 실패율 ≤ 0.2%, 중복 처리 0(멱등성 보장)
+          - 정산 대사: 불일치율 ≤ 0.5% (샘플 파일 기준), diff 리포트 생성
+          - KYC 처리: 평균 TAT ≤ 10분(샌드박스), 오인수락(FAR) ≤ 1%, 오인거절(FRR) ≤ 3%
+          - 인보이스/영수증 PDF·JSON e2e 생성 + 감사 링크 100%
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - PG 어댑터/코어 상태머신/웹훅 검증
+        - KYC 수집·검증·보존 + HITL 연계
+        - 정산/대사·수수료 처리 + 리포트
+        - 세금/VAT 룰 + 영수증 발행
+        - 운영 런북·증빙 번들(Evidence Binder: Payments/KYC)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 106: payments_core(세션/의도/상태머신) + adapters(manual, stripe_stub) + /payments API
+        Day 107: webhook_verify 공통·멱등키·재시도·감사 연동 + dosctl(pay)
+        Day 108: KYC 수집/검증 스텁(adapter_kyc_stub) + /kyc API + HITL 큐 연동
+        Day 109: settlement/recon 배치 + 수수료 라인 + 리포트 UI
+        Day 110: VAT/세금 룰·영수증 PDF/JSON + SLO·증빙·런북 마감
+
+work:
+  codex:
+    - id: X-94
+      title: Payments Core & PG Adapters
+      deliverables:
+        - apps/payments/{core.py, models.py, state_machine.py}
+        - apps/payments/adapters/{manual_stub.py, stripe_stub.py, generic_pg.py}
+        - routers/payments.py
+      acceptance:
+        - auth/capture/refund/void e2e, 멱등성·웹훅 서명 검증 통과
+    - id: X-95
+      title: Webhooks & Idempotency
+      deliverables:
+        - apps/payments/webhooks.py, apps/common/idempotency.py
+      acceptance:
+        - 중복 처리 0, 재시도 내결함성, 감사 로그 링크
+    - id: X-96
+      title: KYC Service & Storage
+      deliverables:
+        - apps/kyc/{service.py, models.py, adapters/stub.py}
+        - routers/kyc.py
+      acceptance:
+        - 제출→검증→결과 통지 e2e, 암호화/접근로그·보존정책 적용
+    - id: X-97
+      title: Settlement & Reconciliation
+      deliverables:
+        - apps/settlement/{importer.py, recon.py, fees.py}
+        - web/finance/recon.html
+      acceptance:
+        - 불일치 보고서 생성(diff), 수수료 라인 반영, 샘플 파일 통과
+    - id: X-98
+      title: Taxes & Receipts
+      deliverables:
+        - apps/taxes/{rules.py}, configs/region_rules.yaml
+        - apps/payments/receipts.py
+      acceptance:
+        - 인보이스/영수증 PDF·JSON 생성, VAT 계산 검증
+    - id: P-18
+      title: dosctl Extensions (payments/kyc/recon)
+      deliverables:
+        - cli/dosctl/main.py: pay intent|confirm|refund, kyc submit|status, recon run
+      acceptance:
+        - 로컬에서 샌드박스 e2e 제어 가능
+
+risks:
+  - name: 웹훅 위조/재생 공격
+    mitigation: 서명검증·타임스탬프 허용범위·리플레이 해시·멱등키
+  - name: 정산 불일치/누락
+    mitigation: 대사 리포트·재수집 배치·경보·인보이스 동결
+  - name: PCI/PII 범위 확대
+    mitigation: 카드 데이터 미보관·토큰화·민감정보 암호화/접근제어
+  - name: KYC 오인/지연
+    mitigation: 위험도 기반 증빙 수위·HITL 에스컬레이션·재검증 주기
+  - name: 환불/차지백 비용
+    mitigation: 환불 정책 명문화·증빙 자동화·HITL/감사 연동

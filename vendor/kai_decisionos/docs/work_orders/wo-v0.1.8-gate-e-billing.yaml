@@ -1,0 +1,43 @@
+meta:
+  version: v0.1.8
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-E: SOW 승인·Paid PoV 계약·계량/청구 개통 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Pricing & Packaging"
+      mode: replace
+      content: |
+        초기 패키지(v0.1.8):
+        - Plan Basic(PoV): 월 정액 30만원 + 과금건당 20원(/decide 성공건)
+        - Add‑on: OpenAI 경로 사용 시 실제 비용 + 10% 핸들링(옵션)
+        - Seat: agent 5명 포함, 초과 seat/월 1만원
+        - SLA(초안): PoV 기간 가용성 99.0%, p95<800ms(모델 미호출 경로)
+        - 캡/버짓: tenant.yaml budgets로 제어(초과 시 폴백 또는 차단)
+    - section: "Entitlements"
+      mode: replace
+      content: |
+        권한/기능 할당(tenant scope):
+        - feature_flags: {simulate, decide, explain, metrics, consent, ingest, billing}
+        - rate_limits: {rps, rpm, daily_caps}
+        - budgets: {max_cost_usd, hard_timeout_ms, retries}
+    - section: "Metering & Billing"
+      mode: replace
+      content: |
+        계량/청구 아키텍처:
+        - usage_events: {ts, tenant_id, event, key, value, attrs(json)}
+        - events: decide.ok, decide.err, model.spend_usd, ingest.row_ok, ingest.row_err, seat.active
+        - aggregator: 일/월 집계 → usage_summary{tenant, period, metrics}
+        - billing_engine: KRW 기준, VAT 10%, 할인/크레딧/프로레이션 지원(초안), 인보이스 PDF 생성
+        - 결제: 수기 송장(계좌이체) — 웹훅은 알림용(HMAC)
+    - section: "Interfaces"
+      mode: append
+      content: |
+        청구/계량 엔드포인트(v0.1.8):
+        - POST /api/v1/usage/events            (HMAC 서명, idempotency-key)
+        - GET  /api/v1/usage/summary?period=   (tenant scope)
+        - POST /api/v1/billing/invoice/preview {period}
+        - POST /api/v1/billing/invoice/finalize{period}
+        - GET  /api/v1/billing/invoices/{id}   (PDF)
+

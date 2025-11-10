@@ -1,0 +1,104 @@
+meta:
+  version: v0.1.6
+  date: 2025-11-02
+  status: locked
+  summary: "PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지"
+
+work:
+  claude:
+    - id: C-06
+      title: PoV Runbook & 롤백 문서
+      deliverables:
+        - ops/runbook_pov.md
+        - ops/rollback.md
+      acceptance:
+        - 체크리스트/명령어/스크린샷 자리표시 포함, 리뷰 가능 상태
+    - id: C-07
+      title: 익명화 시드 생성기
+      deliverables:
+        - scripts/anonymize_seed.py (N=1k 샘플 생성)
+      acceptance:
+        - 주민/계좌/연락처 마스킹 보장, 유효 스키마
+    - id: C-08
+      title: Rule Coverage 베이스라인 업데이트
+      deliverables:
+        - reports/rule_coverage_pov.html
+      acceptance:
+        - 커버리지 임계치 충족(≥85%), 충돌 0
+
+  codex:
+    - id: X-10
+      title: 도커라이제이션 + Makefile
+      deliverables:
+        - Dockerfile(s)
+        - infra/docker-compose.yml
+        - Makefile{up,down,logs,seed}
+        - .env.sample
+      acceptance:
+        - "`make up` 후 /health 200, `make down` 정상 종료"
+    - id: X-11
+      title: 커넥터 v1(CSV/Sheets/S3)
+      deliverables:
+        - apps/connectors/{csv_ingest.py,gsheet_ingest.py,s3_ingest.py}
+        - services/ingest_runner.py(APScheduler)
+        - config/connectors.yaml
+      acceptance:
+        - leads 테이블 적재, consent 검사, 실패행 DLQ 폴더
+    - id: X-12
+      title: 관측성 확장 + 로드테스트
+      deliverables:
+        - apps/observability/logging.py(회전)
+        - apps/gateway/routers/metrics.py 확장
+        - scripts/load_test.sh 또는 locustfile.py
+      acceptance:
+        - 500R/min 5분 테스트, p95<800ms, 오류율<1%
+    - id: X-13
+      title: dosctl 보강(health/ingest)
+      deliverables:
+        - "cli/dosctl/main.py: `health`, `ingest csv|sheet|s3` 추가"
+      acceptance:
+        - 로컬에서 드라이런 시나리오 자동화
+    - id: X-14
+      title: 백업/복구 스크립트
+      deliverables:
+        - scripts/backup.sh
+        - scripts/restore.sh
+        - scripts/rotate_manifests.py
+      acceptance:
+        - 백업→복구→해시체인 검증 OK
+
+risks:
+  - name: 클라우드 자격증명/보안 위험
+    mitigation: 서비스계정 read-only, .env.sample에 변수만 기술, 비밀은 로컬 .env로만
+  - name: PII 누출
+    mitigation: anonymize_seed.py 필수, pre-commit에서 원본 CSV 커밋 차단
+  - name: 성능 미달
+    mitigation: 라우팅 local 고정 + 규칙 튜닝, 필요시 캐시(메모리) 추가
+
+patches:
+  techspec:
+    - section: Open Issues
+      mode: replace
+      content: |
+        - Gate‑C: 도커 패키징, 커넥터 v1, 관측성 확장, Runbook/롤백 문서
+        - Metrics 엔드포인트 확장(p95/error_rate/req_count)
+        - Backup/Restore/Manifest 회전 프로시저 문서화
+    - section: Security Controls
+      mode: ensure
+      content: |
+        - .env.sample 제공, 비밀은 로컬 .env로만
+        - Ingest 시 consent 검사 및 DLQ 처리 원칙 명시
+  plan:
+    - section: Milestones
+      mode: replace
+      content: |
+        - Gate‑A: /decide e2e + Offline Eval 리포트
+        - Gate‑B(No‑Gemini): 조기신호 2/3 + 보안 문서화 + PoV Runbook + OpenAI 라우팅
+        - Gate‑C: 도커 패키징·커넥터 v1·관측성·Runbook·롤백(드라이런)
+    - section: Next Actions
+      mode: append
+      content: |
+        - Dockerfile/compose 정리 및 .env.sample 배포
+        - connectors.yaml 설계 및 ingest_runner 스케줄 테스트
+        - load_test.sh/locustfile.py로 p95/오류율 측정
+        - backup/restore/rotate 스크립트 드라이런

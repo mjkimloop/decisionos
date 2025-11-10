@@ -1,0 +1,63 @@
+feat(gate_s): pluggable IdempoStore (memory/sqlite) + factory + tests (v0.5.11b)
+
+인터페이스/플러그인 구조로 멱등 저장소 분리 완료.
+
+신규 파일:
+- apps/metering/store.py (1.8 KB)
+  - IdempoStore(ABC): 인터페이스 (seen, mark, close)
+  - InMemoryIdempoStore: 기본 구현 (Set 기반)
+  - SQLiteIdempoStore: 영속 구현 (UNIQUE 제약으로 멱등 보장)
+    - WAL 모드, timeout=30s, 다중 프로세스 안전
+    - 자동 테이블 생성: idempo_keys(k TEXT PRIMARY KEY)
+
+- apps/metering/factory.py (742 bytes)
+  - build_idempo_store(): ENV 기반 팩토리
+  - DECISIONOS_METERING_STORE={"type":"sqlite","path":"..."}
+  - 기본값: InMemory
+
+수정 파일:
+- apps/metering/ingest.py (853 bytes)
+  - filter_idempotent_with(store, events): 주입 API 추가
+  - filter_idempotent(events): 기존 API 유지 (InMemory 기본)
+  - apply_event(): 시그니처 변경 (store.mark() 반환값 사용)
+
+테스트:
+- tests/gates/gate_s/test_idempo_store_plugin.py (39줄)
+  - test_inmemory_idempotency_basic: InMemory 중복 필터 검증
+  - test_sqlite_idempotency_persistent: SQLite 영속성 검증
+    - 2개 인스턴스 간 중복 필터 동작 확인
+
+.gitignore 보강:
+- var/ (로컬 데이터 디렉토리)
+- *.sqlite, *.sqlite3
+
+테스트 결과:
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ test_inmemory_idempotency_basic PASSED
+  - 3개 이벤트 (c1, c1 dup, c2) → 2개 unique, 1개 dup
+✓ test_sqlite_idempotency_persistent PASSED
+  - s1 인스턴스: e1 추가 → 1 unique, 0 dup
+  - s2 인스턴스: e2 (동일 corr_id) → 0 unique, 1 dup
+  - 영속성 검증 완료
+
+기능:
+- 플러그인 구조: IdempoStore 인터페이스
+- InMemory: 기본 동작 (기존 호환)
+- SQLite: 선택적 영속 스토어
+  - PRIMARY KEY 충돌로 자동 중복 제거
+  - IntegrityError 처리
+- Factory: ENV 기반 주입
+- 기존 API 호환: filter_idempotent() 시그니처 유지
+
+Work Order:
+- docs/work_orders/wo-v0.5.11b-gate-s-idempo-store.yaml
+- techspec: Gate-S — Idempotency Store Plugins 섹션 추가
+- plan: Milestones — Gate-S v1.1 추가
+
+다음 단계 (Day 219-220):
+- Day 219: Watermark/지연 허용 + 윈도 누수 테스트
+- Day 220: rating/quota/cost_guard 계약 연계 초안
+
+Gate-S 상태: Green + Pluggable Store
+
+No-Gemini. Claude Code 단독 구현.

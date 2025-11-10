@@ -1,0 +1,60 @@
+meta:
+  version: v0.3.6
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑P: Catalog·Search · Lineage v2 · Data Products (No‑Gemini)"
+
+patches:
+  techspec:
+    - section: "Data Products"
+      mode: replace
+      content: |
+        제품 기술서(product.yaml): {name, version, owner, input_datasets[], transforms(ref), slas{freshness,quality}, publish{s3_parquet|db_view}, contracts{output_contract}}
+        배포: product_builder.py(스냅샷 버전), 실패 시 롤백(직전 alias 유지)
+        소비: /products API·카탈로그 UI(골드 레이어)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API:
+        - GET /api/v1/catalog/assets?type=&domain=&tag=
+        - GET /api/v1/catalog/datasets/{id}
+        - GET /api/v1/search?q=&scope=asset|dataset|field
+        - GET /api/v1/lineage/graph?dataset=&depth=
+        - GET /api/v1/lineage/impact?dataset=&field?=
+        - POST /api/v1/products/register {product.yaml}
+        - POST /api/v1/products/publish {name, version}
+        - GET /api/v1/products/list
+        CLI(dosctl): `catalog add|ls|show`, `search`, `lineage graph|impact`, `product register|publish|list`
+    - section: "Dashboards & UI"
+      mode: replace
+      content: |
+        UI(경량):
+        - web/catalog/: 검색·필터(도메인/민감도/티어)·자산 상세·스키마 미리보기
+        - web/lineage/: 그래프 뷰(줌/패닝/하이라이트)·임팩트 패널
+        - web/products/: 제품 목록·버전·SLA 상태·소비 경로
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑P 성공 기준:
+        - 검색 p95 ≤ 800ms(자산 10K), 적중률@10 ≥ 0.8(라벨셋)
+        - 라인리지 커버리지 ≥ 90%(Gate‑O 산출물), 임팩트 쿼리 p95 ≤ 1200ms
+        - 제품 1종 등록→배포→소비 e2e 성공 + 롤백 테스트 통과
+        - 보안: sensitivity/tenant 필터 100% 강제, PII 필드 마스킹 위반 0
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑P 마일스톤:
+        - 카탈로그 스키마/레지스트리 + 인덱서/검색 API
+        - 라인리지 v2 수집/저장/임팩트 API + 그래프 UI
+        - 데이터 제품 레지스트리/빌더 + publish/rollback 흐름
+        - 증빙: 성능/SLO/보안 테스트 리포트 + Evidence Binder(Catalog)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 81: catalog schema·registry·indexer(FTS) + /catalog, /search API
+        Day 82: lineage_edges 스키마·collector + /lineage/graph, /impact API
+        Day 83: product.yaml 스키마·builder·/products API + publish/rollback
+        Day 84: UI(web/catalog, web/lineage, web/products) 1차본 + 캡처 스크립트
+        Day 85: 성능·보안 테스트·SLO 증빙 + Evidence Binder 업데이트
+

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: decisionos-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AUTH_ENABLED=true
+      - DATA_DIR=/app/packages
+      - CONTRACTS_DIR=/app/packages/contracts
+    volumes:
+      - ./packages:/app/packages
+      - ./var:/app/var
+    command: uvicorn apps.gateway.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add database service for audit ledger persistence
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: decisionos-db
+  #   environment:
+  #     - POSTGRES_DB=decisionos
+  #     - POSTGRES_USER=decisionos
+  #     - POSTGRES_PASSWORD=changeme
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+# volumes:
+#   postgres_data:

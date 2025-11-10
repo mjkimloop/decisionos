@@ -1,0 +1,87 @@
+meta:
+  version: v0.1.6
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-C: PoV 드라이런 — 도커 패키징·커넥터 v1·관측성·Runbook·롤백 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Deployment Profiles"
+      mode: replace
+      content: |
+        배포 프로파일(v0.1.6):
+        - local-dev: uvicorn 직부팅, sqlite/postgres(dev), OPENAI 비활성(기본)
+        - pov-singletenant: docker-compose 3컨테이너(gateway, worker, db), audit 볼륨 WORM, 로그 회전
+        환경변수(필수):
+        - DOS_ENV (local|pov), API_KEY, DB_URL, LOG_LEVEL
+        - OPENAI_API_KEY(옵션 — 없으면 local 고정), BUDGET_MAX_USD=0.02, HARD_TIMEOUT_MS=3000
+        백업/보존: audit.ndjson 일 단위 회전, 월간 manifest, 90일 보존(드라이런)
+    - section: "Data Connectors"
+      mode: replace
+      content: |
+        커넥터 v1(ingest→leads):
+        - CSV: 로컬/업로드 폴더 폴링 → 스키마 매핑 → consent 체크 후 적재
+        - Google Sheets: 서비스계정(keyfile)로 읽기 전용 → 스키마 매핑
+        - S3/GCS: prefix 폴링, .csv만 처리 → 실패/성공 큐 분리
+        공통 규칙: 동의 없는 행 drop, PII 마스킹 후 저장, 실패행 dead-letter 폴더 보관
+    - section: "Observability"
+      mode: replace
+      content: |
+        관측성(최소):
+        - /api/v1/metrics: p95_latency, error_rate, req_count, ingest_lag_sec
+        - 구조화 로그(NDJSON): 결정/감사/에러 채널 분리, 일 회전
+        - 알림(선택): ERR_RATE>1% 또는 p95>800ms 10분 지속 시 경고 로그
+    - section: "Runbook & Rollback"
+      mode: replace
+      content: |
+        PoV Runbook 요약:
+        1) 배포: docker-compose up -d → /health 확인
+        2) 시드: anonymize_seed.py → seed.csv → dosctl simulate
+        3) 스모크: /decide 샘플 3건, /explain 3건, 해시 체인 확인
+        4) 라우팅: local 기본, OPENAI_API_KEY 설정 시 옵션 경로 검증
+        5) 롤백: docker-compose down, DB 스냅샷 복구(scripts/restore.sh), manifest 롤백
+    - section: "Cost Guardrails"
+      mode: replace
+      content: |
+        비용 가드레일:
+        - 기본 로컬 우선, openai는 예산 내에서만
+        - 예산 초과/타임아웃 시 즉시 폴백(local)
+        - budget 헤더 미설정 시 BUDGET_MAX_USD 적용(기본 0.02)
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑C 마일스톤(드라이런 완료 조건):
+        - docker-compose 기동 + 스모크 성공
+        - 커넥터 v1로 샘플 1,000행 이상 적재 성공
+        - Reality‑Seal 재실행(4게이트 유지)
+        - Runbook/롤백 리허설 1회 기록
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 14: 도커 패키징(Dockerfile/compose/Makefile) + env.sample
+        Day 15: 커넥터 v1(CSV/Sheets/S3) + APScheduler 폴링 러너
+        Day 16: 관측성(/metrics 확장·로그 회전) + 로드테스트 1차
+        Day 17: 익명화 시드 생성(≥1,000행) + 대량 ingest 드라이런
+        Day 18: Runbook/롤백 스크립트 완성 + Reality‑Seal 재실행
+
+work:
+  claude:
+    - id: C-06
+      title: PoV Runbook & 롤백 문서
+      deliverables:
+        - ops/runbook_pov.md, ops/rollback.md
+      acceptance:
+        - 체크리스트/명령어/스크린샷 자리표시 포함, 리뷰 가능 상태
+    - id: C-07
+      title: 익명화 시드 생성기
+      deliverables:
+        - scripts/anonymize_seed.py (N=1k 샘플 생성)
+      acceptance:
+        - 주민/계좌/연락처 마스킹 보장, 유효 스키마
+    - id: C-08
+      title: Rule Coverage 베이스라인 업데이트
+      deliverables:
+        - reports/rule_coverage_pov.html
+      acceptance:
+        - 커버리지 임계치 충족(≥85%), 충돌 0

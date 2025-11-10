@@ -1,0 +1,50 @@
+name: lead_triage_rules
+version: 1.0.0
+rules:
+  - name: reject_low_credit
+    when: 'payload.get("credit_score", 0) < 550'
+    priority: 100
+    stop: true
+    action:
+      class: reject
+      reasons: ["credit_score_below_threshold"]
+      confidence: 0.9
+  - name: reject_high_dti
+    when: 'payload.get("dti", 0) > 0.6'
+    priority: 90
+    stop: true
+    action:
+      class: reject
+      reasons: ["debt_to_income_too_high"]
+      confidence: 0.85
+  - name: review_missing_docs
+    when: 'payload.get("income_verified") == False'
+    priority: 50
+    action:
+      class: review
+      reasons: ["income_unverified"]
+      required_docs: ["income_proof"]
+      confidence: 0.6
+  - name: approve_strong
+    when: 'payload.get("credit_score", 0) >= 700 and payload.get("dti", 1.0) <= 0.35'
+    priority: 95
+    stop: true
+    action:
+      class: approve
+      reasons: ["strong_credit_and_low_dti"]
+      confidence: 0.92
+  - name: approve_mid
+    when: 'payload.get("credit_score", 0) >= 650 and payload.get("dti", 1.0) <= 0.45 and payload.get("income_verified") == True'
+    priority: 70
+    action:
+      class: approve
+      reasons: ["adequate_credit_and_dti_with_docs"]
+      confidence: 0.8
+  - name: review_borderline
+    when: 'payload.get("credit_score", 0) >= 600 and payload.get("credit_score", 0) < 650'
+    priority: 40
+    action:
+      class: review
+      reasons: ["borderline_credit"]
+      required_docs: ["bank_statements"]
+      confidence: 0.55

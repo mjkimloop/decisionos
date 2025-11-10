@@ -1,0 +1,95 @@
+meta:
+  version: v0.1.9
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑F: Multi‑Tenant · Multi‑Region Lite(Active‑Passive) 초기화 — No‑Gemini"
+
+work:
+  codex:
+    - id: X-24
+      title: RLS 적용/검증 스크립트
+      deliverables:
+        - scripts/rls_apply.sql
+        - scripts/rls_verify.sql
+        - apps/gateway/middleware/tenant_scope.py 강화
+      acceptance:
+        - 교차 테넌트 쿼리 시 403/empty, 테스트 케이스 10+
+    - id: X-25
+      title: mt-lite compose & 복제
+      deliverables:
+        - docker-compose.mt.yml
+        - scripts/replica_setup.sh
+        - scripts/verify_replica.sh
+      acceptance:
+        - standby LSN 지연<=5m, verify 스크립트 통과
+    - id: X-26
+      title: 글로벌 메트릭스 & 라우터
+      deliverables:
+        - apps/gateway/routers/global_metrics.py
+        - apps/region/router.py
+      acceptance:
+        - /global/metrics 노출, region 라벨 일관성
+    - id: X-27
+      title: Failover/Failback 오케스트레이션
+      deliverables:
+        - scripts/failover_promote.sh
+        - scripts/failback_prepare.sh
+        - apps/region/state.py
+      acceptance:
+        - 드라이런에서 60분 내 승격, 복귀 성공 로그
+    - id: X-28
+      title: 교차 테넌트 차단 테스트 & CI
+      deliverables:
+        - tests/test_rls_tenant_isolation.py
+        - scripts/ci_rls.sh
+      acceptance:
+        - 실패 시 머지 차단, 리포트에 차단율 100%
+    - id: P-04
+      title: dosctl 확장(tenant/region/dr)
+      deliverables:
+        - cli/dosctl/main.py: "tenant list|set|whoami"
+        - cli/dosctl/main.py: "region set|status"
+        - cli/dosctl/main.py: "dr failover|failback --dry-run"
+      acceptance:
+        - 로컬에서 mt-lite 시나리오 자동화
+
+risks:
+  - name: 복제 지연/데이터 손실(RPO 초과)
+    mitigation: 주기 5m 보장, 대량 ingest 중 DR 금지 규칙 문서화
+  - name: 교차 테넌트 누출
+    mitigation: RLS + 미들웨어 이중 방어, CI 차단
+  - name: 운영 복잡도 증가
+    mitigation: mt-lite(수동 승격)부터 시작, 자동화는 차기 게이트로 분리
+
+patches:
+  techspec:
+    - section: "Multi-Region Lite"
+      mode: replace
+      content: |
+        Active‑Passive(초기) 구성 v0.1.9:
+        - 복제: primary→standby(지역 B), RPO 5m / RTO 60m 목표
+        - 승격: scripts/failover_promote.sh(수동), 복귀: failback_prepare.sh
+        - 라우팅: apps/region/router.py가 region 선호/폴백 처리
+        - 관측성: /global/metrics에 region 라벨/에러버짓 노출
+    - section: "Tenant Isolation (RLS)"
+      mode: replace
+      content: |
+        테넌트 분리 강제(RLS + 미들웨어):
+        - DB: scripts/rls_apply.sql로 정책 적용, rls_verify.sql로 교차 접근 차단 검증
+        - Gateway: tenant_scope 미들웨어에서 X‑Tenant‑ID 강제/검증
+        - 감사/증빙: 교차 접근 테스트 시나리오/캡처 리포지터리 보관
+    - section: "Interfaces"
+      mode: append
+      content: |
+        글로벌/멀티테넌트 인터페이스(v0.1.9):
+        - GET /api/v1/global/metrics
+        - Header: X‑Tenant‑ID, X‑Region(옵션)
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑F: 멀티테넌트·경량 멀티리전(Active‑Passive) 초기화(싱글 고객 PoV 확장)
+    - section: "Next Actions"
+      mode: append
+      content: |
+        - 교차 접근 테스트 시나리오/증빙 캡처 요구사항 포함

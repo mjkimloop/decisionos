@@ -1,0 +1,167 @@
+meta:
+  version: v0.3.9
+  date: 2025-11-03
+  status: locked
+  summary: "Gate-S: Multi-Tenant · Billing · Usage Metering · Entitlements · Cost Guard (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Tenant/Org · Project · RBAC"
+      mode: replace
+      content: |
+        모델:
+          orgs{ id, name, plan[free|pro|enterprise], status[active|suspended], created_at }
+          projects{ id, org_id, name, tags[], created_at }
+          users{ id, email, name, status, created_at }
+          memberships{ user_id, org_id, role[owner|admin|member|auditor] }
+          project_members{ user_id, project_id, role[manager|contributor|viewer] }
+        정책:
+          - org 스코프 RBAC + project 세분화
+          - 모든 API는 org/project 스코프 필수. 로그/감사에 스코프 포함
+    - section: "Entitlements · Plans · Quotas"
+      mode: replace
+      content: |
+        plans.yaml:
+          free:
+            entitlements: [catalog.read, lineage.read, decisions.run.basic]
+            quotas: { decisions_per_day: 200, storage_gb: 5, connectors: 2 }
+            rate_card: { decision_call: 0, storage_gb_month: 0 }
+          pro:
+            entitlements: [catalog.*, lineage.*, decisions.run, pipelines.run, guardrails.v2, hitl.basic]
+            quotas: { decisions_per_day: 5000, storage_gb: 200, connectors: 10 }
+            rate_card: { decision_call: 0.002, storage_gb_month: 0.08 }
+          enterprise:
+            entitlements: ["*"]
+            quotas: { decisions_per_day: 200000, storage_gb: 2000, connectors: 100 }
+            rate_card: { decision_call: negotiated, storage_gb_month: 0.06 }
+        enforcement:
+          - API 게이트 전/후에 entitlement 체크 → 403/usage_exceeded
+          - quota 카운터는 슬라이딩 윈도우(1d/1m), soft/hard limit 구분
+    - section: "Usage Metering"
+      mode: replace
+      content: |
+        이벤트 스키마(meter_events):
+          { id, org_id, project_id, ts, metric, value, unit, corr_id, source, meta_json }
+        핵심 메트릭:
+          - decision_calls (count)
+          - data_scanned_bytes (bytes)
+          - storage_gb_hours (gbh)
+          - compute_seconds (sec)
+          - api_requests (count)
+        수집:
+          - SDK/게이트웨이 훅(동기 최소화), 배치 집계기(5m)
+        정합성:
+          - idempotency(corr_id), 해시체크, 드리프트 감시(±1.5% 알림)
+        집계 테이블:
+          usage_daily{ org_id, project_id, metric, date, value }
+          usage_monthly{ org_id, metric, yyyymm, value, last_closed_at }
+    - section: "Billing · Invoicing · Revenue Logs"
+      mode: replace
+      content: |
+        빌링 흐름(월말 청구, 프로레이트 지원):
+          1) rate_card × usage_monthly → amount 계산(세금/수수료는 외부 PG 연동 시 확장)
+          2) invoice{ id, org_id, period, subtotal, tax, total, status[draft|issued|paid|void] }
+          3) invoice_lines{ invoice_id, metric, quantity, unit_price, amount, meta }
+          4) revenue_logs(append-only): 결제/조정 이력
+        결제 어댑터:
+          - adapters/{manual_stub.py, stripe_stub.py} (실 PG는 차기 Gate-U)
+        증빙:
+          - /billing/invoices/: PDF/JSON 생성, 감사 체인 링크
+    - section: "Cost Guard (Cloud/Model Cost → Margin)"
+      mode: replace
+      content: |
+        원가 입력(cost_feeds):
+          - model_costs{ model_id, unit, cost_per_unit }  # 예: tokens, decision_call
+          - infra_costs{ resource, unit, cost_per_unit }  # 예: s3_gb_month, compute_sec
+        마진 계산:
+          - margin_monthly = billed_total - (alloc_model_cost + alloc_infra_cost)
+        경보:
+          - org/프로젝트 별 마진<목표치(예: 40%) 시 알림/자동 조정 제안(요금제/쿼터)
+        대시:
+          - /ops/cost-guard: 손익 트리(조직/제품/메트릭)
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/orgs {name, plan} | GET /api/v1/orgs/:id
+          - POST /api/v1/projects {org_id, name}
+          - POST /api/v1/entitlements/check {org_id, feature}
+          - GET  /api/v1/usage/daily?org_id=&metric=&from=&to=
+          - GET  /api/v1/usage/monthly?org_id=&metric=&yyyymm=
+          - POST /api/v1/billing/invoices/close {org_id, yyyymm}
+          - GET  /api/v1/billing/invoices/:id | GET /api/v1/billing/invoices?org_id=
+          - GET  /api/v1/ops/cost-guard?yyyymm=
+        CLI(dosctl):
+          - `dosctl org create|ls|show --plan`
+          - `dosctl project create|ls`
+          - `dosctl entitlements check <feature>`
+          - `dosctl usage ls --org <id> --metric decision_calls --range 2025-11-01:2025-11-30`
+          - `dosctl billing close --org <id> --period 2025-11`
+          - `dosctl billing show --invoice <id>`
+          - `dosctl ops cost-guard --period 2025-11`
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        - 테넌트 격리: org_id 전파·인덱스 스코프 필수, 교차 접근 차단 테스트
+        - 빌링/인보이스에는 PII 저장 금지(식별자는 org_id)
+        - 재무 로그 보존 7년, 감사 해시체인 앵커(일일)
+        - 역할: billing_admin, auditor 전용 API 분리
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-S 성공 기준:
+          - 멀티테넌시/RBAC/엔타이틀먼트 적용된 API e2e(조직→프로젝트→결정 호출)
+          - 메터링 정합 오차 ≤ ±1.0% (샘플 대비), 집계 지연 p95 ≤ 10분
+          - 인보이스 산출/발행 e2e(1개 조직) + PDF/JSON 생성
+          - 코스트 가드 마진 경보 동작·리포트 제공
+          - 테넌트 격리/권한/감사 테스트 전부 통과
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate-S 마일스톤(완료 조건):
+          - Org/Project/RBAC 모델·마이그레이션·API/CLI
+          - Plans/Entitlements/Quotas 적용기 + 미들웨어
+          - Metering 수집기/집계기/조회 API + 유효성 테스트
+          - Billing(요금계산/인보이스) + Export(PDF/JSON) + Stub 결제
+          - Cost Guard(원가피드/마진/경보/대시)
+          - Evidence Binder(Billing/Ops) 업데이트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 96: org/project/rbac 모델·마이그레이션·/orgs|/projects API + dosctl(org|project)
+        Day 97: plans.yaml·entitlements 체크 미들웨어·quota 카운터 + /entitlements API
+        Day 98: metering 훅/집계기(5m)·/usage API + 정합성 테스트(±1%)
+        Day 99: billing 계산기·/billing/invoices close|show + PDF/JSON exporter
+        Day 100: cost_feeds·margin 계산·경보·/ops/cost-guard + SLO/보안 테스트·Evidence 업데이트
+
+work:
+  claude:
+    - id: C-48
+      title: Plans/Entitlements Policy & Docs
+      deliverables:
+        - docs/plans_and_entitlements.md, config/plans.yaml (초안)
+      acceptance:
+        - 기능표/쿼터/레이트카드 정의·버전 정책 포함
+    - id: C-49
+      title: Billing/Invoice Templates & Wording (ko)
+      deliverables:
+        - templates/invoice_pdf.md, templates/invoice_json.md, docs/billing_terms_ko.md
+      acceptance:
+        - 세부 항목/환불·조정·분쟁 정책 텍스트 포함
+    - id: C-50
+      title: Cost Guard Playbook
+      deliverables:
+        - ops/runbook_cost_guard.md
+      acceptance:
+        - 마진 붕괴 시 조치 매뉴얼(가격조정/쿼터/제품 번들)
+
+risks:
+  - name: 메터링 누락/중복
+    mitigation: corr_id 기반 멱등, 배치 재처리, 정합성 점검 잡
+  - name: 테넌트 격리 실패(보안)
+    mitigation: 스코프 CI, 권한 펜테스트, 로그 샘플링 검사
+  - name: 잘못된 청구/요율
+    mitigation: 샌드박스 모드(draft invoice), 2인 검수, 회귀 테스트
+  - name: 마진 악화/비용 급증
+    mitigation: cost_feeds 자동 업데이트, 경보→플랜/쿼터 조정 제안

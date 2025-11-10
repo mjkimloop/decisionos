@@ -1,0 +1,128 @@
+meta:
+  version: v0.3.1
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-L: Adoption Analytics·NPS·Feedback·Roadmap Backlog (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Product Analytics Model"
+      mode: replace
+      content: |
+        이벤트 스키마(v0.3.1):
+        - envelope: {ts, event, tenant_id, user_id?, session_id?, corr_id, attrs(json)}
+        - identity: tenant_id 필수, user_id는 해시(PII 금지), session_id는 24h 회전
+        - 표준 이벤트:
+          * app.install, app.first_run
+          * decide.request, decide.ok, decide.err, decide.hitl_required
+          * ingest.ok, ingest.err
+          * policy.hit, policy.deny, policy.require_hitl
+          * billing.invoice_finalized
+          * nps.shown, nps.submitted, feedback.created
+        - 저장: analytics_events(parquet/append) + summary 테이블(fct_*)
+        - 프라이버시: PII 필드 금지, corr_id는 X-Corr-ID 재사용
+    - section: "Funnels & KPIs"
+      mode: replace
+      content: |
+        핵심 퍼널/지표:
+        - Onboarding 퍼널: signup → key_issued → first_decide_ok(≤24h)
+        - Activation: W1 active tenants(#decide_ok≥50), W4 retention(tenant), seat adoption
+        - Value: decision_time_p95, triage_accuracy, blocked_bad_leads, hitl_sla
+        - Revenue: ARPA, MRR, Gross/Net expansion, churn(logo/revenue)
+        - Cost-to-Serve: compute_usd/tenant, support_hours, incident_count
+        - North Star(초안): monthly_decisions_per_active_tenant
+    - section: "Retention & Churn"
+      mode: replace
+      content: |
+        코호트/이탈 위험(v0.3.1):
+        - Cohorts: by signup_month, plan
+        - Risk score r∈[0,1]: f(usage_drop, error_rate, hitl_delay, unpaid_invoice, ticket_p2plus)
+        - 임계치 r≥0.7 시 CSM 알림 + playbook(trigger: notify)
+    - section: "NPS & Feedback Loop"
+      mode: replace
+      content: |
+        NPS 운영(v0.3.1):
+        - 트리거: first_decide_ok+7d, 이후 분기 1회
+        - 채널: in-app 스니펫 + 이메일(옵션)
+        - 스키마: nps{score(0..10), comment?, contact_ok}
+        - 처리: detractor(0..6) → 티켓 생성·CSM 통보, promoter(9..10) → 리뷰요청 템플릿
+        - 분류: feedback classifier v1(rule/키워드), 카테고리{속도,정확도,UX,가격,지원,기타}
+    - section: "Roadmap Backlog"
+      mode: replace
+      content: |
+        백로그 운영(v0.3.1):
+        - 수집: /feedback·support·sales 입력 → backlog_items
+        - 필드: {title, source, tenant, impact_note, effort_tshirt, type[bug/feat/doc], links, status}
+        - 우선순위: RICE 점수, 에러버짓 정책 고려, 규제/보안 플래그
+        - 의사결정: 주간 분류 → 월간 계획 → Gate 배정(시맨틱 버전)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API 추가:
+        - GET  /api/v1/analytics/funnels?name=
+        - GET  /api/v1/analytics/cohorts?start=YYYY-MM
+        - GET  /api/v1/analytics/risk/tenants
+        - POST /api/v1/nps/submit {score, comment, contact_ok}
+        - POST /api/v1/feedback {category, note, contact?}
+        - GET  /api/v1/backlog/list | POST /api/v1/backlog/create | POST /api/v1/backlog/score
+    - section: "Dashboards"
+      mode: replace
+      content: |
+        대시보드(경량):
+        - web/analytics/: 퍼널·활성·리텐션·리스크·NPS
+        - 필터: 기간/플랜/테넌트
+        - 증빙: Evidence Binder(Adoption) 섹션에 주요 스크린샷 보관
+    - section: "SLO & KPIs"
+      mode: replace
+      content: |
+        Gate‑L 성공 기준:
+        - Onboarding 퍼널 완성 + TTI≤1일 달성률 ≥80%
+        - Activation: W1 active tenants 비율 ≥60%
+        - NPS 응답률 ≥15%, detractor SLA(1영업일 접촉) 100%
+        - 위험 스코어링 알림 정상 동작, 분류 정확도(라벨링 기준) ≥80%
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑L 마일스톤(완료 조건):
+        - 이벤트 SDK(서버·프론트) + 수집/집계 라우트 가동
+        - 퍼널/리텐션/리스크 API + 대시보드 1차본 공개
+        - NPS 스니펫/이메일 루프 가동 + detractor 핸들링 런북 연결
+        - 백로그 API/우선순위 스코어러 + 주간 분류 회의 운용 개시
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 61: 이벤트 스키마·SDK·수집기 배포(샘플 계기 장착)
+        Day 62: 퍼널 계산기/리텐션 코호트·리스크 스코어러 구현
+        Day 63: NPS 스니펫/이메일·피드백 라우트·분류기 v1
+        Day 64: 웹 대시보드(퍼널/활성/리텐션/NPS) + /analytics API
+        Day 65: 백로그 API·RICE 스코어러 + 주간 분류 의식(문서)
+
+work:
+  claude:
+    - id: C-29
+      title: NPS 카피/이메일/후속 플로우(KR/EN)
+      deliverables:
+        - web/nps/copy_ko.md, web/nps/copy_en.md, ops/nps_followups.md
+      acceptance:
+        - detractor/neutral/promoter 분기별 스크립트·SLA 반영
+    - id: C-30
+      title: 고객 인터뷰 가이드(Adoption/Churn)
+      deliverables:
+        - docs/research_guides/{adoption.md,churn.md}
+      acceptance:
+        - 질문지·표본·분석 프레임·윤리/동의 체크 포함
+    - id: C-31
+      title: Roadmap 운영 정책·템플릿
+      deliverables:
+        - docs/roadmap_policy.md, templates/backlog_item.md
+      acceptance:
+        - RICE·Gate 배정 규칙·월간 회의 안건 템플릿
+
+risks:
+  - name: 측정 편향/샘플링 오류
+    mitigation: SDK 기본 이벤트만 필수, 기타는 선택. 샘플링/중복 필터
+  - name: NPS 피로도/응답률 저조
+    mitigation: 빈도 제한, 단문형, 인앱 우선·이메일 보조
+  - name: 개인정보 리스크
+    mitigation: user_id 해시, PII 금지, vault 토큰 외부 노출 금지

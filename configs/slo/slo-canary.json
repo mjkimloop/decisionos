@@ -1,0 +1,11 @@
+{
+  "canary": {
+    "thresholds": {
+      "max_p95_rel_increase": 0.15,
+      "max_error_abs_delta": 0.01,
+      "max_sig_error_delta": 0.0005
+    },
+    "min_sample_count": 1000,
+    "guardband_minutes": 10
+  }
+}

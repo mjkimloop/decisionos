@@ -1,0 +1,11 @@
+{
+  "org_id": "orgC",
+  "payload": {
+    "credit_score": 660,
+    "dti": 0.44,
+    "income_verified": true,
+    "employment_type": "salaried",
+    "region": "TGG"
+  }
+}
+

@@ -1,0 +1,150 @@
+meta:
+  version: v0.5.10
+  date: 2025-11-07
+  status: locked
+  summary: "Gate-AJ: Experiment Ops v2 — SLO-as-Code · AB/N-Way · Guarded Rollout (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Experiment Ops — Scope & Principles"
+      mode: upsert
+      content: |
+        범위: AE/AF/AG/AH/AI + W/Q/T/S/O/P/AD 전 구간의 '시스템 SLO' 집행.
+        원칙:
+          - SLO-as-Code: slo.json(경로별 p95/에러/비용/인용/파리티 등) 단일 소스.
+          - Guarded: SLO 위반 시 자동 차단·롤백·증빙(Q/T/S 연동).
+          - Minimal: 대시보드/지표는 Gate-T 사용, AJ는 러너/판정/증빙에 집중.
+
+    - section: "SLO-as-Code — Schema"
+      mode: upsert
+      content: |
+        파일: configs/slo/slo.json
+        스키마(요지):
+          route_id: { gates: [AI,AE,...], slo: { p95_ms, err_rate, cost_krw, ai_citation_cov, ah_parity, ag_mapping_loss }, sample: { min_n, window } }
+        예시:
+          - route_id: "RAG_Answer_Standard"
+            slo: { p95_ms: 1200, err_rate: 0.01, ai_citation_cov: 0.98 }
+            sample: { min_n: 200, window: "24h" }
+
+    - section: "Runner & Judge"
+      mode: upsert
+      content: |
+        러너(Pytest+dosctl): apps/expops/runner.py — 트래픽 재생/합성, 시드/부하/샘플윈도우.
+        판정기: apps/expops/judge.py — slo.json 기준 자동 합/불 판정, 위반 항목별 원인 분류.
+        증빙: evidence/expops/{run_id}/(metrics.json, violators.csv, q-ledger-links.csv)
+
+    - section: "AB/N-Way & Guarded Rollout"
+      mode: upsert
+      content: |
+        실험기: apps/expops/ab/{assign.py, metrics.py} — 집단 배정·측정·유의성(Sequential/SPRT 스텁).
+        연결: AH(rollout 엔진) 훅 — canary 승급/동결 신호, Gate-S 비용가드 연동.
+
+    - section: "Cross-Gate Integration — Interface Freeze & Topo Build"
+      mode: upsert
+      content: |
+        순환 의존성 해소:
+          - Interface Freeze 윈도우: 각 게이트 API/계약은 주 1회(금요일 16:00 KST)만 변경.
+          - 변경은 adjacent-gates 승인 필요(Gate-AG 계약 검증기 사용).
+          - Topo Build: build_order.json에 의존 그래프 기록, CI에서 위상 정렬 실패시 차단.
+          - Mocks/Adapters: 상호 의존 구간은 계약 스냅샷(Mock)으로 단절, 병렬 개발 유지.
+
+    - section: "Performance & Cost Engineering"
+      mode: upsert
+      content: |
+        성능 예산:
+          - route별 p95/p99, 서버 CPU/RAM, 임베딩/토큰/리랭크 단가 상한을 slo.json에 명세.
+          - 부하/회귀: k6/Locust 선택, 러너에서 서브프로세스 호출.
+          - 코스트 가드: Gate-S와 동일 임계(월간 예산/테넌트/경로별 상한).
+          - 위반 시 judge가 Fail+차단 신호, Gate-Q 레저에 사유 기록.
+
+    - section: "API/CLI"
+      mode: upsert
+      content: |
+        API:
+          - POST /api/v1/exp/run {suite, route_ids[], load, seed}
+          - POST /api/v1/exp/judge {run_id}
+          - GET  /api/v1/exp/status {run_id}
+          - POST /api/v1/exp/abort {run_id}
+        CLI:
+          - dosctl exp run --suite e2e-core --routes RAG_Answer_Standard,Elig_Path_A
+          - dosctl exp judge --run-id <id> --export evidence
+          - dosctl exp list --status failed --since 7d
+          - dosctl exp slo validate --file configs/slo/slo.json
+
+    - section: "Dashboards & Evidence"
+      mode: upsert
+      content: |
+        대시보드: dashboards/expops/{run_history.json, slo_violations.json}
+        Evidence Bundle(AJ):
+          - evidence/expops/{run_id}/metrics.json
+          - evidence/expops/{run_id}/violators.csv
+          - evidence/expops/{run_id}/q-ledger-links.csv
+          - evidence/expops/{run_id}/cost-guard-triggers.json
+        Gate-T/Q/S 연계: 메트릭/레저/비용 링크 자동 수집.
+
+    - section: "SLO & Acceptance"
+      mode: upsert
+      content: |
+        Gate-AJ 성공 기준:
+          - slo.json v1.0 완성(최소 5개 경로): RAG, Eligibility, Pricing, Rollout, Replay
+          - Runner/Judge e2e 동작, 실패 시 자동 증빙 번들 생성
+          - 첫 3개 경로에서 p95/err/cost SLO 집행 성공(위반 시 자동 차단 로그)
+          - AB/N-way 스텁 + AH canary 승급/동결 연동 검증
+          - Interface Freeze 윈도우 + build_order.json Topo Build CI 통과
+          - Evidence Binder(AJ) 업데이트
+
+  plan:
+    - section: "Milestones — Gate-AJ"
+      mode: upsert
+      content: |
+        - slo.json v1 · 러너/판정기 스캐폴드
+        - RAG/Eligibility/Canary 3경로 SLO 집행
+        - AB/N-way 스텁 + AH 연동(승급/동결)
+        - Interface Freeze + Topo Build 자동화
+        - Evidence/대시 연계(Gate-T/Q/S 링크)
+
+    - section: "Next Actions — Gate-AJ"
+      mode: upsert
+      content: |
+        Day 201: slo.json v1(5경로) 작성 · judge 스켈레톤
+        Day 202: runner(재생/합성 부하) · evidence 폴더 구조
+        Day 203: AH rollout 훅 연결 · S 연동(비용가드)
+        Day 204: Interface Freeze 윈도우 + build_order.json + CI 통합
+        Day 205: 3경로 시운전 · 실패시 차단/증빙 확인 · 문서/대시 보강
+
+work:
+  claude:
+    - id: C-101
+      title: SLO Catalog & Authoring Guide
+      deliverables:
+        - docs/expops/slo_authoring.md
+        - configs/slo/slo.json (초안 5경로)
+      acceptance:
+        - p95/err/cost/coverage/psi 항목 정의·샘플 기준/윈도 포함
+
+    - id: C-102
+      title: Cross-Gate Integration Handbook
+      deliverables:
+        - docs/expops/cross_gate_integration.md
+        - build_order.json (의존 그래프)
+      acceptance:
+        - Interface Freeze 정책·Topo Build 절차·Mock/Adapter 가이드
+
+    - id: C-103
+      title: Performance & Cost Budget Guide
+      deliverables:
+        - docs/expops/perf_cost_budgets.md
+      acceptance:
+        - route별 성능/비용 예산 설정법·위반 시 자동 차단 로직
+
+risks:
+  - name: 표본부족으로 통계 유의성 애매
+    mitigation: rolling window/leading indicators 병행, SPRT 스텁
+  - name: 부하 발생 비용/안정성
+    mitigation: 합성 비율 제한, 야간 윈도, AC 예산
+  - name: 경로 정의 과다
+    mitigation: Top-5 경로부터, 분기별 확대
+  - name: 순환 의존성으로 빌드 교착
+    mitigation: Interface Freeze + Topo Build + Mock 강제
+  - name: 성능/비용 예산 과도하게 엄격
+    mitigation: 초기 완화·점진 강화, 경보→차단 2단계

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11hgfedcbaccbabaaa
+version: v0.5.11mmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-10
 status: locked
-summary: Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
+summary: Evidence 불변성/인덱서 + S3 ObjectLock + Chaos/DR 스크립트 + Clock drift 가드 + RBAC·CI 주석
 -->
 
 # DecisionOS Implementation Plan
@@ -624,3 +624,83 @@ Day 224: CI 매트릭스(gate_aj) 확장 및 샘플 evidence/slo 아카이브
 ## Next Actions — v0.5.11h
 Day 223: perf witness/CLI 구현 및 단위테스트
 Day 224: slo(latency/error) + judge 확장, 통합테스트 및 CI 매트릭스 업데이트
+
+## Milestones — v0.5.11i
+- Provider ABC/Local/HTTP 구현
+- Pool quorum_decide 구현
+- providers.yaml 샘플
+- Evidence.judges 블록 병합
+- CLI: dosctl judge quorum --slo ... --evidence ... --providers ... --quorum 2/3
+- 테스트: unit 6, integration 2, e2e 1 (모두 Green)
+
+## Next Actions — v0.5.11i
+Day 224: providers/base/local/http, pool, 서명 로직
+Day 225: Evidence.judges 병합, CLI, 테스트/CI 매트릭스 업데이트
+
+## Milestones — v0.5.11i.1
+- CLI dosctl judge quorum 구현
+- Evidence.judges 병합 옵션(--attach-evidence)
+- Anti-Replay(minimal SQLite) 유틸(테스트용)
+- 단위/통합/E2E 테스트 그린
+- CI 매트릭스 업데이트(gate_aj async)
+
+## Next Actions — v0.5.11i.1
+Day 224: CLI/증빙 병합/반복방지 유틸
+Day 225: unit+integration+e2e 테스트, CI 확장, 커밋/태깅
+
+## Milestones — v0.5.11i.2
+- crypto: multi-key loader + verify
+- providers: HTTP 헤더 kid/nonce/timestamp + 서명
+- replay: ABC + SQLite/Redis 플러그인
+- rbac: PEP 강제, CLI 진입점 연결
+- ci: release_gate 스텝 추가
+- time: utcnow→UTC 리팩터 스크립트
+## Next Actions — v0.5.11i.2
+Day 226: crypto/provider/replay 구현 + 단위테스트
+Day 227: RBAC/CLI/통합/E2E 테스트, utcnow 리팩터
+Day 228: CI release_gate 활성화, 문서 갱신
+
+## Milestones — v0.5.11k
+- M1: controller/shadow/compare 스켈레톤 + 정책 파일
+- M2: Evidence.canary 병합 + Judge canary 판정
+- M3: 통합/E2E + CI release gate
+
+## Next Actions — v0.5.11k
+Day 232: controller.py, shadow.py, compare.py, 정책/샘플 CSV
+Day 233: evidence.canary 병합, slo-canary.json, judge 확장
+Day 234: 통합/E2E/CI 파이프라인, strict infra gate on
+
+## Milestones — v0.5.11l
+Day 1-2: 배포 파이프라인 훅 연결(옵션A/B 중 택1), 환경변수/시크릿 배선
+Day 3: 로그→Evidence 자동화(Job/Cron) + 보존정책
+Day 4: KMS 키 로테이션 드라이런 + RBAC 정책 배포
+Day 5: SLO 알람/런북 + CI 릴리스 게이트 확장(운영 스텝)
+## Next Actions — v0.5.11l
+• pipeline/release: canary_step.sh, promote.sh, abort.sh 추가
+• configs/: ingress-mirror.* 또는 rollouts/*.yaml 추가
+• jobs/: evidence_harvest_{reqlog,judgelog}.py + cron 스케줄
+• docs/ops/: RUNBOOK-SLO.md, RUNBOOK-ROLLBACK.md, CLI-DEPLOY.md
+
+
+<!-- AUTOGEN:BEGIN:Acceptance — v0.5.11l -->
+- 카나리 단계(최소 25/50/100)에서 shadow_capture→canary_compare→judge quorum 2/3 통과 시만 promote
+- reqlog/judgelog로부터 Evidence(perf, perf_judge, canary) 자동 생성·업로드, SHA256 무결성 검증
+- KMS 키 로테이션 드라이런 성공(활성/예비 교대, 만료키 거부, 로그 남김)
+- SLO 알람 트리거 시 rollout 자동 pause 및 증빙 링크 포함 알림
+<!-- AUTOGEN:END:Acceptance — v0.5.11l -->
+
+
+<!-- AUTOGEN:BEGIN:Out of Scope — v0.5.11l -->
+- Gate-O/P 기능 본개발(별도 v0.5.12에서 착수)
+<!-- AUTOGEN:END:Out of Scope — v0.5.11l -->
+
+## Milestones — v0.5.11m
+- Day 1: indexer/clock_guard/chaos·DR 스크립트 추가, 로컬 스모크
+- Day 2: CI pre-gate(clock) → evidence_harvest → indexer → infra·canary gate 순서 확정
+- Day 3: S3 ObjectLock 잡(옵션) 연결, 운영 런북 보강
+## Next Actions — v0.5.11m
+- jobs/evidence_indexer.py, apps/obs/evidence/indexer.py
+- jobs/evidence_objectlock.py (옵션, boto3)
+- apps/common/clock.py, jobs/clock_guard.py
+- pipeline/chaos/chaos_inject.sh, pipeline/release/abort_on_gate_fail.sh
+- tests/* 스모크 추가, CI 매트릭스에 pre-gate 삽입

@@ -1,0 +1,10 @@
+{
+  "widgets": [
+    {
+      "id": "aging_summary",
+      "title": "Aging AR Summary",
+      "type": "table",
+      "columns": ["bucket", "amount"]
+    }
+  ]
+}

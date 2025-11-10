@@ -1,0 +1,26 @@
+meta:
+  version: v0.5.11b
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-S — IdempoStore pluggable (InMemory/SQLite) + factory injection + tests"
+
+patches:
+  techspec:
+    - section: "Gate-S — Idempotency Store Plugins"
+      mode: upsert
+      content: |
+        - Store 인터페이스(IdempoStore)와 구현체 InMemory/SQLite 제공.
+        - factory: ENV DECISIONOS_METERING_STORE 로 구성 주입.
+        - ingest API: filter_idempotent_with(store, events), 기존 filter_idempotent는 InMemory 기본.
+  plan:
+    - section: "Milestones — Gate-S v1.1"
+      mode: upsert
+      content: |
+        - store.py/factory.py 추가
+        - plugin 테스트: InMemory/SQLite 중복 필터 검증
+        - .gitignore var/ 보강
+    - section: "Next Actions — Gate-S"
+      mode: upsert
+      content: |
+        Day 219: Watermark/지연 허용 + 윈도 누수 테스트
+        Day 220: rating/quota/cost_guard 계약 연계 초안

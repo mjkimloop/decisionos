@@ -1,0 +1,62 @@
+meta:
+  version: v0.1.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-A 통과용 작업지시 + 문서 자동기입 도입"
+
+patches:
+  techspec:
+    - section: "Open Issues"
+      mode: append
+      content: |
+        - Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
+        - Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
+        - Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
+    - section: "Security Controls"
+      mode: replace
+      content: |
+        최소 통제 6/6 (v0.1.2 기준)
+        1) at-rest 암호화(AES-256, 키 래퍼 스텁)
+        2) in-transit 보호(TLS dev 예외, API Key 필수)
+        3) RBAC 3계층(admin/agent/auditor)
+        4) OAuth2(+MFA 옵션) dev 토큰 발급
+        5) DLP/마스킹(주민/계좌/연락처), CSV export 제한
+        6) 동의/철회/파기 API + 로그
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        W2 Gate-A 마일스톤(현행):
+        - /decide e2e 3케이스 200 OK, 평균 <300ms(모델 미호출)
+        - dosctl simulate → JSON+HTML 리포트 산출
+        - 보안 최소통제 6/6 체크 통과
+        - 감사 NDJSON 해시 체인(prev→curr) 일관 확인
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 0–1: 스키마/DSL/Executor 코어
+        Day 2: Gateway 3 API + dosctl
+        Day 3: Switchboard 폴백 + Offline Eval 리포트
+        Day 4–5: 보안 6/6 + Lending 규칙 6개 튜닝
+
+work:
+  claude:
+    - id: C-01
+      title: Rule DSL v1
+      deliverables:
+        - apps/rule_engine/{parser.py,evaluator.py,linter.py,tests/*}
+      acceptance:
+        - YAML→AST→평가 결과(JSON) 반환
+        - 충돌/음영 규칙 탐지, pytest ≥20, 커버리지 ≥70%
+    - id: C-02
+      title: Offline Eval v1
+      deliverables:
+        - apps/rule_engine/offline_eval.py, templates/report.html
+      acceptance:
+        - dosctl simulate → JSON+HTML 동시 생성
+    - id: L-01
+      title: Lending 규칙 6개 v1
+      deliverables:
+        - packages/rules/triage/*.yaml
+      acceptance:
+        - 린터 경고 0, 샘플 CSV 리포트 생성

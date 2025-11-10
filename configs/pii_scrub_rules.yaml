@@ -1,0 +1,468 @@
+# PII Scrubbing Rules — Pattern-Based Redaction for Logs
+
+# Version: 2.0.0
+# Last Updated: 2025-11-04
+# Owner: Platform Security + Observability Team
+# Status: Active
+
+# This file defines regex patterns for detecting and scrubbing PII (Personally Identifiable Information)
+# and secrets from log messages before emission.
+#
+# Usage:
+#   - Applied in logging pipeline (pre-emit scrubbing)
+#   - Additional scrubbing in log aggregator (defense-in-depth)
+#   - Test changes with: python scripts/test_pii_scrubber.py configs/pii_scrub_rules.yaml
+
+---
+
+# Global Settings
+settings:
+  # Apply scrubbing to all log levels (DEBUG, INFO, WARN, ERROR, FATAL)
+  apply_to_all_levels: true
+
+  # Case sensitivity
+  case_sensitive: false
+
+  # Replacement strategy: "redact" (replace with placeholder) | "hash" (one-way hash) | "truncate" (show partial)
+  default_strategy: "redact"
+
+  # Performance: Max regex execution time per log line (prevent ReDoS attacks)
+  max_regex_time_ms: 50
+
+---
+
+# PII Scrubbing Rules
+pii_rules:
+
+  # ========================================
+  # Contact Information
+  # ========================================
+
+  - name: email_address
+    description: "Email addresses (RFC 5322 simplified)"
+    pattern: '\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'
+    replacement: '[REDACTED_EMAIL]'
+    strategy: redact
+    severity: high
+    examples:
+      - input: "User alice@example.com submitted application"
+        output: "User [REDACTED_EMAIL] submitted application"
+      - input: "Contact: support+team@company.co.uk"
+        output: "Contact: [REDACTED_EMAIL]"
+
+  - name: phone_us
+    description: "US phone numbers (various formats)"
+    pattern: '\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
+    replacement: '[REDACTED_PHONE]'
+    strategy: redact
+    severity: high
+    examples:
+      - input: "Call 555-123-4567 for support"
+        output: "Call [REDACTED_PHONE] for support"
+      - input: "Phone: (555) 123-4567 or +1-555-123-4567"
+        output: "Phone: [REDACTED_PHONE] or [REDACTED_PHONE]"
+
+  - name: phone_international
+    description: "International phone numbers (E.164 format)"
+    pattern: '\+\d{1,3}[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}'
+    replacement: '[REDACTED_PHONE_INTL]'
+    strategy: redact
+    severity: high
+    examples:
+      - input: "Calling +82-10-1234-5678"
+        output: "Calling [REDACTED_PHONE_INTL]"
+
+  - name: street_address
+    description: "US street addresses (simplified, may have false positives)"
+    pattern: '\b\d{1,5}\s+[A-Za-z0-9\s,]+\b(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Circle|Cir)\b'
+    replacement: '[REDACTED_ADDRESS]'
+    strategy: redact
+    severity: medium
+    case_sensitive: false
+    examples:
+      - input: "Lives at 123 Main Street, Apt 4B"
+        output: "Lives at [REDACTED_ADDRESS], Apt 4B"
+
+  # ========================================
+  # Government IDs
+  # ========================================
+
+  - name: ssn_us
+    description: "US Social Security Number (SSN)"
+    pattern: '\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'
+    replacement: '[REDACTED_SSN]'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "SSN: 123-45-6789"
+        output: "SSN: [REDACTED_SSN]"
+      - input: "Social Security Number 123456789"
+        output: "Social Security Number [REDACTED_SSN]"
+
+  - name: ein_us
+    description: "US Employer Identification Number (EIN)"
+    pattern: '\b\d{2}[-\s]?\d{7}\b'
+    replacement: '[REDACTED_EIN]'
+    strategy: redact
+    severity: high
+    examples:
+      - input: "Company EIN: 12-3456789"
+        output: "Company EIN: [REDACTED_EIN]"
+
+  - name: passport_us
+    description: "US Passport Number (9 digits)"
+    pattern: '\b[A-Z0-9]{9}\b'
+    replacement: '[REDACTED_PASSPORT]'
+    strategy: redact
+    severity: critical
+    # Note: High false positive rate (any 9-char alphanumeric), use with caution
+    enabled: false  # Disabled by default, enable if passport logging is suspected
+
+  - name: drivers_license_us
+    description: "US Driver's License (various state formats, simplified)"
+    pattern: '\b[A-Z]{1,2}\d{6,8}\b'
+    replacement: '[REDACTED_DL]'
+    strategy: redact
+    severity: high
+    enabled: false  # Disabled (high false positive rate)
+
+  - name: resident_registration_kr
+    description: "Korean Resident Registration Number (주민등록번호)"
+    pattern: '\b\d{6}[-\s]?\d{7}\b'
+    replacement: '[REDACTED_RRN_KR]'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "주민번호: 901234-1234567"
+        output: "주민번호: [REDACTED_RRN_KR]"
+
+  # ========================================
+  # Financial Information
+  # ========================================
+
+  - name: credit_card
+    description: "Credit card numbers (Visa, MasterCard, Amex, Discover)"
+    pattern: '\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b'
+    replacement: '[REDACTED_CC]'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "Card: 4111-1111-1111-1111"
+        output: "Card: [REDACTED_CC]"
+      - input: "Amex 3782 822463 10005"
+        output: "Amex [REDACTED_CC]"
+
+  - name: credit_card_last4
+    description: "Credit card last 4 digits (safe to keep, but redact context)"
+    pattern: '(?i)(card|cc|credit)[\s#:]*ending[\s#:]*(\d{4})'
+    replacement: '\1 ending [REDACTED_CONTEXT]'
+    strategy: redact
+    severity: low
+    enabled: false  # Last 4 is typically safe, disable scrubbing
+
+  - name: iban
+    description: "International Bank Account Number (IBAN)"
+    pattern: '\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b'
+    replacement: '[REDACTED_IBAN]'
+    strategy: redact
+    severity: critical
+
+  - name: routing_number_us
+    description: "US Bank Routing Number (ABA)"
+    pattern: '\b\d{9}\b'
+    replacement: '[REDACTED_ROUTING]'
+    strategy: redact
+    severity: high
+    # Note: 9 digits could be many things (ZIP+4, phone), use with context keywords
+    context_keywords: ['routing', 'aba', 'bank']
+
+  - name: account_number
+    description: "Bank account numbers (generic, 8-17 digits)"
+    pattern: '(?i)(account|acct)[\s#:]*(\d{8,17})'
+    replacement: '\1 [REDACTED_ACCOUNT]'
+    strategy: redact
+    severity: critical
+
+  # ========================================
+  # Secrets & Credentials
+  # ========================================
+
+  - name: jwt_token
+    description: "JSON Web Token (JWT)"
+    pattern: '\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b'
+    replacement: '[REDACTED_JWT]'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        output: "Authorization: Bearer [REDACTED_JWT]"
+
+  - name: api_key_generic
+    description: "Generic API keys (common patterns)"
+    pattern: '(?i)(api[_\-]?key|apikey|access[_\-]?token|secret[_\-]?key)[\s:=]+[A-Za-z0-9_\-]{20,}'
+    replacement: '\1 [REDACTED_API_KEY]'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "API_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+        output: "API_KEY=[REDACTED_API_KEY]"
+
+  - name: aws_access_key
+    description: "AWS Access Key ID"
+    pattern: '\b(AKIA[0-9A-Z]{16})\b'
+    replacement: '[REDACTED_AWS_KEY]'
+    strategy: redact
+    severity: critical
+
+  - name: aws_secret_key
+    description: "AWS Secret Access Key (40 chars base64)"
+    pattern: '\b[A-Za-z0-9/+=]{40}\b'
+    replacement: '[REDACTED_AWS_SECRET]'
+    strategy: redact
+    severity: critical
+    enabled: false  # High false positive rate, enable if AWS secrets suspected
+
+  - name: private_key_pem
+    description: "PEM-encoded private keys"
+    pattern: '-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----[\s\S]+?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----'
+    replacement: '[REDACTED_PRIVATE_KEY]'
+    strategy: redact
+    severity: critical
+
+  - name: password_in_url
+    description: "Passwords in URLs (e.g., mysql://user:pass@host)"
+    pattern: '([a-zA-Z][a-zA-Z0-9+.-]*://[^:]+:)([^@]+)(@)'
+    replacement: '\1[REDACTED_PASSWORD]\3'
+    strategy: redact
+    severity: critical
+    examples:
+      - input: "Connecting to postgres://admin:secret123@db.internal:5432/mydb"
+        output: "Connecting to postgres://admin:[REDACTED_PASSWORD]@db.internal:5432/mydb"
+
+  - name: slack_webhook
+    description: "Slack webhook URLs"
+    pattern: 'https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+'
+    replacement: '[REDACTED_SLACK_WEBHOOK]'
+    strategy: redact
+    severity: high
+
+  - name: github_token
+    description: "GitHub Personal Access Token"
+    pattern: '\bghp_[A-Za-z0-9]{36}\b'
+    replacement: '[REDACTED_GITHUB_TOKEN]'
+    strategy: redact
+    severity: critical
+
+  # ========================================
+  # Health Information (HIPAA)
+  # ========================================
+
+  - name: medical_record_number
+    description: "Medical Record Number (MRN, generic)"
+    pattern: '(?i)(mrn|medical\s+record)[\s#:]*([A-Z0-9]{6,12})'
+    replacement: '\1 [REDACTED_MRN]'
+    strategy: redact
+    severity: critical
+
+  - name: diagnosis_code_icd10
+    description: "ICD-10 diagnosis codes"
+    pattern: '\b[A-Z]\d{2}(\.\d{1,4})?\b'
+    replacement: '[REDACTED_ICD10]'
+    strategy: redact
+    severity: high
+    enabled: false  # Enable only if healthcare context
+
+  # ========================================
+  # Names (Structured)
+  # ========================================
+
+  # Note: Name detection is challenging (high false positive rate).
+  # Use only if names are in structured format (e.g., "Name: John Doe").
+
+  - name: full_name_structured
+    description: "Full name in structured format (e.g., 'Name: John Doe')"
+    pattern: '(?i)(name|patient|customer)[\s:]+([A-Z][a-z]+\s+[A-Z][a-z]+)'
+    replacement: '\1 [REDACTED_NAME]'
+    strategy: redact
+    severity: medium
+    enabled: false  # Disabled (enable if structured name logging is confirmed)
+
+  # ========================================
+  # IP Addresses (Optional)
+  # ========================================
+
+  - name: ipv4_address
+    description: "IPv4 addresses (optional, may be needed for debugging)"
+    pattern: '\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    replacement: '[REDACTED_IP]'
+    strategy: redact
+    severity: low
+    enabled: false  # Disabled (IP addresses often needed for ops, not PII unless linked to user)
+
+  - name: ipv6_address
+    description: "IPv6 addresses"
+    pattern: '\b(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}\b'
+    replacement: '[REDACTED_IPV6]'
+    strategy: redact
+    severity: low
+    enabled: false
+
+  # ========================================
+  # Custom Application-Specific Rules
+  # ========================================
+
+  - name: application_id_with_pii
+    description: "Application IDs that accidentally contain PII (e.g., email as ID)"
+    pattern: 'application_id["\']?\s*[:=]\s*["\']?([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})'
+    replacement: 'application_id=[REDACTED_EMAIL_IN_ID]'
+    strategy: redact
+    severity: high
+    examples:
+      - input: 'application_id="alice@example.com"'
+        output: 'application_id=[REDACTED_EMAIL_IN_ID]'
+
+---
+
+# Hashing Rules (Alternative to Redaction)
+# Use when you need to preserve uniqueness for correlation, but hide raw value.
+
+hashing_rules:
+
+  - name: email_hash
+    description: "Hash email for correlation (non-reversible)"
+    pattern: '\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'
+    strategy: hash
+    hash_algorithm: sha256  # sha256 | md5 | sha1
+    hash_prefix: 'email_'
+    enabled: false  # Enable if you need email correlation without exposing raw emails
+    examples:
+      - input: "User alice@example.com logged in"
+        output: "User email_5d41402abc4b2a76b9719d911017c592 logged in"  # MD5 hash
+
+---
+
+# Truncation Rules (Show Partial Data)
+# Use when you need partial visibility for debugging (e.g., last 4 digits of CC).
+
+truncation_rules:
+
+  - name: credit_card_last4_only
+    description: "Show only last 4 digits of credit card"
+    pattern: '\b(\d{4})[\s\-]?(\d{4})[\s\-]?(\d{4})[\s\-]?(\d{4})\b'
+    replacement: '****-****-****-\4'
+    strategy: truncate
+    enabled: false
+    examples:
+      - input: "Card: 4111-1111-1111-1111"
+        output: "Card: ****-****-****-1111"
+
+  - name: ssn_last4_only
+    description: "Show only last 4 digits of SSN"
+    pattern: '\b(\d{3})[-\s]?(\d{2})[-\s]?(\d{4})\b'
+    replacement: '***-**-\3'
+    strategy: truncate
+    enabled: false
+    examples:
+      - input: "SSN: 123-45-6789"
+        output: "SSN: ***-**-6789"
+
+---
+
+# Allowlist (Exceptions)
+# Patterns that should NOT be scrubbed (e.g., test data, public info).
+
+allowlist:
+
+  - name: test_emails
+    description: "Test email addresses (safe to log)"
+    pattern: '\b[A-Za-z0-9._%+\-]+@(example\.com|test\.com|localhost)\b'
+    enabled: true
+
+  - name: public_support_email
+    description: "Public support emails (non-PII)"
+    pattern: '\b(support|info|hello|contact)@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b'
+    enabled: true
+
+  - name: internal_user_ids
+    description: "Internal opaque user IDs (not PII)"
+    pattern: '\buser_[A-Za-z0-9]{8,}\b'
+    enabled: true
+    # Example: user_a1b2c3d4 is safe (not linkable to real identity)
+
+---
+
+# Testing & Validation
+# Sample test cases to validate scrubbing rules.
+
+test_cases:
+
+  - description: "Email in plain text"
+    input: "User alice@example.com submitted application"
+    expected_output: "User [REDACTED_EMAIL] submitted application"
+    rules_applied: [email_address]
+
+  - description: "SSN in log message"
+    input: "SSN verification failed for 123-45-6789"
+    expected_output: "SSN verification failed for [REDACTED_SSN]"
+    rules_applied: [ssn_us]
+
+  - description: "JWT token in Authorization header"
+    input: "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+    expected_output: "Authorization: Bearer [REDACTED_JWT]"
+    rules_applied: [jwt_token]
+
+  - description: "Credit card in JSON"
+    input: '{"card_number": "4111-1111-1111-1111", "cvv": "123"}'
+    expected_output: '{"card_number": "[REDACTED_CC]", "cvv": "123"}'
+    rules_applied: [credit_card]
+
+  - description: "Phone number (US format)"
+    input: "Contact customer at (555) 123-4567"
+    expected_output: "Contact customer at [REDACTED_PHONE]"
+    rules_applied: [phone_us]
+
+  - description: "API key in environment variable"
+    input: "API_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+    expected_output: "API_KEY=[REDACTED_API_KEY]"
+    rules_applied: [api_key_generic]
+
+  - description: "Password in database URL"
+    input: "Connecting to postgres://admin:secret123@db.internal:5432/mydb"
+    expected_output: "Connecting to postgres://admin:[REDACTED_PASSWORD]@db.internal:5432/mydb"
+    rules_applied: [password_in_url]
+
+  - description: "Korean resident registration number"
+    input: "주민번호: 901234-1234567"
+    expected_output: "주민번호: [REDACTED_RRN_KR]"
+    rules_applied: [resident_registration_kr]
+
+  - description: "Test email (allowlisted, not scrubbed)"
+    input: "Sending email to test@example.com"
+    expected_output: "Sending email to test@example.com"
+    rules_applied: []  # Allowlist exception
+
+  - description: "Internal user ID (safe, not scrubbed)"
+    input: "User user_a1b2c3d4e5f6 logged in"
+    expected_output: "User user_a1b2c3d4e5f6 logged in"
+    rules_applied: []  # Allowlist exception
+
+---
+
+# Changelog
+
+# Version 2.0.0 (2025-11-04)
+#   - Gate-T: Add JWT, AWS keys, GitHub token, Slack webhook scrubbing
+#   - Add Korean RRN (resident registration number)
+#   - Add hashing and truncation strategies
+#   - Add allowlist for test/internal data
+
+# Version 1.1.0 (2025-08-15)
+#   - Add credit card, SSN, phone number scrubbing
+#   - Add test cases for validation
+
+# Version 1.0.0 (2025-06-01)
+#   - Initial PII scrubbing rules (email, API keys)
+
+---
+
+# END OF FILE

@@ -1,0 +1,16 @@
+{
+  "widgets": [
+    {
+      "id": "payments_volume",
+      "title": "Payments Volume",
+      "type": "metric",
+      "query": "ledger:Cash.debit"
+    },
+    {
+      "id": "refund_ratio",
+      "title": "Refund Ratio",
+      "type": "metric",
+      "query": "ledger:Refunds.debit / ledger:Cash.debit"
+    }
+  ]
+}

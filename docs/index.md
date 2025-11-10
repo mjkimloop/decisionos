@@ -1,5 +1,17 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11m — 2025-11-10 — stage 파일 원자화·드리프트 가드, Evidence 불변성, 카나리 장애/롤백 시뮬, 키/시계/권한 하드닝, CI 게이트 강화
+
+- v0.5.11l — 2025-11-10 — 실트래픽 배포 파이프라인 연결(카나리/블루그린), 로그→Evidence 자동화, 운영 게이트/런북
+
+- v0.5.11k — 2025-11-10 — 카나리/블루-그린 라우팅 · 섀도 트래픽 수집 · 증빙 비교 · 카나리 SLO 판정 · 자동 롤백
+
+- v0.5.11i.2 — 2025-11-10 — 분산 저지 하드닝: 키 로테이션·RBAC 강제·리플레이 스토어 플러그인화·릴리스 게이트
+
+- v0.5.11i.1 — 2025-11-10 — 분산 저지 마감: dosctl CLI, k-of-n 통합/단위/E2E 테스트, HMAC+Nonce Anti-Replay, Evidence.judges 병합, CI 확장
+
+- v0.5.11i — 2025-11-10 — 원격 저지(HTTP/RPC) k-of-n 합의, 서명검증, Degraded 시 Fail-Closed, Evidence에 투표 로그 포함
+
 - v0.5.11h — 2025-11-10 — Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
 
 - v0.5.11g — 2025-11-10 — slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI

@@ -1,0 +1,135 @@
+meta:
+  version: v0.3.4
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-O: Connectors·ETL/CDC·Data Contracts v1·Ontology Mapping·Quality Gates (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Connectors Catalog"
+      mode: replace
+      content: |
+        초기 커넥터(v0.3.4):
+        - Batch: local_csv, s3_csv, http_json
+        - DB-CDC: postgres_logical, mysql_binlog
+        - Streaming: kafka_topic(local)
+        공통 규격:
+        - connector.yaml {name, kind[batch|cdc|stream], version, source{...}, schedule|offset, schema_ref, pii:bool, owner}
+        - 출력: records(line-delimited JSON) + _meta{src, ts, offset, schema_hash}
+        - 보안: 자격증명은 secrets/ 에 K/V, IAM role은 차기 게이트
+    - section: "ETL/CDC Pipelines"
+      mode: replace
+      content: |
+        파이프라인 구성(v0.3.4):
+        - Orchestrator: jobs/runner.py(간단 스케줄러, cron/interval), retries(지수백오프)
+        - Transforms: apps/etl/transforms/{cleanse.py, map_ontology.py, pii_mask.py}
+        - Loads: apps/etl/loaders/{parquet_sink.py, kafka_sink.py}
+        - CDC 보장: at-least-once + idempotency key(_meta.offset), 지연 p95<5s(동일 DC)
+        - 재처리: backfill window(ISO-interval), quarantine_bucket(스키마 위반)
+    - section: "Data Contracts v1"
+      mode: replace
+      content: |
+        컨트랙트 스키마(v1): YAML/JSON
+        kind: data_contract
+        version: v1
+        dataset: {name, domain, owner, slas:{freshness, completeness_min, distinctness_min}}
+        schema:
+          fields:
+            - {name, type, mode[required|optional], pii?:bool, tags[], description?, constraints?{min?,max?,enum?}}
+        compatibility:
+          policy: semver
+          rules:
+            - backward_add_optional: allow
+            - remove_or_narrow: require major bump
+            - pii_flag_drop: deny(승인필요)
+        validation:
+          on: ingest|transform|export
+          actions: {reject|quarantine|mask|coerce}
+        lineage: {sources[], owner, change_log[]}
+    - section: "Ontology Mapping"
+      mode: replace
+      content: |
+        온톨로지 매핑(v0.3.4):
+        - decision_ontology.yaml(표준 엔티티: Applicant/Asset/Loan/Decision/Reason)
+        - 매핑 규칙: map_ontology.yaml {source_field -> ontology_field, transform, pii_policy}
+        - 품질 체크: 필수 온톨로지 필드 누락 시 reject/quarantine
+        - 계약 연결: contract.schema.fields.tags에 ontology key를 표준화(tag: do:Applicant.income_monthly 등)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API:
+        - POST /api/v1/connectors/register {connector.yaml}
+        - POST /api/v1/pipelines/create {connector, transforms[], sink, schedule}
+        - POST /api/v1/contracts/register {contract}
+        - POST /api/v1/contracts/validate {dataset, sample}
+        - GET  /api/v1/contracts/list | GET /api/v1/connectors/list | GET /api/v1/pipelines/list
+        - POST /api/v1/pipelines/run {id, backfill?}
+        - GET  /api/v1/lineage/{dataset}
+        CLI (dosctl):
+        - `dosctl connectors add|ls|test`
+        - `dosctl pipelines scaffold|run|backfill`
+        - `dosctl contracts register|lint|compat`
+    - section: "Quality Gates & Metrics"
+      mode: replace
+      content: |
+        품질게이트/KPI:
+        - 스키마 위반율 ≤ 0.5%, quarantine 처리는 24h내 95%
+        - freshness: 계약 SLA 충족률 ≥ 99%
+        - completeness/distinctness 계약 기준 준수
+        - CDC 지연 p95 ≤ 5s(동일 DC), 데이터 유실 0(리플레이 기준)
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑O 성공 기준:
+        - 커넥터 4종(local_csv, s3_csv, postgres_logical, kafka_topic) e2e 동작
+        - Data Contract v1 등록/검증/호환성 체크 + 위반시 quarantine/알림
+        - 온톨로지 매핑으로 DecisionContract 입력 생성·정책엔진/Executor 연동 샘플 1건
+        - CDC p95 ≤ 5s·스키마 위반율 ≤0.5%·freshness SLA 99% 증빙
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑O 마일스톤(완료 조건):
+        - 커넥터 프레임워크/카탈로그 + 등록/실행 API·CLI
+        - Data Contracts v1·레지스트리·린터·호환성 검사기
+        - ETL/CDC 파이프라인(변환·온톨로지 매핑·적재) + 격리 큐
+        - 품질 대시·SLO 측정 + Evidence Binder(Data) 업데이트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 76: connector SDK·registry·register/list API + local_csv/s3_csv 구현
+        Day 77: postgres_logical CDC + kafka_topic 소비자 + idempotency 키 처리
+        Day 78: data_contracts 스키마/린터/호환성 검사기 + /contracts API
+        Day 79: transforms(cleanse/pii_mask/ontology_map) + pipelines create/run/backfill
+        Day 80: 품질 대시·SLO 집계 + DecisionContract 연동 샘플 e2e
+
+work:
+  claude:
+    - id: C-36
+      title: Data Contract Guide & Examples
+      deliverables:
+        - docs/data_contracts_guide.md, samples/contracts/*.yaml
+      acceptance:
+        - 호환성 규칙/버전업 전략/위반 대응 시나리오 포함
+    - id: C-37
+      title: Connector & CDC Runbooks
+      deliverables:
+        - ops/runbook_connectors.md, ops/runbook_cdc_backfill.md
+      acceptance:
+        - 장애 유형별 대응(지연/중복/역행), 백필 플레이북
+    - id: C-38
+      title: Ontology Mapping Handbook
+      deliverables:
+        - docs/ontology_mapping.md, config/map_ontology.yaml(샘플)
+      acceptance:
+        - Applicant/Asset/Loan/Decision 필수키 명세·예제
+
+risks:
+  - name: 스키마 드리프트/호환성 붕괴
+    mitigation: compat 검사 강제, dry-run·카나리, 위반 격리/알림
+  - name: PII 누락 마스킹·로그 유출
+    mitigation: pii_mask 변환 선행, Vault 토큰화, 로그 스크럽 검사
+  - name: CDC 이벤트 중복/순서역행
+    mitigation: idempotency 키·윈도우 정렬, 재처리/백필 플레이북 적용
+  - name: 비용 폭증(백필/대용량)
+    mitigation: 샘플링·시간창 분할·스케줄 창 제어, 비용 예측(코스트 센트리 연동)

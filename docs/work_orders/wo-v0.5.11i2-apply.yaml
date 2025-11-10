@@ -1,0 +1,51 @@
+meta:
+  version: v0.5.11i.2
+  date: 2025-11-10
+  status: locked
+  summary: "멀티키 로테이션, 리플레이 스토어 플러그인(SQLite/Redis), RBAC 강제, CI Release Gate, utcnow 리팩터"
+
+patches:
+  techspec:
+    - section: "Security — Judge HMAC Key Rotation v1"
+      mode: upsert
+      content: |
+        - 키 다중화: DECISIONOS_JUDGE_KEYS(JSON) 우선, 없으면 DECISIONOS_JUDGE_HMAC_KEY 단일키.
+        - 송신 헤더: X-Key-Id, X-DecisionOS-Signature, X-DecisionOS-Nonce, X-DecisionOS-Timestamp.
+        - 롤링 절차: Add(k2)→Dual-accept(k1,k2)→Deprecate(k1)→Remove(k1).
+    - section: "Security — Anti-Replay Plugins v1"
+      mode: upsert
+      content: |
+        - ReplayStoreABC(seen_or_insert), SQLite(default), Redis(optional).
+        - 허용 오차: TTL=600s, skew=±120s. 저장소 오류는 fail-closed.
+    - section: "Gate-AJ — RBAC Enforcement v1"
+      mode: upsert
+      content: |
+        - env DECISIONOS_ENFORCE_RBAC=1일 때 PEP.enforce 필수.
+        - 정책 토큰: 'judge.run' + resource 'slo:<file>'.
+        - 거부 시 exit code 3.
+    - section: "CI — Release Gate (strict SLO)"
+      mode: upsert
+      content: |
+        - dosctl judge quorum --slo configs/slo/slo-billing-strict-v2.json --evidence var/evidence/latest.json --providers configs/judge/providers.yaml --quorum 2/3 --attach-evidence
+        - 종료코드 0만 릴리스 통과. 2/3은 fail.
+    - section: "Time — utcnow Deprecation Remediation"
+      mode: upsert
+      content: |
+        - 레거시 UTC naive 호출을 datetime.now(datetime.UTC)로 치환.
+        - 공용 헬퍼 time_utcnow() 제공 후 단계적 마이그레이션.
+  plan:
+    - section: "Milestones — v0.5.11i.2"
+      mode: upsert
+      content: |
+        - crypto: multi-key loader + verify
+        - providers: HTTP 헤더 kid/nonce/timestamp + 서명
+        - replay: ABC + SQLite/Redis 플러그인
+        - rbac: PEP 강제, CLI 진입점 연결
+        - ci: release_gate 스텝 추가
+        - time: utcnow→UTC 리팩터 스크립트
+    - section: "Next Actions — v0.5.11i.2"
+      mode: upsert
+      content: |
+        Day 226: crypto/provider/replay 구현 + 단위테스트
+        Day 227: RBAC/CLI/통합/E2E 테스트, utcnow 리팩터
+        Day 228: CI release_gate 활성화, 문서 갱신

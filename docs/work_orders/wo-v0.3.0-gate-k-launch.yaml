@@ -1,0 +1,114 @@
+meta:
+  version: v0.3.0
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-K: Launch Readiness — Docs·Trials·Pricing·Support·Status (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Docs & Site"
+      mode: replace
+      content: |
+        문서/사이트(v0.3.0):
+        - docs/site/: mkdocs 기반 정적 사이트(내부 호스팅)
+        - 섹션: Getting Started, API, Runbooks, Security, Pricing, Changelog
+        - 내비게이션: techspec/plan 자동 동기화(scripts/build_docs.py)
+        - 배포: docs/site/ → /public/docs (Nginx) — 캐시 10m
+    - section: "Trials & Onboarding"
+      mode: replace
+      content: |
+        트라이얼 SKU:
+        - Sandbox(무료·14일): /decide 10k건/월, 모델 실경로 off, 지역=ap, 지원=P3
+        - Paid PoV(월30만원+건당20원): 계약/SOW 필요, 지원=P2, KPI 리포트 제공
+        - Pilot(3개월): 월 200만원 최소, 커넥터 확장/카나리 허용, 지원=P1(업무시간)
+        온보딩 파이프라인:
+        - POST /api/v1/signup → 이메일 도메인 검증 → tenant 생성(tenant.yaml 템플릿)
+        - budgets/feature_flags 기본값 주입 → welcome 메일(+API 키)
+        - SSO(OAuth) 옵션(도입은 차기 게이트)
+    - section: "Pricing & Calculator"
+      mode: replace
+      content: |
+        가격/계산기:
+        - 초기 플랜: Sandbox(무료), PoV, Pilot, Enterprise(문의)
+        - 계산기: usage_summary × 단가 → 예상 청구액(부가세 10%)
+        - 캡: tenant.budgets로 과금 캡/차단 옵션 반영
+    - section: "Support & Incident"
+      mode: replace
+      content: |
+        지원/인시던트:
+        - 접점: support@ (메일 인테이크) → triage 큐(HITL 기반)
+        - 심각도: P1(1h)·P2(4h)·P3(24h)·P4(3일) 최초 응답SLA
+        - 운영문서: runbook_support.md, comms_incident_templates.md
+        - 지표: 응답SLA 준수율, 티켓 해소시간 p95
+    - section: "Status Page"
+      mode: replace
+      content: |
+        상태페이지(경량):
+        - components: API, Ingest, DB, Provider, Billing
+        - 엔드포인트: GET /api/v1/status, POST /api/v1/status/incident (admin)
+        - 웹: /status/index.html(정적), 과거 인시던트 보관 JSON
+    - section: "Legal & Compliance"
+      mode: replace
+      content: |
+        법무/컴플라이언스(초기):
+        - ToS(이용약관), Privacy(개인정보처리방침·KR/EN), DPA(처리위탁) 초안 확정
+        - 데이터 위치: ap 기본(선언), 로그/트레이스 PII 스크럽 준수
+        - DSAR/삭제요청: tickets로 접수 → vault 토큰 기반 삭제
+        - 쿠키/분쟁/해지/환불 정책 명시
+    - section: "SLO & KPIs"
+      mode: replace
+      content: |
+        Gate‑K 성공 기준:
+        - Docs 커버리지 ≥80%(핵심 섹션 6/6 채움), Changelog 시작
+        - Trial 온보딩(샌드박스) TTI ≤ 1일, PoV 1건 유료 전환
+        - Status 페이지 라이브, Support SLA 계측 개시
+        - Evidence Binder(런치 섹션) 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑K 마일스톤(완료 조건):
+        - docs/site 빌드/배포 + 내비 동기화
+        - /signup → tenant 부트스트랩 e2e
+        - pricing 계산기 페이지 + 요율 반영
+        - support 인테이크/트리아지 동작 + SLA 측정
+        - status 페이지 공개 + 인시던트 템플릿 준비
+        - Go/No‑Go 리뷰팩(운영/법무/영업) 승인
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 56: mkdocs 테마/내비 구성 + ToS/Privacy/DPA 초안 업로드 + status 스켈레톤
+        Day 57: /signup API + tenant bootstrap 서비스 + welcome 메일/키 발급
+        Day 58: pricing 계산기(프론트/백엔드) + /costs/summary 연동
+        Day 59: support 인테이크(메일→큐) + SLA 계측 + incident 템플릿/상태페이지 완성
+        Day 60: 샌드박스 트라이얼 e2e 드라이런 + Evidence Binder 업데이트 + Go/No‑Go
+
+work:
+  claude:
+    - id: C-26
+      title: Legal Pack(KR/EN)
+      deliverables:
+        - docs/legal/ToS_ko.md, docs/legal/Privacy_ko.md, docs/legal/DPA_ko.md
+        - docs/legal/ToS_en.md, docs/legal/Privacy_en.md
+      acceptance:
+        - 책임/면책/해지/환불/분쟁/데이터처리 범위 명시, PDF 변환 가능
+    - id: C-27
+      title: Support Runbooks & Status Templates
+      deliverables:
+        - ops/runbook_support.md, ops/comms_incident_templates.md
+      acceptance:
+        - P1~P4 응답/해소 절차·체크리스트 포함
+    - id: C-28
+      title: Launch Deck & One‑Pager
+      deliverables:
+        - slides/launch_readout.pptx, docs/onepager.md
+      acceptance:
+        - 가격/가치/ROI/리스크배분 요약, 고객 발표 가능 상태
+
+risks:
+  - name: 법무 문서 미비/해석 리스크
+    mitigation: 책임제한·참고용 고지·PoV 범위 명확화
+  - name: 이메일 스팸/딜리버러빌리티
+    mitigation: 도메인 검증/DMARC 안내, 확인메일 더블옵트인
+  - name: 트라이얼 남용
+    mitigation: rate limit/캡, 전화번호·도메인 화이트리스트, HITL 승인 옵션

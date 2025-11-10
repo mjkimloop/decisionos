@@ -1,0 +1,88 @@
+meta:
+  version: v0.1.2
+  date: 2025-11-02
+  status: locked
+  summary: "Work Order → TechSpec/Plan 자동기입 체계 도입"
+
+work:
+  claude:
+    - id: C-01
+      title: Rule DSL v1
+      deliverables:
+        - apps/rule_engine/{parser.py,evaluator.py,linter.py,tests/*}
+      acceptance:
+        - YAML→AST→평가 결과(JSON) 반환
+        - 충돌/음영 규칙 탐지, pytest ≥20, 커버리지 ≥70%
+    - id: C-02
+      title: Offline Eval v1
+      deliverables:
+        - apps/rule_engine/offline_eval.py, templates/report.html
+      acceptance:
+        - dosctl simulate → JSON+HTML 동시 생성
+    - id: L-01
+      title: Lending 규칙 6개 v1
+      deliverables:
+        - packages/rules/triage/*.yaml
+      acceptance:
+        - 린터 경고 0, 샘플 CSV 리포트 생성
+
+  codex:
+    - id: X-01
+      title: Executor 파이프라인 v1
+      deliverables:
+        - apps/executor/{pipeline.py,hooks/checklist.py,tests/*}
+      acceptance:
+        - /decide 응답 필드 완비, p50<200ms(모델 미호출)
+    - id: X-02
+      title: Gateway 3 API v1
+      deliverables:
+        - apps/gateway/main.py, routers/*.py
+      acceptance:
+        - /decide|/simulate|/explain, API Key + RBAC, e2e 3건 통과
+    - id: P-01
+      title: dosctl v0
+      deliverables:
+        - cli/dosctl/main.py
+      acceptance:
+        - 샘플 JSON/CSV로 정상 작동
+
+  gemini:
+    - id: G-01
+      title: Switchboard v0.1(폴백)
+      deliverables:
+        - apps/switchboard/{router.py,adapters/local.py,adapters/openai.py(mock),tests/*}
+      acceptance:
+        - 타임아웃/에러 시 로컬 폴백 단위테스트 10+
+    - id: SEC-01
+      title: 보안 최소통제 6/6
+      deliverables:
+        - apps/gateway/security/*, apps/gateway/middleware/*
+      acceptance:
+        - 체크리스트 6/6 + e2e 3건, 문서 반영
+
+patches:
+  techspec:
+    - section: Open Issues
+      mode: replace
+      content: |
+        - SEC-01: 보안 최소통제 6/6 e2e 문서화
+        - Switchboard 비용 캐시(차기)
+    - section: Security Controls
+      mode: ensure
+      content: |
+        - AES at-rest(Fernet) 키 적용 경로 문서화
+        - API Key + RBAC 3계층
+        - DLP/CSV 제한
+        - Consent DDL 및 감사
+  plan:
+    - section: Milestones
+      mode: replace
+      content: |
+        - Gate-A: /decide e2e + Offline Eval 리포트
+        - Gate-B: 조기신호 2/3 + 보안 6/6 + PoV 문서
+    - section: Next Actions
+      mode: append
+      content: |
+        - Postman 컬렉션 추가
+        - audit verify 서브커맨드 추가
+

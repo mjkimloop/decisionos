@@ -1,0 +1,12 @@
+{
+  "overall_verdict": "FAIL",
+  "routes": {
+    "ad_hoc": {
+      "expression": "latency_p95<=1200 and err_rate<=0.01 and citation_cov>=0.98",
+      "verdict": "FAIL",
+      "failures": [
+        "err_rate <= 0.01 (actual=0.014)"
+      ]
+    }
+  }
+}

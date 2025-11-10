@@ -1,0 +1,41 @@
+{
+  "routes": [
+    {
+      "route_id": "RAG_Answer_Standard",
+      "slo": { "p95_ms": 1200, "err_rate": 0.01, "ai_citation_cov": 0.98 },
+      "sample": { "min_n": 200, "window": "24h" },
+      "witness_requirements": ["latency_p95", "err_rate", "citation_cov"]
+    },
+    {
+      "route_id": "Eligibility_Path_A",
+      "slo": { "p95_ms": 800, "err_rate": 0.005, "ag_mapping_loss": 0.005 },
+      "sample": { "min_n": 300, "window": "24h" },
+      "witness_requirements": ["latency_p95", "err_rate", "parity_delta"]
+    },
+    {
+      "route_id": "Pricing_Path_A",
+      "slo": { "p95_ms": 900, "err_rate": 0.005, "cost_krw": 0.0 },
+      "sample": { "min_n": 200, "window": "24h" },
+      "witness_requirements": ["latency_p95", "err_rate", "cost_krw"]
+    },
+    {
+      "route_id": "Rollout_Canary_1pct",
+      "slo": { "err_rate_delta_pp": 1.0, "latency_p95_delta_pct": 10.0 },
+      "sample": { "min_n": 500, "window": "24h" },
+      "witness_requirements": ["latency_p95", "err_rate"]
+    },
+    {
+      "route_id": "Replay_Q_Ledger",
+      "slo": { "replay_hash_match": 1.0 },
+      "sample": { "min_n": 100, "window": "24h" },
+      "witness_requirements": ["replay_hash_match"]
+    }
+  ],
+  "measurement_quorum_tolerances": {
+    "latency_p95_delta_pct": 2.0,
+    "err_rate_delta_pp": 0.1,
+    "cost_krw_delta_pct": 1.0,
+    "citation_cov_delta_pp": 0.5,
+    "parity_delta_pp": 0.2
+  }
+}

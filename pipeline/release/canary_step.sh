@@ -30,6 +30,15 @@ log() {
   echo "[canary-step][stage=${STAGE}] $*"
 }
 
+python - <<'PY'
+import sys
+from apps.policy.pep import PEP
+
+if not PEP().enforce("deploy:canary"):
+    print("[rbac] deploy:canary denied", file=sys.stderr)
+    sys.exit(3)
+PY
+
 REQLOG_PATH=${REQLOG_PATH:-var/log/reqlog.csv}
 JUDGELOG_PATH=${JUDGELOG_PATH:-var/log/judgelog.csv}
 EVIDENCE_PATH=${EVIDENCE_PATH:-var/evidence/latest.json}

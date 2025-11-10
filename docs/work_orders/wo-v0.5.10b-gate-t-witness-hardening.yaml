@@ -1,0 +1,49 @@
+meta:
+  version: v0.5.10b
+  date: 2025-11-07
+  status: locked
+  summary: "Gate-T Hotfix v2 — Dual Witness Exporters, Quorum-of-Measurement, Backfill Reconcile"
+
+patches:
+  techspec:
+    - section: "Observability — Witness Schema & Invariants"
+      mode: upsert
+      content: |
+        Witness 필수 필드:
+          period_start, period_end, sample_n, coverage_ratio, dropped_spans,
+          latency_p95, latency_p99, err_rate, cost_krw, citation_cov, parity_delta,
+          watermark_ts, clock_skew_ms, build_id, commit_sha, source_id, sha256, q_ledger_ref.
+        불변식:
+          - period_end >= period_start
+          - sample_n >= min_n, coverage_ratio >= min_ratio
+          - clock_skew_ms ≤ 50ms (초과시 Stale)
+          - sha256(Q-ledger) 일치 필수
+    - section: "Observability — Dual/Triple Exporters"
+      mode: upsert
+      content: |
+        Exporter 구현 2종 이상(Codex: X-190b-x; Claude: C-190b-c).
+        합의 규칙:
+          - 공통 메트릭 Δ 허용치 이내일 때만 Valid (p95 ≤2%, err ≤0.1pp, cost ≤1%, citation ≤0.5pp, parity ≤0.2pp).
+          - 불일치 시 Fail-Closed + discrepancies.csv + 알림.
+    - section: "Observability — Backfill & Calibration"
+      mode: upsert
+      content: |
+        Backfill Reconcile(일 1회): 원시 로그→재집계→Witness 대조.
+        Golden Trace Suite: 합성 분포로 p95/p99/err/cost 교정 검증.
+        Supply Chain: 서명/해시 검증, SBOM, 재현 빌드.
+  plan:
+    - section: "Milestones — Gate-T"
+      mode: upsert
+      content: |
+        - Dual Exporters(v1) 가동 · Δ 허용치 확정
+        - Witness Schema 확장 · Q-ledger 앵커링
+        - Backfill Reconcile · Golden Trace
+        - 알림/대시 카드(T-overview.json)
+    - section: "Next Actions — Gate-T"
+      mode: upsert
+      content: |
+        Day 201: 스키마/인변식 구현, Δ 허용치 적용
+        Day 202: exporter_x/exporter_c 가동 · Δ 비교 리포트
+        Day 203: backfill_runner 배치, golden_trace 교정
+        Day 204: 알림/대시 카드, Q-ledger 앵커링 점검
+        Day 205: 문서/런북 PR

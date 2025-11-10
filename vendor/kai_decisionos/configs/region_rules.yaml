@@ -1,0 +1,7 @@
+KR:
+  vat_rate: 0.1
+  exempt: []
+US:
+  vat_rate: 0.0
+  exempt:
+    - digital_goods

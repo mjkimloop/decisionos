@@ -1,5 +1,6 @@
 import subprocess
 import sys
+
 import pytest
 
 pytestmark = [pytest.mark.gate_aj]
@@ -9,19 +10,9 @@ if sys.platform.startswith("win"):
 
 
 def test_rbac_promote_denied(monkeypatch, tmp_path):
+    stage = tmp_path / "stage.txt"
+    monkeypatch.setenv("STAGE_PATH", str(stage))
+    monkeypatch.setenv("ROLLOUT_MODE", "none")
     monkeypatch.setenv("DECISIONOS_ALLOW_SCOPES", "judge:run")
-    monkeypatch.setenv("ROLLOUT_MODE", "argo")
-    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "dummy"))
-    rc = subprocess.call(
-        ["bash", "-c", "pipeline/release/promote.sh"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    rc = subprocess.call(["bash", "pipeline/release/promote.sh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     assert rc != 0
-
-
-@pytest.mark.skip(reason="Requires kubectl/argo in CI environment")
-def test_rbac_promote_allowed(monkeypatch):
-    monkeypatch.setenv("DECISIONOS_ALLOW_SCOPES", "judge:run,deploy:promote")
-    rc = subprocess.call(["bash", "-c", "pipeline/release/promote.sh"])
-    assert rc == 0

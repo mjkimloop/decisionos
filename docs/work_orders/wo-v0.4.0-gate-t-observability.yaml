@@ -1,0 +1,144 @@
+meta:
+  version: v0.4.0
+  date: 2025-11-04
+  status: locked
+  summary: "Gate-T: Observability v2 · SLI/SLO · Traces/Logs/Metrics · Error-Budget Gating (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Observability v2 — Architecture"
+      mode: replace
+      content: |
+        표준 스택:
+          - OpenTelemetry SDK/Collector(otlp/http, grpc)
+          - Metrics: Prometheus-compatible (pull) + remote-write
+          - Traces: otlp → collector → Tempo/Jaeger 호환
+          - Logs: JSON 구조화 로그 → collector → Loki 호환
+        상관관계:
+          - trace_id/span_id를 로그·메트릭 라벨에 삽입 (context propagation)
+          - corr_id(업무 상관키) → decisions/hitl/billing 등 공통 라벨
+        오버헤드 목표:
+          - 에이전트 도입 후 p95 레이턴시 증가 ≤ 5%, CPU 오버헤드 ≤ 8%
+    - section: "SLI/SLO Catalog"
+      mode: replace
+      content: |
+        서비스 SLI(대표):
+          - API: 성공율(2xx/모든 요청), p95/p99 레이턴시, 스루풋
+          - Pipeline: freshness lag, 성공율, 재처리율
+          - Catalog/Search: 적중률@10(라벨셋), 검색 p95
+          - Guardrails: 차단율, 오탐율, 오버헤드 p95
+          - Explain/Audit: 재현성 성공률, 감사 누락 0
+          - HITL: first_pick_time p95, resolution_time p95, 재오픈율
+          - Billing/Metering: 집계 지연 p95, 정합 오차
+        SLO 정책:
+          - 서비스별 월간 SLO(가용성, 레이턴시, 품질) 정의
+          - 에러버짓 계산(1 - SLO) 및 번레이트(5m/1h/6h 윈도우) 측정
+          - 번레이트 임계 초과 시 배포 게이팅/카나리 강제
+    - section: "Error Budget Gating — Release Policy"
+      mode: replace
+      content: |
+        정책:
+          - burn_rate > 2.0 (1h) 또는 > 1.0 (6h) → 배포 금지, 롤백 검토
+          - P0 알림: burn_rate > 4.0 (1h) → 즉시 카나리 0%로 롤백
+          - 예외 승인: oncall + duty_manager 동시 승인 필요
+        CI/CD 연계:
+          - gate job: /api/v1/obs/errorbudget/status?service=
+          - 상태: allow|review|block (PR 체크·머지 게이팅)
+    - section: "Synthetic & Blackbox"
+      mode: replace
+      content: |
+        합성 모니터:
+          - /healthz, /readyz, /api smoke, decision e2e stub
+        블랙박스 프로브:
+          - 외부 엔드포인트 가용성/SSL/도메인 만료
+        목표: 무중단 상시 1분 간격, 경보 억제 룰(3/5 실패 시)
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        API:
+          - GET  /api/v1/obs/sli?service=&metric=&from=&to=
+          - GET  /api/v1/obs/slo?service=
+          - GET  /api/v1/obs/errorbudget/status?service=
+          - POST /api/v1/obs/alerts/ack {alert_id}
+          - GET  /api/v1/obs/traces?corr_id= | GET /api/v1/obs/logs?trace_id=
+        CLI(dosctl):
+          - `dosctl obs slo set --service X --target 99.9 --latency-p95 800`
+          - `dosctl obs slo ls --service X`
+          - `dosctl obs eb status --service X`
+          - `dosctl obs traces show --corr <id>`
+          - `dosctl obs logs tail --service X --level warn`
+    - section: "Dashboards & Runbooks"
+      mode: replace
+      content: |
+        대시:
+          - /web/obs/overview: RED/USE 메트릭, burn-rate 패널
+          - /web/obs/service/<name>: SLI·트레이스·로그 상관
+          - /web/ops/oncall: 경보 인박스, 사일런스/승인
+        런북:
+          - P0/P1 절차, 롤백·카나리, 데이터 파이프라인 지연 대응
+          - 공통 체크리스트: 최근 배포, 트래픽 급증, 외부 의존성
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        - 로그 PII/비밀 자동 스크럽(키패턴/정규식) + 샘플링
+        - 라벨 카디널리티 가드(상한, 드랍 룰) · 지표 보존 정책
+        - 감사: 알림 확인/사일런스/예외 승인은 모두 감사 체인 링크
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-T 성공 기준:
+          - OTel 인스트루먼트/컨텍스트 전파: 코어 경로 100%
+          - 에이전트 도입 오버헤드: p95 레이턴시 +≤5%, CPU +≤8%
+          - 에러버짓 게이팅: CI 상태 전파·차단 동작 증빙
+          - 대시/런북/알림: 온콜 데모, P0 시나리오 2종 복기
+          - Evidence Binder(Observability) 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - OTel 계측/콜렉터 구성 · 로그/트레이스/메트릭 수집
+        - SLI/SLO 카탈로그·저장·조회 API
+        - 에러버짓 계산/알림/배포 게이팅
+        - 합성 모니터/블랙박스 운영
+        - 대시/런북·온콜 플로우 · 증빙 번들
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 101: OTel 라이브러리·미들웨어 삽입, collector 배치, 상관 라벨 적용
+        Day 102: SLI 스키마/저장·/obs/sli,/obs/slo API · 기본 SLO 정의
+        Day 103: 에러버짓 계산기·/obs/errorbudget/status · CI 게이트 훅
+        Day 104: 합성/블랙박스 프로브·경보 억제 룰·온콜 알림
+        Day 105: 대시보드·런북·P0/P1 게임데이·SLO/Evidence 업데이트
+
+work:
+  claude:
+    - id: C-51
+      title: SLI/SLO Catalog & Policy
+      deliverables:
+        - docs/sli_slo_catalog.md, docs/error_budget_policy.md
+      acceptance:
+        - 서비스별 표준 SLI/SLO, 번레이트 임계·예외 프로세스 명문화
+    - id: C-52
+      title: Oncall Runbooks & GameDay Scripts
+      deliverables:
+        - ops/runbook_oncall.md, ops/gameday_playbook.md
+      acceptance:
+        - P0/P1 체크리스트·롤백/카나리 절차, 게임데이 시나리오 3종
+    - id: C-53
+      title: Logging/PII Scrub Standard
+      deliverables:
+        - docs/logging_standard.md, configs/pii_scrub_rules.yaml
+      acceptance:
+        - 비밀/PII 패턴 목록·테스트 규칙 포함
+
+risks:
+  - name: 로그 비용/카디널리티 폭발
+    mitigation: 샘플링·필드 화이트리스트·카디널리티 가드·보존주기 조정
+  - name: PII/비밀 노출
+    mitigation: 스크럽 룰 선적용·CI 검사·랜덤 샘플링 감시
+  - name: 알림 피로(Noise)
+    mitigation: 억제 룰·합성 기준 강화·멀티 윈도우 번레이트
+  - name: 성능 오버헤드
+    mitigation: 비동기 Export·배치·샘플링(Head 10%, Tail for p95)
+  - name: 컨텍스트 누락
+    mitigation: 미들웨어 공통화·계약 테스트·분기 커버리지 측정

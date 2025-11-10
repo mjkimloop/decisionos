@@ -1,0 +1,46 @@
+{
+  "pass": true,
+  "discrepancies": [
+    {
+      "metric": "latency_p95",
+      "x_value": 857.7120283508312,
+      "c_value": 858.4465460117582,
+      "delta_pct": 0.0856368613996514,
+      "threshold": 2.0,
+      "status": "PASS"
+    },
+    {
+      "metric": "err_rate",
+      "x_value": 0.004,
+      "c_value": 0.004,
+      "delta_pp": 0.0,
+      "threshold": 0.1,
+      "status": "PASS"
+    },
+    {
+      "metric": "cost_krw",
+      "x_value": 200.19110493569787,
+      "c_value": 200.19110493569787,
+      "delta_pct": 0.0,
+      "threshold": 1.0,
+      "status": "PASS"
+    },
+    {
+      "metric": "citation_cov",
+      "x_value": 0.798,
+      "c_value": 0.798,
+      "delta_pp": 0.0,
+      "threshold": 0.5,
+      "status": "PASS"
+    },
+    {
+      "metric": "parity_delta",
+      "x_value": 0.0030004051135238225,
+      "c_value": 0.0030004051135238225,
+      "delta_pp": 0.0,
+      "threshold": 0.2,
+      "status": "PASS"
+    }
+  ],
+  "summary": "[PASS]: 5/5 metrics within tolerance"
+}

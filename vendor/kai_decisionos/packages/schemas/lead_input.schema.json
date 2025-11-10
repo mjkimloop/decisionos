@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://decisionos.io/schemas/lead_input.json",
+  "title": "Lead Input Schema",
+  "description": "Input schema for lead triage decision requests",
+  "type": "object",
+  "properties": {
+    "org_id": {
+      "type": "string",
+      "description": "Organization identifier",
+      "minLength": 1,
+      "examples": ["orgA", "orgB", "org123"]
+    },
+    "credit_score": {
+      "type": "integer",
+      "description": "Credit score (typically 300-850)",
+      "minimum": 300,
+      "maximum": 850,
+      "examples": [720, 650, 540]
+    },
+    "dti": {
+      "type": "number",
+      "description": "Debt-to-income ratio (0.0-1.0+)",
+      "minimum": 0,
+      "maximum": 2.0,
+      "examples": [0.3, 0.45, 0.65]
+    },
+    "income_verified": {
+      "type": "boolean",
+      "description": "Whether income has been verified",
+      "examples": [true, false]
+    },
+    "converted": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "description": "Conversion label (0 or 1)"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional label for evaluation (1=converted, 0=not converted, null=unknown)"
+    }
+  },
+  "required": ["org_id", "credit_score", "dti", "income_verified"],
+  "additionalProperties": false
+}

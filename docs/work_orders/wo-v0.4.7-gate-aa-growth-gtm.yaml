@@ -1,0 +1,132 @@
+meta:
+  version: v0.4.7
+  date: 2025-11-05
+  status: locked
+  summary: "Gate-AA: Growth & GTM Runbooks · Sales/Marketing/Partner · PQL/PLG · CRM/Sequencer (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Growth Architecture — Funnel & Definitions"
+      mode: replace
+      content: |
+        목적: '리드 → 수익' 경로를 표준화, 각 단계에 SLO·증빙 부착.
+        표준 퍼널:
+          - Site → Lead → MQL → SQL/PoV → PQL/PQA → Paid → Expansion
+        용어 정의:
+          - MQL: 대상 ICP + 의도 시그널(폼/세미나/가이드 다운로드)
+          - SQL: PoV 제안 자격(예산/권한/니즈/타임라인 3/4 충족)
+          - PQL: 제품 내 행동 기반 자격(결정 호출 ≥ N, triage 정확도 ≥ X%)
+          - PQA: 조직 단위 제품 자격(활성 사용자 ≥ K, 채널 ≥ L)
+        계측:
+          - event taxonomy v1 (events.yaml): lead.created, content.viewed, seq.sent, pql.hit 등
+          - 대시보드: 퍼널 전환, CAC/LTV, 채널 ROI, PQL 승격률, 코호트 잔존
+
+    - section: "ICP · Segmentation · Positioning"
+      mode: replace
+      content: |
+        ICP v1:
+          - Primary: 중소형 대출 브로커리지(10~100 seats, KR 우선)
+          - Secondary: 리스크/컴플팀이 있는 금융 파트너(연동 PoV)
+        세분화: seat 규모·월 리드량·규제 민감도·IT 성숙도 점수.
+        메시지 맵(핵심/증거/반론대응)과 금지표현(과도한 보장/오인 우려) 목록.
+
+    - section: "Packaging & Pricing Experiments"
+      mode: replace
+      content: |
+        플랜(초안): Basic/Pro/Ent (Gate-Z와 동기).
+        실험:
+          - A/B: 월정액 vs 사용량 혼합, 연간 선결제 -10%, PoV fee 환급 규칙.
+          - 할인: 파트너/비영리/초기고객 쿠폰 정책.
+        환불/조정: Gate-U API 사용, 환불 SLA/감사라벨 부착.
+
+    - section: "Channels & Motions"
+      mode: replace
+      content: |
+        인바운드: SEO/콘텐츠(가이드/케이스스터디), 웨비나, 마켓플레이스(Gate-V).
+        아웃바운드: SDR 시퀀스(3주, 6터치), 이벤트-트리거(신규 규제 이슈 등).
+        파트너: 등급(Silver/Gold/Platinum), 공동세일즈/리드쉐어/Co-op 마케팅.
+
+    - section: "CRM Abstraction & Sequencer"
+      mode: replace
+      content: |
+        CRM Adapter:
+          - 통합 인터페이스(ICRM): upsert_lead, add_activity, move_stage, assign_owner.
+          - 지원: generic_crm(webhook/CSV), crm_stub, 나중에 상용 CRM 커넥터 추가.
+        Router:
+          - 리드 라우팅 규칙(ICP 적합도, 지역/좌석, SLA 타이머).
+        Sequencer:
+          - 템플릿(이메일/콜/링크드인 DM), 윈도우/쿨다운, 실패/성공 후크.
+
+    - section: "Product-Led Growth (PLG)"
+      mode: replace
+      content: |
+        트라이얼: 14일, 결정 호출/커넥터/시뮬 제한. 인앱 가이드/체크리스트.
+        PQL 규칙 예: 72시간 내 결정 50회 + triage 정확도 ≥ 65% + 팀원 3명 초대.
+        업셀: PQL→SQL 자동 생성, /billing 업그레이드 딥링크(Gate-S/U).
+
+    - section: "Compliance & Consent (Growth)"
+      mode: replace
+      content: |
+        - 모든 메시징/랜딩은 Gate-W 정책 라벨/동의 스코프 부여.
+        - 옵트인 수집/구독취소, 쿠키/추적 배너 지역 규칙(Gate-Z 연동).
+        - 세일즈 주장에는 근거 링크(케이스스터디/지표), 과장 금지.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AA 성공 기준:
+          - MQL→SQL 전환 ≥ 20% (초기 코호트), SQL→Paid ≥ 15% (PoV 종료 30일 내)
+          - PQL 정의/검출 정확도 F1 ≥ 0.7, PQL→Paid 전환 ≥ 25%
+          - 리드 응답 SLA: p90 ≤ 2h(영업일), 시퀀스 완료율 ≥ 85%
+          - 채널별 CAC/Payback 12개월 이내, 최소 1개 채널 CAC<⅔ LTV
+          - CRM e2e/라우팅/시퀀서/대시보드 동작 + Evidence Bundle(GTM) 제출
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - ICP/포지셔닝/메시지 맵·금지표현·법무 검토
+        - 이벤트 택소노미·퍼널 대시보드·PQL 규칙·PLG 가드
+        - CRM 어댑터/라우팅/시퀀서·템플릿·SLA 타이머
+        - 채널 실행(SEO/컨텐츠/웨비나)·파트너 프로그램(v1)
+        - 가격/패키징 실험·증빙/Evidence Bundle
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 136: ICP/메시지 맵 초안 + 금지표현·법무 검토/승인(ko)
+        Day 137: events.yaml v1 + 대시보드 카드(퍼널/CAC/LTV) + PQL 규칙 구현
+        Day 138: CRM adapter(generic/stub) + 리드 라우터 + 시퀀서 MVP + SLA 타이머
+        Day 139: 채널 킷(가이드/케이스스터디/웨비나) + 파트너 등급/정책 + 마켓 연동
+        Day 140: 가격 실험 스위치·쿠폰·환불흐름 + GTM Evidence 정리·SLO 검수
+
+work:
+  claude:
+    - id: C-70
+      title: ICP & Positioning/Message Map (ko)
+      deliverables:
+        - docs/gtm/icp_matrix.md, docs/gtm/messaging_map.md, docs/gtm/banned_claims.md
+      acceptance:
+        - 핵심/증거/반론·금지표현·법무 승인 코멘트 포함
+    - id: C-71
+      title: Channel Kits (SEO/Webinar/Case)
+      deliverables:
+        - web/content/landing_kits.md, web/content/case_template.md, ops/webinar_runbook.md
+      acceptance:
+        - 1개 케이스스터디 샘플, 웨비나 체크리스트 포함
+    - id: C-72
+      title: Sales Playbook & Sequences
+      deliverables:
+        - ops/sales_playbook.md, ops/sequences_3w6t.md, email_templates/*.md
+      acceptance:
+        - 3주/6터치 시퀀스, 반론대응 스크립트, 종결 단계 체크리스트
+risks:
+  - name: 컴플라이언스/과장 광고 리스크
+    mitigation: 금지표현 목록·법무 리뷰 필수·증거링크·Gate-W 동의/라벨
+  - name: PQL 오탐/미탐
+    mitigation: 규칙+모델 하이브리드·샘플 리뷰·카나리 승격
+  - name: 채널 CAC 과다
+    mitigation: 상한 예산·미니멈 성과 게이트·빠른 중단 스위치
+  - name: CRM 데이터 품질
+    mitigation: 스키마 검증·중복 병합·SLA 타이머 경보
+  - name: 파트너 채널 충돌
+    mitigation: 지역/세그먼트 독점 규칙·리드 어트리뷰션 정책

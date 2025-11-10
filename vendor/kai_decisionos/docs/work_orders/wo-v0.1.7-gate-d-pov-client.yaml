@@ -1,0 +1,63 @@
+meta:
+  version: v0.1.7
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-D: Client PoV — 싱글 테넌트 배포/관측성/보안 증빙/현장 리허설 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Tenancy & Config"
+      mode: replace
+      content: |
+        싱글 테넌트(고객별 분리) v0.1.7:
+        - tenant.yaml: {tenant_id, name, ip_allowlist, rbac_map, connectors, budgets}
+        - 구성 주입: X-Tenant-ID 헤더 또는 /t/{tenant}/ 경로 프리픽스
+        - 암호/키: filesystem keystore(mounted secrets/, mode 0400)
+        - 예산: budgets:{max_cost_usd, hard_timeout_ms, retries}
+        - 감사: audit.ndjson에 tenant_id 필수 포함
+    - section: "Interfaces"
+      mode: append
+      content: |
+        테넌트 인터페이스(v0.1.7):
+        - Header: X-Tenant-ID: <tenant>
+        - Path(대안): /api/v1/t/{tenant}/decide|simulate|explain|metrics
+        - Admin: POST /api/v1/t/{tenant}/config/reload (RBAC: admin)
+    - section: "Security Controls"
+      mode: append
+      content: |
+        추가 통제(고객 PoV):
+        - IP Allowlist(nginx/middleware) — tenant.yaml의 ip_allowlist 반영
+        - Secrets Handling — secrets/ 볼륨 마운트(읽기전용), .env.client만 참조
+        - Lineage — consent_snapshot + decision_input_hash 함께 보관
+    - section: "SLO & KPIs"
+      mode: replace
+      content: |
+        PoV 성공 기준(Gate‑D):
+        - 운영: 가동시간 99.5%+ (PoV 기간), /health 에러율 <1%
+        - 성능: /decide p95 < 800ms(모델 미호출), 오류율 < 1%
+        - 데이터: 초기 적재 ≥ 10k rows, DLQ < 2%
+        - 품질: Reality‑Seal 4게이트 유지, 리딩KPI 2/3 충족(2주 관찰)
+    - section: "Evidence Binder"
+      mode: replace
+      content: |
+        보안/운영 증빙 바인더(v0.1.7):
+        - logs/: 구조화 로그 샘플 + 회전 설정
+        - reports/: Reality‑Seal, rule coverage, ingest summary
+        - screenshots/: /metrics, /consent 호출, RBAC/401 캡처
+        - runbooks/: runbook_pov.md, rollback.md
+        - manifests/: 월간 manifest + 해시 검증 출력
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑D: Client PoV 드레스리허설 → 현장 배포(싱글 테넌트, No‑Gemini 유지)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 19: 싱글 테넌트 구성(tenant.yaml) + secrets/ 마운트 검증
+        Day 20: 커넥터 CSV/Sheets/S3 PoV 대상 데이터 적재 리허설
+        Day 21: 관측성 점검(메트릭 대시보드/알람) + /metrics 검수
+        Day 22: PoV Runbook/롤백 절차 드릴 + 책임분담 확인
+        Day 23: 백업→복구→해시체인 검증 리허설 + Evidence 정리
+        Day 24: 최종 동결(Tag v0.1.7) + 고객 현장 배포 체크리스트
+

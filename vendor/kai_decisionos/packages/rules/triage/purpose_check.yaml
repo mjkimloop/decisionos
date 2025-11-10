@@ -1,0 +1,11 @@
+name: purpose_check
+version: 1.0.0
+rules:
+  - name: purpose_investment_review
+    when: 'payload.get("purpose", "") == "investment"'
+    priority: 45
+    action:
+      class: review
+      reasons: ["investment_additional_review"]
+      required_docs: ["investment_plan"]
+

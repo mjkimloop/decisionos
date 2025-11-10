@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/lead_payload.schema.json",
+  "title": "LeadPayload",
+  "type": "object",
+  "properties": {
+    "credit_score": { "type": "integer", "minimum": 0, "maximum": 850 },
+    "dti": { "type": "number", "minimum": 0, "maximum": 2 },
+    "income_verified": { "type": "boolean" }
+  },
+  "required": ["credit_score", "dti", "income_verified"],
+  "additionalProperties": true
+}
+

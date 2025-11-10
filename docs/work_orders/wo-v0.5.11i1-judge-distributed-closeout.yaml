@@ -1,0 +1,55 @@
+meta:
+  version: v0.5.11i.1
+  date: 2025-11-10
+  status: locked
+  summary: "분산 저지 마감: dosctl CLI, k-of-n 통합/단위/E2E 테스트, HMAC+Nonce Anti-Replay, Evidence.judges 병합, CI 확장"
+
+patches:
+  techspec:
+    - section: "Gate-AJ — Distributed Judges v1 (Close-out)"
+      mode: upsert
+      content: |
+        범위: 로컬/HTTP 저지 혼합 k-of-n 합의의 운영 마감.
+        포함:
+          - CLI: dosctl judge quorum (파일 입출력, 증빙 병합, 종료코드 규약)
+          - Evidence.judges: 투표 로그(개별 판단, 지연, 버전) 병합 및 서명 포함
+          - 보안: HMAC-SHA256 서명 + Anti-Replay(Nonce+Timestamp, TTL=600s, clock_skew=±120s)
+          - 안정성: timeout/retry(지수백오프), fail_closed_on_degrade, 5xx/서명불일치/리플레이=fail
+          - 가시성: judge 투표/지연 메트릭을 Gate-T 카운터로 발행(차주 Gate-**j**에서 상세화)
+    - section: "Security — Request Signing & Anti-Replay"
+      mode: upsert
+      content: |
+        요청 헤더:
+          - X-DecisionOS-Signature: base64(HMAC_SHA256(canonical_json, key))
+          - X-Key-Id: 키 식별자(기본 'k1')
+          - X-Timestamp: ISO8601(UTC), 허용 clock_skew ±120s
+          - X-Nonce: 128-bit 랜덤(hex), TTL=600s, 재사용 시 401
+        서버는 (key_id, nonce) 조합 재사용 차단. 서버 시간과의 차이가 120s 초과면 거부.
+        리플레이 저장소는 SQLite 또는 Redis 권장.
+    - section: "Observability — Evidence.judges"
+      mode: upsert
+      content: |
+        스냅샷 예:
+        "judges": {
+          "k": 2, "n": 3, "final": "pass",
+          "votes": [
+            {"id":"local-a","decision":"pass","latency_ms":12,"reasons":[],"version":"aj-1.0"},
+            {"id":"http-b","decision":"pass","latency_ms":63,"reasons":[],"version":"aj-1.0"},
+            {"id":"http-c","decision":"fail","latency_ms":2001,"reasons":["timeout"],"version":"aj-1.0"}
+          ]
+        }
+        무결성 서명 대상에 포함.
+  plan:
+    - section: "Milestones — v0.5.11i.1"
+      mode: upsert
+      content: |
+        - CLI dosctl judge quorum 구현
+        - Evidence.judges 병합 옵션(--attach-evidence)
+        - Anti-Replay(minimal SQLite) 유틸(테스트용)
+        - 단위/통합/E2E 테스트 그린
+        - CI 매트릭스 업데이트(gate_aj async)
+    - section: "Next Actions — v0.5.11i.1"
+      mode: upsert
+      content: |
+        Day 224: CLI/증빙 병합/반복방지 유틸
+        Day 225: unit+integration+e2e 테스트, CI 확장, 커밋/태깅

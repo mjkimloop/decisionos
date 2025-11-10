@@ -1,0 +1,118 @@
+meta:
+  version: v0.2.0
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-G: Auto-Failover·Health Probes·Error-Budget SLO·Canary·Chaos (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Health Probes & Degradation"
+      mode: replace
+      content: |
+        프로브 정의(v0.2.0):
+        - /healthz (liveness): 프로세스 생존·핵심 스레드 동작
+        - /readyz (readiness): 필수 의존성(DB 읽기, router state, config load)
+        - /livez  (readiness+write): 쓰기 경로 허용 여부(승격·락 상태 반영)
+        디그레이드 정책:
+        - DB 장애 시: 읽기 전용 모드, /decide 차단, /simulate 허용
+        - switchboard 장애: local 폴백 강제, openai 경로 차단
+        - failover 중: /livez=fail, /readyz=ok(읽기는 허용)
+    - section: "Auto‑Failover Controller"
+      mode: replace
+      content: |
+        구성요소:
+        - watcher: DB health/replication lag 모니터 (5s 주기)
+        - quorum(옵션): file‑based lock 또는 redis(옵션)로 단일 승격 보장
+        - promoter: standby 승격(promote) + write‑block 구 노드(펜싱)
+        - router sync: region/router failover flag 업데이트
+        보호장치:
+        - split‑brain 방지: 승격 전 old‑primary 접근 차단 목록 반영 + connection kill
+        - post‑promote 검증: LSN/해시 일치 확인 후 /livez 오픈
+    - section: "Error Budget Policy"
+      mode: replace
+      content: |
+        에러버짓 정책(v0.2.0):
+        - SLO: /decide p95<800ms, 오류율<1%, 가용성 99.5%/월
+        - 버짓 계산: (1‑SLO)×기간 분으로 산정, /api/v1/metrics에 노출
+        - 소진 규칙: 버짓 50% 초과→릴리즈 동결, 80% 초과→기능 플래그 롤백, 100%→변경동결+사후분석
+    - section: "Canary & Progressive Delivery"
+      mode: replace
+      content: |
+        카나리 전략:
+        - 대상: tenant 또는 percent 기반(1%→5%→25%→100%)
+        - 제어: feature_flags.canary:{enabled, percent, tenants[]}
+        - 게이트: 카나리 동안 p95/오류율/에러버짓 감시, 임계치 초과 시 자동 롤백
+        - 인터페이스: POST /api/v1/admin/canary {enabled, percent, tenants}
+    - section: "Chaos & DR Drills"
+      mode: replace
+      content: |
+        카오스 항목:
+        - 네트워크 단절/지연(게이트웨이↔DB)
+        - 프로세스 강제 종료(watcher/promoter)
+        - region 장애 시나리오(standby만 정상)
+        주기: PoV 기간 주1회 소규모, 월1회 DR 리허설
+        스크립트: scripts/chaos_net.sh, scripts/chaos_kill.sh, scripts/drill_failover.sh
+    - section: "Interfaces — API/CLI"
+      mode: append
+      content: |
+        추가 엔드포인트(v0.2.0):
+        - GET  /healthz | /readyz | /livez
+        - POST /api/v1/admin/canary (RBAC: admin)
+        - POST /api/v1/admin/failover/simulate (드라이런)
+    - section: "Observability"
+      mode: append
+      content: |
+        SLO/버짓 노출:
+        - /metrics에 error_budget_remaining, canary_active, failover_state 추가
+        - synthetic check: /probes/synthetic_decide (내부만)
+    - section: "Security Controls"
+      mode: append
+      content: |
+        보호 조치:
+        - /healthz는 내부 전용, /readyz는 IP allowlist, /livez와 /admin/*는 RBAC+HMAC 옵션
+        - 카오스/드릴 엔드포인트는 로컬 인증 토큰 별도
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑G 마일스톤(완료 조건):
+        - 자동 Failover 드라이런 2회 통과(RTO≤20m, split‑brain 0)
+        - 프로브 3종 배포 + 디그레이드 동작 캡처
+        - 카나리 5%→25%→100% 롤아웃 24h 내 무사 통과
+        - 에러버짓 대시보드/정책 문서화 및 적용
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 36: 프로브 3종 구현 + 라우팅 디그레이드 연동
+        Day 37: Auto‑failover controller(watcher/promoter) + 펜싱
+        Day 38: 카나리 라우터/플래그 + 롤백 훅, /admin/canary
+        Day 39: 카오스 스크립트/DR 드릴 + /admin/failover/simulate
+        Day 40: 에러버짓 계산/노출 + 문서/런북 업데이트
+
+work:
+  claude:
+    - id: C-15
+      title: SLO/에러버짓 정책서
+      deliverables:
+        - docs/slo_error_budget.md (정의·계산·동결/롤백 규칙)
+      acceptance:
+        - 정책 시트+예시 계산 포함, 운영 체크리스트 링크
+    - id: C-16
+      title: Auto‑Failover/Incident Runbook
+      deliverables:
+        - ops/runbook_autofailover.md
+        - ops/comms_incident_templates.md
+      acceptance:
+        - 승격/펜싱/복귀/커뮤니케이션 단계 포함
+    - id: C-17
+      title: Chaos/DR Drill Guide
+      deliverables:
+        - ops/chaos_guide.md, schedules/chaos_calendar.md
+      acceptance:
+        - 주간/월간 계획표, 위험·롤백 포함
+    - id: C-18
+      title: Canary 운영 가이드
+      deliverables:
+        - docs/canary_playbook.md (임계치·롤백 트리)
+      acceptance:
+        - 5%→25%→100% 단계·판정표 포함

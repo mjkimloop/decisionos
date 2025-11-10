@@ -1,0 +1,85 @@
+feat(gate_s): rating/quota/cost-guard v1 + tests (v0.5.11d)
+
+요금계산/한도관리/예산감시 완료. Gate-S가 완전한 billing 시스템으로 진화.
+
+신규 모듈 (3개):
+1. apps/rating/ - 요금 계산
+   - plans.py (225 bytes): MetricPlan, Plan
+   - engine.py (1.7 KB): rate_from_buckets, rate_report
+
+2. apps/limits/ - 할당량 관리
+   - quota.py (1.6 KB): QuotaRule, QuotaConfig, InMemoryQuotaState
+
+3. apps/cost_guard/ - 예산/이상 감시
+   - budget.py (593 bytes): BudgetPolicy, check_budget
+   - anomaly.py (563 bytes): EwmaConfig, ewma_detect
+
+Rating 기능:
+- 입력: ReconcileReport buckets (metric별 사용량 sum)
+- 계획: metric별 included(포함량) + overage_rate(초과 단가)
+- 출력: RatingResult(subtotal, LineItem[])
+- LineItem: metric, usage, included, overage_units, overage_rate, amount
+- 미정의 metric: 과금 0 (v1 정책)
+
+테스트 시나리오 (Rating):
+- tokens: included=100, overage_rate=0.02, usage=150 → over=50, amount=1.0
+- storage_gb: included=10, overage_rate=0.5, usage=8 → over=0, amount=0
+- unknown: 미정의 → amount=0
+- subtotal: 1.0
+
+Quota 기능:
+- QuotaRule: soft/hard 임계값
+- InMemoryQuotaState: (tenant, metric) → 누적 사용량
+- decide_quota: used > hard → "deny", used > soft → "throttle", else → "allow"
+- apply_quota_batch: 배치 처리 + 상태 업데이트
+
+테스트 시나리오 (Quota):
+- 초기 90 → allow (used=90)
+- +20 → throttle (used=110, soft=100)
+- +15 → deny (used=125, hard=120)
+
+Cost-Guard 기능:
+- BudgetPolicy: monthly_limit, warn_ratio=0.8
+- check_budget:
+  - spent >= limit → "exceeded"
+  - spent >= limit*warn_ratio → "warn"
+  - else → "ok"
+- EwmaConfig: alpha=0.3, spike_ratio=0.5
+- ewma_detect: EWMA 계산 + 급증 탐지
+  - current > ewma*(1+spike_ratio) → is_spike=True
+
+테스트 시나리오 (Cost-Guard):
+- limit=100, spent=79 → "ok"
+- spent=85 → "warn" (80% 초과)
+- spent=100 → "exceeded"
+- EWMA: [10,12,11,13,40] → spike=True
+
+전체 Gate-S 테스트 결과:
+✓ test_inmemory_idempotency_basic PASSED
+✓ test_sqlite_idempotency_persistent PASSED
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ test_watermark_lateness_v1_drop_and_keep PASSED
+✓ test_rating_simple_overage PASSED
+✓ test_quota_soft_and_hard PASSED
+✓ test_budget_levels_and_ewma_spike PASSED
+✓ test_metering_contract_shape_seed XPASS
+
+7 passed, 1 xpassed in 0.30s
+
+Work Order:
+- docs/work_orders/wo-v0.5.11d-gate-s-rating-quota-costguard.yaml
+- techspec: Rating/Quota/Cost-Guard v1 섹션 3개 추가
+- plan: Milestones — Gate-S v1.3 추가
+
+v1 제외사항 (후속 단계):
+- Rating: 단위/환율/세금
+- Quota: pluggable store (현재 InMemory)
+- Cost-Guard: Evidence 연동, RBAC hook
+
+다음 단계 (Day 221-222):
+- Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering)
+- Day 222: Cost-Guard 조치의 Evidence 연동 + RBAC hook
+
+Gate-S 상태: Green + Full Billing Capabilities
+
+No-Gemini. Claude Code 단독 구현.

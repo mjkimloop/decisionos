@@ -1,0 +1,45 @@
+meta:
+  version: v0.5.11m
+  date: 2025-11-10
+  status: locked
+  summary: "Evidence 불변성/인덱서 + S3 ObjectLock + Chaos/DR 스크립트 + Clock drift 가드 + RBAC·CI 주석"
+
+patches:
+  techspec:
+    - section: "Evidence — Immutability & Indexer v1"
+      mode: upsert
+      content: |
+        - 모든 Evidence JSON을 주기적으로 스캔하여 index.json 생성:
+          {path, size, mtime, sha256, parsed_meta(tenant, generated_at, version), tampered(bool)}.
+        - tampered: 파일 자체 sha256 != evidence.integrity.signature_sha256 이거나 필수 블록 누락.
+        - 선택: S3(Object Lock, COMPLIANCE, retain N일) 업로드 잡 제공.
+    - section: "Chaos/DR — Fail-Fast & Abort Gate"
+      mode: upsert
+      content: |
+        - chaos_inject.sh: 가짜 reqlog/judgelog 생성(에러/레이턴시 스파이크) → Evidence.hydrate → 게이트 고의 Fail.
+        - abort_on_gate_fail.sh: judge quorum 실패 시 즉시 abort.sh 호출, 증빙 보관.
+    - section: "Clock — Drift Guard"
+      mode: upsert
+      content: |
+        - jobs/clock_guard.py: 기준시각(reference_utc.txt) 대비 시스템 UTC 드리프트(X초) 초과 시 비정상 종료.
+        - timeutil.now_utc() 일원화, CI pre-gate로 clock guard 실행.
+    - section: "RBAC & CI Notes"
+      mode: upsert
+      content: |
+        - 모든 릴리스 스크립트는 PEP.enforce(scope) 필수.
+        - CI Step Summary에 stage/증빙 요약 남김, 아티팩트 업로드.
+  plan:
+    - section: "Milestones — v0.5.11m"
+      mode: upsert
+      content: |
+        - Day 1: indexer/clock_guard/chaos·DR 스크립트 추가, 로컬 스모크
+        - Day 2: CI pre-gate(clock) → evidence_harvest → indexer → infra·canary gate 순서 확정
+        - Day 3: S3 ObjectLock 잡(옵션) 연결, 운영 런북 보강
+    - section: "Next Actions — v0.5.11m"
+      mode: upsert
+      content: |
+        - jobs/evidence_indexer.py, apps/obs/evidence/indexer.py
+        - jobs/evidence_objectlock.py (옵션, boto3)
+        - apps/common/clock.py, jobs/clock_guard.py
+        - pipeline/chaos/chaos_inject.sh, pipeline/release/abort_on_gate_fail.sh
+        - tests/* 스모크 추가, CI 매트릭스에 pre-gate 삽입

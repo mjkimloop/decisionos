@@ -1,0 +1,105 @@
+meta:
+  version: v0.3.5
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑P: Search & Catalog · Lineage v2 · Data Products (No‑Gemini)"
+
+work:
+  codex:
+    - id: X-71
+      title: Catalog Registry & Indexer
+      deliverables:
+        - apps/catalog/models.py
+        - apps/catalog/registry.py
+        - apps/catalog/indexer.py
+        - apps/gateway/routers/catalog.py
+        - apps/gateway/routers/search.py
+      acceptance:
+        - "등록/조회/검색, FTS 인덱스 업데이트 지연 ≤ 5m"
+    - id: X-72
+      title: Lineage v2 Collector & APIs
+      deliverables:
+        - apps/lineage/collector.py
+        - apps/lineage/graph.py
+        - apps/gateway/routers/lineage.py
+      acceptance:
+        - "커버리지≥90%, 임팩트 p95≤1200ms, idempotent 수집"
+    - id: X-73
+      title: Data Products Registry & Builder
+      deliverables:
+        - apps/products/schema.py
+        - apps/products/registry.py
+        - apps/products/builder.py
+        - apps/gateway/routers/products.py
+      acceptance:
+        - "register/publish/rollback 동작, 제품 1종 e2e"
+    - id: X-74
+      title: Catalog/Lineage/Products UI
+      deliverables:
+        - web/catalog/index.html
+        - web/lineage/index.html
+        - web/products/index.html
+      acceptance:
+        - "검색/필터/그래프/버전 보기, 증빙 캡처 스크립트 제공"
+    - id: P-14
+      title: dosctl 확장(catalog/search/lineage/product)
+      deliverables:
+        - "cli/dosctl/main.py: catalog add|ls|show"
+        - "cli/dosctl/main.py: search"
+        - "cli/dosctl/main.py: lineage graph|impact"
+        - "cli/dosctl/main.py: product register|publish|rollback|list"
+      acceptance:
+        - "로컬 e2e 제어 가능"
+
+risks:
+  - name: PII/민감데이터 노출 위험(검색/카탈로그)
+    mitigation: sensitivity 스코프 필터·PII 마스킹·RBAC 정합성 CI
+  - name: 라인리지 불완전/오탐
+    mitigation: 파이프라인 계측 강화·수동 보정(override)·커버리지 메트릭
+  - name: 검색 품질 미달
+    mitigation: 랭킹 튜닝 가이드·라벨셋·사용도 부스팅·쿼리 로깅 분석
+  - name: 인덱스 비용/성능 이슈
+    mitigation: 필드 최소화·증분 인덱싱·아카이브·옵션형 OpenSearch
+
+patches:
+  techspec:
+    - section: "Catalog & Search"
+      mode: replace
+      content: |
+        카탈로그/검색(v0.3.5):
+        - Registry: 데이터셋/파이프라인/제품 메타 등록·조회
+        - Indexer: FTS 인덱스, 업데이트 지연 ≤ 5m 목표
+        - Search: 키워드/필터/스코프(sensitivity/RBAC)
+    - section: "Lineage v2"
+      mode: replace
+      content: |
+        라인리지 v2(v0.3.5):
+        - Collector: idempotent 수집, 커버리지≥90%
+        - Graph: 영향도 계산 p95≤1200ms, override 지원
+        - APIs: 그래프/임팩트 조회
+    - section: "Data Products"
+      mode: replace
+      content: |
+        데이터 제품(v0.3.5):
+        - Registry/Schema/Builder: register/publish/rollback
+        - e2e: 제품 1종 등록→발행→롤백 확인
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑P 신규/확장 엔드포인트:
+        - /api/v1/catalog/*, /api/v1/search
+        - /api/v1/lineage/*
+        - /api/v1/products/*
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑P: Search & Catalog · Lineage v2 · Data Products 도입
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 111: Catalog registry/indexer + FTS
+        Day 112: Lineage collector/graph + 커버리지 테스트
+        Day 113: Data products registry/schema/builder
+        Day 114: UI 3종(catalog/lineage/products)
+        Day 115: dosctl catalog/search/lineage/product e2e

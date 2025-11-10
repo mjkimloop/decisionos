@@ -1,0 +1,11 @@
+name: dsr_guard
+version: 1.0.0
+rules:
+  - name: dsr_high
+    when: 'payload.get("target_amt", 0) / (payload.get("income_monthly", 1) or 1) > 20'
+    priority: 70
+    action:
+      class: review
+      reasons: ["dsr_above_threshold"]
+      required_docs: ["income_proof", "debt_statement"]
+

@@ -1,0 +1,28 @@
+meta:
+  version: v0.5.11a
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-S · Metering Contracts v1 (schema/ingest/reconcile/idempotency) + test"
+
+patches:
+  techspec:
+    - section: "Gate-S — Metering v1"
+      mode: upsert
+      content: |
+        - 이벤트 계약: tenant, metric, corr_id, ts, value, tags
+        - 멱등키: sha256(tenant|metric|corr_id)
+        - 윈도: hour, 집계: count/sum/min/max
+        - 리포트: buckets(dict), duplicates(int)
+  plan:
+    - section: "Milestones — Gate-S v1"
+      mode: upsert
+      content: |
+        - schema/ingest/reconcile 구현
+        - test_metering_contract_v1 Green
+        - requirements-dev에 pydantic 추가
+    - section: "Next Actions — Gate-S"
+      mode: upsert
+      content: |
+        Day 218: ingest backend를 pluggable(store 인터페이스)로 분리
+        Day 219: watermark/지연 처리, 윈도 누수 테스트 추가
+        Day 220: rating/quota/cost_guard와 계약 연계 초안

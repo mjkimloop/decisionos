@@ -1,0 +1,6 @@
+sample_rate: 0.1
+redactor:
+  enabled: true
+  patterns:
+    - "\\d{3}-\\d{2}-\\d{4}"
+    - "\\d{4}-\\d{4}-\\d{4}-\\d{4}"

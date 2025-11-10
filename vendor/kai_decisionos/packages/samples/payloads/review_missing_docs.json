@@ -1,0 +1,9 @@
+{
+  "org_id": "orgC",
+  "payload": {
+    "credit_score": 640,
+    "dti": 0.44,
+    "income_verified": false
+  }
+}
+

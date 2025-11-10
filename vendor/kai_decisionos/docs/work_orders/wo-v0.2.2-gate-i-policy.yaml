@@ -1,0 +1,124 @@
+meta:
+  version: v0.2.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑I: Policy Engine · PII Vault · Human‑in‑the‑Loop (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-21
+      title: Threat Model & Audit Checklist
+      deliverables:
+        - docs/threat_model.md
+        - docs/audit_checklist.md
+      acceptance:
+        - "위협 시나리오/완화책·감사 항목 정리"
+    - id: C-23
+      title: HITL 운영 가이드·스크립트
+      deliverables:
+        - docs/hitl_playbook.md
+        - ops/hitl_escalation.md
+      acceptance:
+        - "SLA·에스컬레이션 규칙·소통 템플릿 포함"
+
+  codex:
+    - id: X-38
+      title: Policy Engine v1
+      deliverables:
+        - apps/policy/engine.py
+        - apps/policy/validator.py
+        - apps/policy/simulator.py
+        - apps/gateway/routers/policy.py
+      acceptance:
+        - "validate/simulate 통과, 샘플 정책 10개 e2e, 감사 로그 남김"
+    - id: X-39
+      title: PII Vault v1
+      deliverables:
+        - apps/vault/service.py
+        - apps/vault/keys.py
+        - scripts/rotate_keys.sh
+        - apps/gateway/routers/vault.py
+      acceptance:
+        - "seal/unseal/rotate e2e, consent/RBAC/audit 연동, 토큰만 외부 노출"
+    - id: X-40
+      title: HITL v1(API/Queue/UI 최소)
+      deliverables:
+        - apps/hitl/queue.py
+        - apps/gateway/routers/hitl.py
+        - web/hitl/index.html
+      acceptance:
+        - "require_hitl 액션 경로 검증, SLA·통계 노출"
+    - id: X-41
+      title: Enforcement Hooks & Replays
+      deliverables:
+        - apps/gateway/middleware/policy_enforcer.py
+        - apps/executor/hooks/hitl_gate.py
+        - tests/test_policy_hitl_replay.py
+      acceptance:
+        - "deny/allow/require_hitl/route 동작, 재현 리플레이 일치"
+    - id: P-07
+      title: dosctl 확장(policy/vault/hitl)
+      deliverables:
+        - "cli/dosctl/main.py: policy validate|apply|simulate"
+        - "cli/dosctl/main.py: vault seal|unseal"
+        - "cli/dosctl/main.py: hitl list|approve|reject"
+      acceptance:
+        - "로컬에서 end‑to‑end 제어 가능"
+
+risks:
+  - name: 정책 오판으로 대량 차단
+    mitigation: dry-run + 카나리 적용, 기본 동작 allow, 임계치 초과 시 자동 비활성화
+  - name: 키 손실/접근 차단
+    mitigation: master_key 백업/이중화, 복구 절차 문서화, 접근 2인 승인
+  - name: HITL 지연으로 SLA 미달
+    mitigation: 에스컬레이션·알림, reviewer 슬롯/근무시간 설정, 자동 반려 정책
+
+patches:
+  techspec:
+    - section: "Policy Engine"
+      mode: replace
+      content: |
+        정책엔진 v1(선언형 DSL):
+        - 액션: allow/deny/require_hitl/route/mask
+        - 구성: 파일 정책 + 린터 + 시뮬레이터
+        - 집행 훅: gateway/ingest/executor/export 경로에 적용
+    - section: "PII Vault"
+      mode: replace
+      content: |
+        Vault v1:
+        - 암호화: AES‑256‑GCM 엔벌로프, 키로테이션
+        - API: seal/unseal/rotate, 토크나이즈
+        - 연동: consent/RBAC/audit
+    - section: "HITL"
+      mode: replace
+      content: |
+        Human‑in‑the‑Loop v1:
+        - 승인/반려 대기열, 사유코드, SLA(95% < 30m), 에스컬레이션
+        - 경량 UI: web/hitl/index.html(리스트/승인/반려)
+    - section: "Enforcement"
+      mode: replace
+      content: |
+        집행/리플레이:
+        - 미들웨어: policy_enforcer
+        - 훅: hitl_gate
+        - 재현: test_policy_hitl_replay로 결정 경로 일치 검증
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑I 신규 엔드포인트:
+        - POST /api/v1/policy/validate, POST /api/v1/policy/simulate
+        - POST /api/v1/vault/seal|unseal|rotate
+        - GET  /api/v1/hitl/queue, POST /api/v1/hitl/approve|reject
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑I: Policy Engine·PII Vault·HITL 도입(선언형/보안강화)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 51: Policy 엔진 스캐폴드/샘플 10개
+        Day 52: Vault 서비스(seal/unseal/rotate) 통합
+        Day 53: HITL API/큐/미니 UI 연결
+        Day 54: Enforcement 훅 + 리플레이 테스트 완성
+        Day 55: dosctl policy/vault/hitl 확장·리허설

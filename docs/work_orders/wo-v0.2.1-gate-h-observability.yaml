@@ -1,0 +1,84 @@
+meta:
+  version: v0.2.1
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-H: Observability·Tracing·Cost Sentry·Vendor v2 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Observability & Tracing"
+      mode: replace
+      content: |
+        OpenTelemetry 기반 분산추적(v0.2.1):
+        - SDK: otel-api(내장) + OTLP Exporter(옵션). 외부 수집기 미사용 시 traces.ndjson 로컬 기록
+        - 상관관계: inbound X-Corr-ID 생성/전파, decision_id/span_link 연계, 로그에 corr_id, span_id 삽입
+        - 샘플링: 기본 10% 헤드샘플링, 오류/슬로우케이스는 테일샘플링 강제(100%)
+        - PII 스크럽: 로그/트레이스 필드에 주민·계좌·연락처·주소 패턴 마스킹(apply before export)
+        - 메트릭 확장: 히스토그램(latency p50/p90/p95/p99), ingest_lag_sec, cost_estimate_ms
+        - 보존: traces.ndjson 7일, logs 일 회전. Evidence Binder에 대표 트레이스 3건 보관
+    - section: "Cost Sentry"
+      mode: replace
+      content: |
+        비용 감시/제어(v0.2.1):
+        - 모델 호출 전 비용예측: provider price_table × tokens_estimate ⇒ expected_usd
+        - 예산검사: remaining_budget_usd < expected_usd → 폴백(local) 또는 차단(policy)
+        - 실비 집계: cost_event{ts, tenant_id, provider, route, usd, tokens} 기록, summary와 대조(오차≤1%)
+        - 알림: 예산 80%/100% 임계치 도달 시 경고 이벤트(로그)
+        - 구성: tenants/<tenant>/tenant.yaml 내 budgets.{max_cost_usd, hard_timeout_ms, retries}
+    - section: "Vendor Abstraction v2"
+      mode: replace
+      content: |
+        프로바이더 플러그인 구조(v2):
+        - ProviderBase: capabilities(), estimate(tokens), invoke(prompt, opts), map_error(e)
+        - Registry: providers.yaml 로드({name, type, base_url, pricing, limits, features})
+        - 어댑터: local_v2, openai_v2(실), mock_v2(테스트)
+        - 오류 분류: {Retryable, RateLimited, BudgetExceeded, InvalidInput, ProviderDown}
+        - 회복탄력성: 공통 백오프/서킷브레이커/재시도 정책 내장
+    - section: "Interfaces — API/CLI"
+      mode: append
+      content: |
+        추가 엔드포인트(v0.2.1):
+        - GET  /api/v1/traces/{id}         → 익명화된 트레이스 스냅샷(JSON)
+        - GET  /api/v1/costs/summary?period=YYYY-MM&tenant=
+        - GET  /api/v1/vendors/capabilities
+        - POST /api/v1/admin/sampling {head_pct, tail_error:bool}
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑H 성공 기준:
+        - 트레이스 커버리지: 샘플링 10%+ (에러/슬로우 100%)
+        - 비용 오차: provider 인보이스와의 드리프트 ≤ 1%
+        - 예산 위반: 차단·폴백 작동(위반 인시던트 0)
+        - 성능: 관측성 오버헤드 < 5%p, /decide p95 < 800ms 유지
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑H 마일스톤(완료 조건):
+        - OTEL 전파(X-Corr-ID/Span) + traces.ndjson/OTLP 중 택1 정상 수집
+        - Cost Sentry: 사전예측→예산검사→폴백/차단 e2e
+        - Vendor v2: local/openai 마이그레이션 + capabilities 노출
+        - Reality‑Seal 재실행(품질게이트 유지) + 오버헤드 측정 리포트
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 41: correlation middleware + otel span 컨텍스트/로그 연동
+        Day 42: exporter(traces.ndjson/OTLP), 샘플링/테일샘플링 + /traces API
+        Day 43: Cost Sentry 모듈(estimate/enforce) + switchboard 통합
+        Day 44: Vendor v2 ProviderBase/Registry + openai/local 마이그레이션
+        Day 45: /costs/summary, /vendors/capabilities, /admin/sampling + Reality‑Seal 재실행
+
+work:
+  claude:
+    - id: C-19
+      title: Observability Guide & PII Scrub Map
+      deliverables:
+        - docs/observability_guide.md, docs/pii_scrub_map.md
+      acceptance:
+        - 로그/트레이스 필드별 스크럽 규칙·예시·테스트 케이스 포함
+    - id: C-20
+      title: Vendor Error Taxonomy & Playbook
+      deliverables:
+        - docs/vendor_error_taxonomy.md, docs/vendor_playbook.md
+      acceptance:
+        - 오류→조치 매핑표, 롤백/폴백 절차 포함

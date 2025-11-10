@@ -1,0 +1,123 @@
+meta:
+  version: v0.3.3
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-N: SSO/OAuth·Org/Projects·Fine-Grained RBAC — No-Gemini"
+
+patches:
+  techspec:
+    - section: "Identity & SSO"
+      mode: replace
+      content: |
+        OAuth 2.1 + OIDC Core(v0.3.3):
+        - 플로우: Authorization Code + PKCE, Refresh Rotation(재사용 감지)
+        - 토큰: access(JWT, 15m), refresh(opaque, 30d), PAT(서비스계정, 스코프 제한)
+        - issuer: https://<host>/.well-known/openid-configuration, jwks.json 제공
+        - 스코프: openid profile email offline_access org:read/write project:read/write policy:write vault:unseal hitl:approve billing:manage admin:*
+        - 클레임: sub, tid(tenant), oid(org_id), pid(project_id?), roles[], perms[], corr_id
+        - 프로바이더: generic_oidc(Okta/AzureAD/Google) — per-tenant federation(옵션)
+        - 보안: nonce·state, pkce 필수, client_secret_post 금지, SameSite=strict 쿠키, IP/UA 바인딩(옵션)
+        - 로그아웃: RP‑Initiated Logout(세션쿠키 제거), refresh revoke
+    - section: "Org/Projects Model"
+      mode: replace
+      content: |
+        자원모델(v0.3.3):
+        - Org(조직) → Projects(업무단위) → Environments(dev/stage/prod)
+        - 멀티테넌트: tenant == org 기본, enterprise에서 org 내 multi‑project 지원
+        - 맵핑: decisions/policies/vault_tokens/packs/analytics는 project 스코프, billing은 org 스코프
+        - 좌석(seats): org 레벨로 구매, project에 할당(Seat Utilization 리포트 연계)
+    - section: "RBAC (Fine‑Grained)"
+      mode: replace
+      content: |
+        역할/권한(v0.3.3):
+        - 표준 역할: owner, admin, security_admin, billing_admin, project_admin, agent, reviewer, auditor, read_only
+        - 권한(primitives): tenant.admin, org.manage, project.manage, policy.read/write, hitl.approve, vault.seal/unseal(scope), sampling.admin, canary.manage, packs.enable, billing.read/manage, analytics.read, keys.rotate(2인 승인)
+        - 부여: role→permissions 매핑 + 커스텀 grant(deny 우선)
+        - 범위(scope): org|project|environment
+        - 집행: gateway 미들웨어 + routers 레벨 데코레이터 + PII Vault/Policy Enforcer 훅
+        - 감사: 모든 grant/revoke/critical action은 append‑only 로그 + 해시체인(sha256)
+    - section: "Access Reviews & Just‑in‑Time Elevation"
+      mode: replace
+      content: |
+        접근검토/승격:
+        - 정기 리뷰: 분기 1회, 만료기한(expiry) 필수, 비활성 사용자 자동 해지
+        - JIT 승격: reviewer→security_admin 요청 → HITL 큐 승인 시 임시 권한(≤4h)
+        - 이중 통제: keys.rotate, vault.unseal(scope=PII) 2인 승인 강제
+    - section: "Audit & Session Management"
+      mode: replace
+      content: |
+        감사/세션:
+        - audit_event{ts, actor, action, resource, scope, reason, ip, ua, hash, prev_hash}
+        - tamper‑evident: prev_hash 체인 + 일일 앵커 해시 보관(Evidence Binder)
+        - 세션: last_seen, device lock, 동시세션 제한(기본 3), 위험 탐지(이상 위치/UA)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        Auth/SSO:
+        - GET  /.well-known/openid-configuration
+        - GET  /oauth/authorize  | POST /oauth/token  | POST /oauth/revoke
+        - GET  /oauth/jwks.json  | POST /oauth/introspect
+        Org/Projects:
+        - POST /api/v1/orgs {name}
+        - POST /api/v1/orgs/{id}/projects {name, envs[]}
+        - GET  /api/v1/orgs/{id}/projects | DELETE /api/v1/projects/{id}
+        RBAC:
+        - GET  /api/v1/rbac/roles | GET /api/v1/rbac/permissions
+        - POST /api/v1/rbac/grant {subject, role|perm, scope}
+        - POST /api/v1/rbac/revoke {subject, role|perm, scope}
+        - GET  /api/v1/audit/logs?from=&to=&actor=
+        Invites/Users:
+        - POST /api/v1/users/invite {email, role, project?, expires_at}
+        - POST /api/v1/users/accept {token}
+        Service Accounts:
+        - POST /api/v1/pat/create {name, scopes[], project?}
+        - POST /api/v1/pat/revoke {id}
+    - section: "SLO & KPIs"
+      mode: replace
+      content: |
+        Gate‑N 성공 기준:
+        - OIDC 컨포먼스 테스트 통과, 로그인 성공률 ≥ 99.5%, 중간 로그인 p50 ≤ 1200ms
+        - RBAC 오탑재(권한거부 오검) ≤ 0.1%, 감사 누락 0
+        - 2인 승인 액션 100% 강제, 세션 동시성·위험탐지 동작
+        - Evidence Binder(Security/RBAC) 섹션 업데이트
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑N 마일스톤(완료 조건):
+        - OIDC 서버/클라이언트 플로우 + JWKS/Introspect/Logout e2e
+        - Org/Projects 리소스 모델/마이그레이션 + API 가동
+        - RBAC 엔진/미들웨어 + 권한 매트릭스/감사 연동
+        - Access Review & JIT Elevation + 2인 승인 경로
+        - Reality‑Seal 재실행(보안 영향 0)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 71: OIDC issuer·JWKS·/authorize|/token 구현, 세션/쿠키·PKCE·회전
+        Day 72: Org/Projects 스키마·마이그레이션 + API(생성/목록/삭제)
+        Day 73: RBAC 엔진(roles→perms, scope) + 게이트웨이 집행 미들웨어
+        Day 74: Invite/Users·PAT·Audit 해시체인 + Access Review/JIT 승격
+        Day 75: Admin UI 최소본(RBAC/Projects) + Reality‑Seal·보안 스캔
+
+work:
+  claude:
+    - id: C-34
+      title: Security Controls & Role Matrix
+      deliverables:
+        - docs/security_controls.md, docs/rbac_matrix.md
+      acceptance:
+        - 역할별 권한표·스코프·승격/JIT 규칙·2인 승인 명시
+    - id: C-35
+      title: SSO Guide & Runbooks
+      deliverables:
+        - docs/sso_guide.md(Okta/Azure/Google 설정), ops/runbook_access_review.md
+      acceptance:
+        - 테넌트 연동 가이드·주기적 리뷰 체크리스트
+
+risks:
+  - name: SSO 오구성으로 전체 잠금
+    mitigation: 백도어 루트 계정 보관(오프라인 키), per-tenant bypass flag(시간 제한)
+  - name: 권한 상승/수평 이동
+    mitigation: 최소권한 기본값, deny 우선, 감사 체인·경보, JIT 만료 강제
+  - name: 토큰 유출
+    mitigation: 짧은 access, 회전 refresh, IP/UA 바인딩·철회 API, 키 롤테이션

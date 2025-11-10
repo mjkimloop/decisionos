@@ -1,0 +1,54 @@
+meta:
+  version: v0.5.11m
+  date: 2025-11-10
+  status: locked
+  summary: "stage 파일 원자화·드리프트 가드, Evidence 불변성, 카나리 장애/롤백 시뮬, 키/시계/권한 하드닝, CI 게이트 강화"
+
+patches:
+  techspec:
+    - section: "Deploy — Stage Controller Hardening"
+      mode: upsert
+      content: |
+        - stage 파일(var/rollout/desired_stage.txt) 쓰기는 temp+rename 원자화(동일 FS).
+        - 파일 포맷: single-line {stable|canary|promote|abort}, 끝 개행 금지. SHA256(manifest) 별도 기록.
+        - NFS/원격FS 대비: fsync+rename, 락(플랫폼 불가지: 파일락 실패 시 시간/해시 검증으로 대체).
+        - 컨트롤러는 stage 해시/mtime를 evidence.ops 재서명 루틴과 함께 기록(감사 추적).
+    - section: "Evidence — Immutability & Index"
+      mode: upsert
+      content: |
+        - var/evidence/ 아래 스냅샷은 생성 후 수정 금지. 수정 시 새 파일로만.
+        - S3 업로드 시 버저닝+ObjectLock(Governance)+SSE-KMS.
+        - evidence-index.json(append-only): 파일명, sha256, s3_etag, created_at, actor.
+    - section: "Canary/Abort — DR & Chaos"
+      mode: upsert
+      content: |
+        - shadow_capture → harvest → evidence.merge → judge(quorum) 실패 시 즉시 abort, stage=stable로 원자적 롤백.
+        - chaos 스위치: 429/500 스파이크, 지연(p95↑), 저지 1/3 타임아웃 주입. 게이트가 fail-closed 되는지 확인.
+    - section: "Keys/Time/RBAC — Security Hardening"
+      mode: upsert
+      content: |
+        - HMAC 다중키는 kid 롤링 지원(활성/그레이스/리티어).
+        - 시계 드리프트 허용 오차 ±90s, 서명 timestamp 범위 검사.
+        - CI/런타임 RBAC: deploy:promote, deploy:abort, judge:run 권한 분리.
+    - section: "CI — Dual Release Gates & PR Annotations"
+      mode: upsert
+      content: |
+        - release_gate(infra) → release_gate(canary) 두 단계 게이트.
+        - 실패 시 PR에 요약 코멘트: 위반 항목(latency, error_rate, budget/quota/anomaly, canary_delta 등)과 evidence 링크.
+  plan:
+    - section: "Milestones — v0.5.11m"
+      mode: upsert
+      content: |
+        - M1: stage 파일 원자화 유틸/테스트 + 드리프트 가드
+        - M2: Evidence ObjectLock/Index + 업로드 잡 보강
+        - M3: Chaos 시나리오 3종 + abort 경로 검증
+        - M4: 키 롤테이션/시계 오차/권한 테스트
+        - M5: CI 게이트 주석(annotations) + 실패 요약 산출
+    - section: "Next Actions — v0.5.11m"
+      mode: upsert
+      content: |
+        Day 1: stage I/O 유틸, 원자화 적용, 테스트 추가
+        Day 2: evidence indexer, S3 ObjectLock 옵션, 업로드 잡 확장
+        Day 3: chaos 스크립트/테스트(429/500, p95↑, judge timeout) + abort 스크립트 경로 점검
+        Day 4: 키 롤테이션/시계 허용오차 단위·통합 테스트, RBAC PEP 시나리오 추가
+        Day 5: CI 주석/아티팩트 업로드, PR 코멘트 생성기

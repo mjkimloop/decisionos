@@ -1,0 +1,11 @@
+name: region_guard
+version: 1.0.0
+rules:
+  - name: region_bsn_extra_check
+    when: 'payload.get("region", "") == "BSN"'
+    priority: 40
+    action:
+      class: review
+      reasons: ["region_additional_check"]
+      required_docs: ["residence_proof"]
+

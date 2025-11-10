@@ -1,0 +1,123 @@
+meta:
+  version: v0.3.6
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-P: Search & Catalog · Lineage v2 · Data Products (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Data Catalog & Taxonomy"
+      mode: replace
+      content: |
+        카탈로그 모델(v0.3.6):
+        - asset: {id, type[connector|dataset|table|view|product|policy|pipeline], name, domain, owner, tags[], pii?:bool, contract_ref?, created_at}
+        - dataset: {id, asset_id, schema_version, fields[]}
+        - field: {name, type, mode, pii?:bool, ontology_tag?, description?}
+        - ownership: owner(primary), stewards[], slack_channel?, escalation?
+        - 분류체계: domain(credit, risk, ops...), tier(gold|silver|bronze), sensitivity(public|internal|restricted)
+        - 계약 연결: data_contract(dataset) ↔ catalog.dataset.schema_version 동기화
+    - section: "Search & Indexing"
+      mode: replace
+      content: |
+        검색/인덱싱(v0.3.6):
+        - 인덱서: jobs/indexer.py (delta index, 5m 주기)
+        - 저장: pg tsvector 기반 FTS(기본) + file trigram(보조), 필요시 OpenSearch 어댑터(opt)
+        - 인덱스 대상: asset.name/tags, dataset.fields(name/type/desc), contracts, lineage summary, runbooks
+        - 보안: sensitivity 필터, tenant/org 스코프, pii 필드명 부분 마스킹(예: na**e)
+        - 랭킹: text_rank + freshness_boost + usage_boost(최근 조회/결정 연동)
+    - section: "Lineage v2 (Column‑Level)"
+      mode: replace
+      content: |
+        계보 수집/저장:
+        - 소스: pipelines(run logs), contracts(compat), transforms(map_ontology), cdc offsets
+        - 테이블: lineage_edges{src_asset, src_field?, dst_asset, dst_field?, op, run_id, ts}
+        - 보장: at-least-once, 동일 run_id idempotent
+        - 커버리지 목표: Gate‑O 파이프라인 산출물의 필드 기준 ≥90%
+        - 영향분석: impact(dataset|field) = 역방향 탐색, 병합 규칙(op별 가중치)
+    - section: "Data Products"
+      mode: replace
+      content: |
+        데이터 제품 정의(v1):
+        - product.yaml {name, version, owner, input_datasets[], transforms(ref), slas{freshness, quality}, publish{s3_parquet|db_view}, contracts{output_contract}}
+        - 배포: product_builder.py(스냅샷 버전), 실패 시 롤백(직전 버전 alias 유지)
+        - 소비: /products API·카탈로그 UI(골드 레이어)
+    - section: "Interfaces"
+      mode: replace
+      content: |
+        API:
+        - GET  /api/v1/catalog/assets?type=&domain=&tag=
+        - GET  /api/v1/catalog/datasets/{id}
+        - GET  /api/v1/search?q=&scope=asset|dataset|field
+        - GET  /api/v1/lineage/graph?dataset= &depth=
+        - GET  /api/v1/lineage/impact?dataset= &field?=
+        - POST /api/v1/products/register {product.yaml}
+        - POST /api/v1/products/publish {name, version}
+        - GET  /api/v1/products/list
+        CLI(dosctl):
+        - `dosctl catalog add|ls|show`
+        - `dosctl search 'query' --scope dataset`
+        - `dosctl lineage graph --dataset X --depth 2`
+        - `dosctl product register|publish|list`
+    - section: "Dashboards & UI"
+      mode: replace
+      content: |
+        UI(경량):
+        - web/catalog/: 검색창·필터(도메인/민감도/티어)·자산 상세·스키마 미리보기
+        - web/lineage/: 그래프 뷰(줌/패닝/하이라이트)·임팩트 패널
+        - web/products/: 제품 목록·버전·SLA 상태·소비 경로
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑P 성공 기준:
+        - 검색 p95 ≤ 800ms(10K 자산 규모), 적중률@10 ≥ 0.8(라벨셋)
+        - 계보 커버리지 ≥ 90%(Gate‑O 산출물), 임팩트 쿼리 p95 ≤ 1200ms
+        - 제품 1종(product.yaml) 등록→배포→소비 e2e 성공, 롤백 테스트 통과
+        - 보안: sensitivity/tenant 스코프 필터 100% 강제, PII 필드 마스킹 위반 0
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑P 마일스톤(완료 조건):
+        - 카탈로그 스키마/레지스트리 + 인덱서/검색 API
+        - 계보 v2 수집기/저장/임팩트 API + 그래프 UI
+        - 데이터 제품 레지스트리/빌더 + publish/rollback 흐름
+        - 증빙: 성능/SLO/보안 테스트 리포트 + Evidence Binder(Catalog)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 81: catalog schema·registry·indexer(FTS) + /catalog, /search API
+        Day 82: lineage_edges 스키마·수집기 + /lineage/graph, /impact API
+        Day 83: product.yaml 스키마·빌더·/products API + publish/rollback
+        Day 84: UI(web/catalog, web/lineage, web/products) 1차본 + 캡처 스크립트
+        Day 85: 성능·보안 테스트·SLO 증빙 + Evidence Binder 업데이트
+
+work:
+  claude:
+    - id: C-39
+      title: Catalog Taxonomy & Naming Standard
+      deliverables:
+        - docs/catalog_taxonomy.md, docs/naming_convention.md
+      acceptance:
+        - 도메인/티어/민감도·네이밍 규칙·태그 가이드
+    - id: C-40
+      title: Search Relevance Tuning Guide
+      deliverables:
+        - docs/search_relevance.md(랭킹/부스팅/테스트셋)
+      acceptance:
+        - 적중률@10 평가방법·테스트셋 생성법 포함
+    - id: C-41
+      title: Product Owner Handbook
+      deliverables:
+        - docs/data_products_handbook.md
+      acceptance:
+        - 제품 수명주기·SLA·롤백/버전 정책
+
+risks:
+  - name: PII/민감데이터 노출 위험(검색/카탈로그)
+    mitigation: sensitivity 스코프 필터·PII 마스킹·접근제어(RBAC) 일치 검사 CI
+  - name: 계보 불완전/오탐
+    mitigation: 파이프라인 계측 강화, 수동 보정 입력(override) 지원, 커버리지 메트릭 공개
+  - name: 검색 품질 미달
+    mitigation: 랭킹 튜닝 가이드·라벨셋 운영·사용도 부스팅, 쿼리 로깅 분석
+  - name: 인덱스 비용/성능 이슈
+    mitigation: 필드 최소화·증분 인덱싱·아카이브 정책·옵션형 OpenSearch

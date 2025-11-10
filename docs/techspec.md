@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11hgfedcbaccbabaaaaa
+version: v0.5.11mmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-10
 status: locked
-summary: Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
+summary: Evidence 불변성/인덱서 + S3 ObjectLock + Chaos/DR 스크립트 + Clock drift 가드 + RBAC·CI 주석
 -->
 
 
@@ -2395,3 +2395,273 @@ apps/judge/slo_judge.evaluate():
   - SLO.latency / SLO.error 존재 시 Evidence.perf 필수
   - 위반 사유를 reasons[]에 추가: latency.p95_over, latency.p99_over, error.rate_over
 <!-- AUTOGEN:END:Judge — perf checks -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AJ — Distributed Judges v1 -->
+목표: 로컬 저지(현재) + 원격 저지(HTTP) 혼합 k-of-n 합의.
+구성:
+  - apps/judge/providers/base.py: JudgeProvider ABC (name, evaluate(evidence,slo)->{decision, reasons, meta})
+  - apps/judge/providers/local.py: 기존 slo_judge.evaluate 래핑
+  - apps/judge/providers/http.py: POST /judge {evidence,slo,ts,nonce,signature} → {decision,reasons,version}
+    - 타임아웃, 재시도(지수백오프), 회로차단(half-open) 지원
+    - HMAC-SHA256 서명(X-DecisionOS-Signature), 키ID(X-Key-Id)
+  - apps/judge/pool.py: quorum_decide(providers, k, n, policy)
+    - 정책: fail_closed_on_degrade=true 면 타임아웃/5xx/서명실패=fail 표로 간주
+  - apps/judge/errors.py: JudgeTimeout, JudgeBadSig, JudgeHTTPError
+설정:
+  - configs/judge/providers.yaml:
+      providers:
+        - id: local-a; type: local
+        - id: http-b; type: http; url: "https://judge-b.internal/judge"; timeout_ms: 2000; require_sig: true; key_id: "k1"
+        - id: http-c; type: http; url: "https://judge-c.internal/judge"; timeout_ms: 2000; require_sig: true; key_id: "k1"
+  - 키: DECISIONOS_JUDGE_HMAC_KEY(기본), 회로차단 파라미터 env 기반
+<!-- AUTOGEN:END:Gate-AJ — Distributed Judges v1 -->
+
+
+<!-- AUTOGEN:BEGIN:SLO-as-Code — Quorum Policy -->
+slo_schema 확장 없음(운영 구성을 분리). SLO의 quorum{k,n,fail_closed_on_degrade}는 유지.
+실행 시 providers.yaml로 실제 참여자 결정.
+<!-- AUTOGEN:END:SLO-as-Code — Quorum Policy -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Request Signing -->
+클라이언트(dosctl/aggregator)가 evidence JSON 정규화 후 sha256 → HMAC-SHA256(signing_key).
+헤더:
+  - X-DecisionOS-Signature: base64(hmac)
+  - X-Key-Id: key alias
+  - X-Timestamp: ISO8601, X-Nonce: 랜덤
+서버(테스트용 mock)는 동일 규칙으로 검증. 불일치/누락 시 401.
+<!-- AUTOGEN:END:Security — Request Signing -->
+
+
+<!-- AUTOGEN:BEGIN:Observability — Judge Votes in Evidence -->
+Evidence에 judges 블록 추가(선택):
+"judges": { "k":2,"n":3,"votes":[{"id":"local-a","decision":"pass","latency_ms":12,"reasons":[],"version":"..."}], "final":"pass" }
+스냅샷 저장 시 포함 옵션. 무결성 서명에 포함.
+<!-- AUTOGEN:END:Observability — Judge Votes in Evidence -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AJ — Distributed Judges v1 (Close-out) -->
+범위: 로컬/HTTP 저지 혼합 k-of-n 합의의 운영 마감.
+포함:
+  - CLI: dosctl judge quorum (파일 입출력, 증빙 병합, 종료코드 규약)
+  - Evidence.judges: 투표 로그(개별 판단, 지연, 버전) 병합 및 서명 포함
+  - 보안: HMAC-SHA256 서명 + Anti-Replay(Nonce+Timestamp, TTL=600s, clock_skew=±120s)
+  - 안정성: timeout/retry(지수백오프), fail_closed_on_degrade, 5xx/서명불일치/리플레이=fail
+  - 가시성: judge 투표/지연 메트릭을 Gate-T 카운터로 발행(차주 Gate-**j**에서 상세화)
+<!-- AUTOGEN:END:Gate-AJ — Distributed Judges v1 (Close-out) -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Request Signing & Anti-Replay -->
+요청 헤더:
+  - X-DecisionOS-Signature: base64(HMAC_SHA256(canonical_json, key))
+  - X-Key-Id: 키 식별자(기본 'k1')
+  - X-Timestamp: ISO8601(UTC), 허용 clock_skew ±120s
+  - X-Nonce: 128-bit 랜덤(hex), TTL=600s, 재사용 시 401
+서버는 (key_id, nonce) 조합 재사용 차단. 서버 시간과의 차이가 120s 초과면 거부.
+리플레이 저장소는 SQLite 또는 Redis 권장.
+<!-- AUTOGEN:END:Security — Request Signing & Anti-Replay -->
+
+
+<!-- AUTOGEN:BEGIN:Observability — Evidence.judges -->
+스냅샷 예:
+"judges": {
+  "k": 2, "n": 3, "final": "pass",
+  "votes": [
+    {"id":"local-a","decision":"pass","latency_ms":12,"reasons":[],"version":"aj-1.0"},
+    {"id":"http-b","decision":"pass","latency_ms":63,"reasons":[],"version":"aj-1.0"},
+    {"id":"http-c","decision":"fail","latency_ms":2001,"reasons":["timeout"],"version":"aj-1.0"}
+  ]
+}
+무결성 서명 대상에 포함.
+<!-- AUTOGEN:END:Observability — Evidence.judges -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Judge Key Rotation v1 -->
+- 다중 키(Map) 지원: {"k1":"<base64>","k2":"<base64>"}.
+- 발신: X-Key-Id로 사용 키 지정, 수신: kid별 검증 허용(롤링 기간 중 k1,k2 동시 허용).
+- 키 롤링 절차: Add(k2)→Dual-Sign 기간→Deprecate(k1)→Remove(k1).
+<!-- AUTOGEN:END:Security — Judge Key Rotation v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Replay Store Plugins -->
+- 인터페이스 ReplayStoreABC(seen_or_insert, purge_expired).
+- 구현: SQLite(default), Redis(optional).
+- TTL=600s, skew=±120s. 저장소 오류=fail-closed.
+<!-- AUTOGEN:END:Security — Replay Store Plugins -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AJ — RBAC Enforcement v1 -->
+- env DECISIONOS_ENFORCE_RBAC=1일 때 PEP.enforce 필수.
+- 정책 토큰: 'judge.run' + resource 'slo:<file>'.
+- 거부 시 exit code 3.
+<!-- AUTOGEN:END:Gate-AJ — RBAC Enforcement v1 -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Release Gate (SLO strict) -->
+- Step 'release_gate': dosctl judge quorum --slo configs/slo/slo-billing-strict-v2.json --evidence var/evidence/latest.json --providers configs/judge/providers.yaml --quorum 2/3 --attach-evidence
+- 종료코드 0=통과, 2/3=차단.
+<!-- AUTOGEN:END:CI — Release Gate (SLO strict) -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Judge HMAC Key Rotation v1 -->
+- 키 다중화: DECISIONOS_JUDGE_KEYS(JSON) 우선, 없으면 DECISIONOS_JUDGE_HMAC_KEY 단일키.
+- 송신 헤더: X-Key-Id, X-DecisionOS-Signature, X-DecisionOS-Nonce, X-DecisionOS-Timestamp.
+- 롤링 절차: Add(k2)→Dual-accept(k1,k2)→Deprecate(k1)→Remove(k1).
+<!-- AUTOGEN:END:Security — Judge HMAC Key Rotation v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Anti-Replay Plugins v1 -->
+- ReplayStoreABC(seen_or_insert), SQLite(default), Redis(optional).
+- 허용 오차: TTL=600s, skew=±120s. 저장소 오류는 fail-closed.
+<!-- AUTOGEN:END:Security — Anti-Replay Plugins v1 -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Release Gate (strict SLO) -->
+- dosctl judge quorum --slo configs/slo/slo-billing-strict-v2.json --evidence var/evidence/latest.json --providers configs/judge/providers.yaml --quorum 2/3 --attach-evidence
+- 종료코드 0만 릴리스 통과. 2/3은 fail.
+<!-- AUTOGEN:END:CI — Release Gate (strict SLO) -->
+
+
+<!-- AUTOGEN:BEGIN:Time — utcnow Deprecation Remediation -->
+- 레거시 UTC naive 호출을 datetime.now(datetime.UTC)로 치환.
+- 공용 헬퍼 time_utcnow() 제공 후 단계적 마이그레이션.
+<!-- AUTOGEN:END:Time — utcnow Deprecation Remediation -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AH — Experiment Harness v2 (Traffic Controller) -->
+- 모듈: apps/experiment/controller.py
+  - 기능: 카나리/블루-그린 라우팅, 점진 증분(1%→5%→10%→25%→50%), 해시 고정(sticky) 세션 라우팅
+  - 해시 키: X-Canary-Key 헤더(or cookie) 또는 (tenant|user|path) 해시
+  - 가드: kill-switch(즉시 0%), 단계별 증분 실패 시 자동 롤백
+  - 정책: configs/rollout/policy.yaml (단계/대기시간/최대 동시 단계/허용 실패율)
+<!-- AUTOGEN:END:Gate-AH — Experiment Harness v2 (Traffic Controller) -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-T — Shadow Traffic Witness -->
+- 모듈: apps/obs/witness/shadow.py
+  - 실트래픽 복제 비동기 전송(파이어-앤-포겟), PII 마스킹용 플러그(hooks/redactor.py)
+  - 샘플링율: configs/shadow/config.yaml (e.g., sample=0.1)
+  - 산출: control/canary 각각 reqlog CSV, diff CSV (응답코드/지연/페이로드 크기)
+<!-- AUTOGEN:END:Gate-T — Shadow Traffic Witness -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — canary block -->
+- Evidence.canary:
+  - control_perf: {p50,p95,p99,error_rate,count}
+  - canary_perf:  {p50,p95,p99,error_rate,count}
+  - deltas: {p95_rel, error_delta, sig_error_delta}
+- build_snapshot(..., perf_judge, canary)로 병합, 무결성 서명 포함
+<!-- AUTOGEN:END:Evidence — canary block -->
+
+
+<!-- AUTOGEN:BEGIN:SLO-as-Code — Canary Policy -->
+- slo-canary.json:
+  - thresholds:
+      max_p95_rel_increase: 0.15
+      max_error_abs_delta:  0.01
+      max_sig_error_delta:  0.0005
+  - min_sample_count: 1000
+  - guardband_minutes: 10
+<!-- AUTOGEN:END:SLO-as-Code — Canary Policy -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AJ — Judge (Canary Checks) -->
+- slo_judge.canary_check(evidence.canary, slo_canary)
+- 실패 사유 태그: canary.p95_rel_over, canary.error_delta_over, canary.sig_error_delta_over, canary.sample_insufficient
+- fail-closed: 하나라도 위반 시 단계 중단 + 롤백 트리거
+<!-- AUTOGEN:END:Gate-AJ — Judge (Canary Checks) -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Release Gate (Canary) -->
+- 샘플 control/canary 로그 생성 → witness_judge_perf + canary_compare → Evidence 병합
+- dosctl judge quorum --slo configs/slo/slo-canary.json --evidence var/evidence/latest.json --quorum 2/3 --attach-evidence
+- exit code==0만 통과
+<!-- AUTOGEN:END:CI — Release Gate (Canary) -->
+
+
+<!-- AUTOGEN:BEGIN:Deployment — Traffic Controller Integration -->
+목표: release 파이프라인에서 카나리/블루그린을 실트래픽에 연결.
+옵션A(K8s): Argo Rollouts(steps:25/50/100, maxUnavailable=0), shadow=Ingress mirror.
+옵션B(NGINX/VM): mirror_location으로 shadow, upstream weight로 canary step.
+게이트: dosctl shadow_capture → canary_compare → judge quorum(Infra+Canary SLO) 통과 시 promote.
+<!-- AUTOGEN:END:Deployment — Traffic Controller Integration -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Auto-Harvest from Prod Logs -->
+reqlog(ingress/app), judgelog(원격저지) 수집 → apps/cli/dosctl/witness_perf.py, witness_judge_perf.py로 변환 →
+Evidence.merge(perf, perf_judge, canary). 저장소: object storage(s3://decisionos-evidence/YYYY/MM/DD/…).
+보존: 90일(핵심 필드 해시 포함).
+<!-- AUTOGEN:END:Evidence — Auto-Harvest from Prod Logs -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Keys & Secrets Ops -->
+HMAC 멀티키 KMS 연동(활성/예비/만료), 키수명 90일, 키 롤테이션 시 서명/검증 동시 허용 기간 14일.
+ReplayStore: Redis(프로드), SQLite(스테이징). RBAC PEP 필수 정책: judge.run, rollout.promote.
+<!-- AUTOGEN:END:Security — Keys & Secrets Ops -->
+
+
+<!-- AUTOGEN:BEGIN:Operations — SLO Burn-rate & Runbooks -->
+SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, canary regression.
+알람→슬랙/이메일. 런북: SLO 위반시 자동 freeze(rollout.pause) 및 증빙 링크 첨부.
+<!-- AUTOGEN:END:Operations — SLO Burn-rate & Runbooks -->
+
+
+<!-- AUTOGEN:BEGIN:Deploy — Stage Controller Hardening -->
+- stage 파일(var/rollout/desired_stage.txt) 쓰기는 temp+rename 원자화(동일 FS).
+- 파일 포맷: single-line {stable|canary|promote|abort}, 끝 개행 금지. SHA256(manifest) 별도 기록.
+- NFS/원격FS 대비: fsync+rename, 락(플랫폼 불가지: 파일락 실패 시 시간/해시 검증으로 대체).
+- 컨트롤러는 stage 해시/mtime를 evidence.ops 재서명 루틴과 함께 기록(감사 추적).
+<!-- AUTOGEN:END:Deploy — Stage Controller Hardening -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Immutability & Index -->
+- var/evidence/ 아래 스냅샷은 생성 후 수정 금지. 수정 시 새 파일로만.
+- S3 업로드 시 버저닝+ObjectLock(Governance)+SSE-KMS.
+- evidence-index.json(append-only): 파일명, sha256, s3_etag, created_at, actor.
+<!-- AUTOGEN:END:Evidence — Immutability & Index -->
+
+
+<!-- AUTOGEN:BEGIN:Canary/Abort — DR & Chaos -->
+- shadow_capture → harvest → evidence.merge → judge(quorum) 실패 시 즉시 abort, stage=stable로 원자적 롤백.
+- chaos 스위치: 429/500 스파이크, 지연(p95↑), 저지 1/3 타임아웃 주입. 게이트가 fail-closed 되는지 확인.
+<!-- AUTOGEN:END:Canary/Abort — DR & Chaos -->
+
+
+<!-- AUTOGEN:BEGIN:Keys/Time/RBAC — Security Hardening -->
+- HMAC 다중키는 kid 롤링 지원(활성/그레이스/리티어).
+- 시계 드리프트 허용 오차 ±90s, 서명 timestamp 범위 검사.
+- CI/런타임 RBAC: deploy:promote, deploy:abort, judge:run 권한 분리.
+<!-- AUTOGEN:END:Keys/Time/RBAC — Security Hardening -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Dual Release Gates & PR Annotations -->
+- release_gate(infra) → release_gate(canary) 두 단계 게이트.
+- 실패 시 PR에 요약 코멘트: 위반 항목(latency, error_rate, budget/quota/anomaly, canary_delta 등)과 evidence 링크.
+<!-- AUTOGEN:END:CI — Dual Release Gates & PR Annotations -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Immutability & Indexer v1 -->
+- 모든 Evidence JSON을 주기적으로 스캔하여 index.json 생성:
+  {path, size, mtime, sha256, parsed_meta(tenant, generated_at, version), tampered(bool)}.
+- tampered: 파일 자체 sha256 != evidence.integrity.signature_sha256 이거나 필수 블록 누락.
+- 선택: S3(Object Lock, COMPLIANCE, retain N일) 업로드 잡 제공.
+<!-- AUTOGEN:END:Evidence — Immutability & Indexer v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Chaos/DR — Fail-Fast & Abort Gate -->
+- chaos_inject.sh: 가짜 reqlog/judgelog 생성(에러/레이턴시 스파이크) → Evidence.hydrate → 게이트 고의 Fail.
+- abort_on_gate_fail.sh: judge quorum 실패 시 즉시 abort.sh 호출, 증빙 보관.
+<!-- AUTOGEN:END:Chaos/DR — Fail-Fast & Abort Gate -->
+
+
+<!-- AUTOGEN:BEGIN:Clock — Drift Guard -->
+- jobs/clock_guard.py: 기준시각(reference_utc.txt) 대비 시스템 UTC 드리프트(X초) 초과 시 비정상 종료.
+- timeutil.now_utc() 일원화, CI pre-gate로 clock guard 실행.
+<!-- AUTOGEN:END:Clock — Drift Guard -->
+
+
+<!-- AUTOGEN:BEGIN:RBAC & CI Notes -->
+- 모든 릴리스 스크립트는 PEP.enforce(scope) 필수.
+- CI Step Summary에 stage/증빙 요약 남김, 아티팩트 업로드.
+<!-- AUTOGEN:END:RBAC & CI Notes -->

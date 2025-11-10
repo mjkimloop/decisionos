@@ -1,0 +1,26 @@
+meta:
+  version: v0.5.11c
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-S — Watermark/Lateness 처리 + Window 누수 방지 + V2 리포트"
+
+patches:
+  techspec:
+    - section: "Gate-S — Watermark & Lateness"
+      mode: upsert
+      content: |
+        - WatermarkPolicy(max_lag_sec, drop_too_late).
+        - classify: on_time / late_kept / late_dropped.
+        - aggregate_hourly_with_watermark: 이벤트 타임스탬프 기준 윈도 집계.
+        - 카운터: duplicates, late_kept, late_dropped.
+  plan:
+    - section: "Milestones — Gate-S v1.2"
+      mode: upsert
+      content: |
+        - watermark.py 추가, reconcile V2 함수 추가
+        - test_watermark_lateness_v1 Green
+    - section: "Next Actions — Gate-S"
+      mode: upsert
+      content: |
+        Day 220: rating/quota/cost_guard 연계 스펙 초안
+        Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering)

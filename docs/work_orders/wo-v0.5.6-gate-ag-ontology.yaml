@@ -1,0 +1,152 @@
+meta:
+  version: v0.5.6
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AG: Ontology v2 · Decision Graph · Contracts · Codegen (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Ontology v2 — Scope & Principles"
+      mode: replace
+      content: |
+        목적: 데이터/규칙/모델/정책을 '동일 온톨로지'로 연결하여 일관된 의사결정과 재현을 보장.
+        원칙:
+          - Type System: Entity, Event, Decision, Policy, Metric, Artifact.
+          - Strong IDs: {tenant_id, natural_key, version, valid_time, system_time}.
+          - Time Semantics: Bitemporal(valid/system), late arrival 허용, correction 추적.
+          - Compatibility: SemVer(major/minor/patch)·Back/Forward 호환 규칙.
+          - Provenance: source, transform, contract_id, lineage_ref(Gate-P), hash.
+
+    - section: "Core Types & Schemas"
+      mode: replace
+      content: |
+        폴더: ontology/schemas/
+        필수 타입:
+          - Entity: Person, Organization, Asset(Property/Account), Product(Loan/ProductRule).
+          - Event: LeadSubmitted, DocUploaded, PriceQuoted, DecisionMade, PaymentPosted.
+          - Decision: Eligibility, Pricing, Routing, RiskFlag, PrivacyAllow/Deny.
+          - Policy/Rule: PolicySet, RuleSet(DSL path), PolicyBinding(scope/priority).
+        스키마 형식: YAML(v2) with jsonschema draft2020-12 변환 지원.
+        공통 규약: id rules, required fields, reason_codes, consent/ref links.
+
+    - section: "Decision Graph — Nodes & Edges"
+      mode: replace
+      content: |
+        그래프 모델:
+          - Node: {type[Rule|Model|Contract|Human|Policy], ref(id@ver), io{expects, produces}}
+          - Edge: {from, to, when{predicate}, audit_tags[], cost, safety}
+        실행: apps/decision/graph/{engine.py, planner.py}
+        기능: 경로 추론(필수/대체/폴백), 비용/위험/품질 스코어 합성, 가시화 export(.dot/.json).
+
+    - section: "DecisionContract v2"
+      mode: replace
+      content: |
+        계약 스키마: contract{inputs(schema_ref), outputs(schema_ref), pre/post-conditions, metrics, sla, pii_tags, residency, evidence_hooks}
+        검증기: tools/contracts/validator.py — Pydantic+JSON Schema 검증, Gate-W/Q/AD/AF 연동 검사.
+
+    - section: "Source Mapping — ETL/CDC Binding"
+      mode: replace
+      content: |
+        매핑 정의: ontology/mappings/{source}/*.map.yaml
+        내용: field map, unit/enum 정규화, pii/sensitivity 태깅(Gate-AD), residency 라벨(Gate-AF), lineage anchor(Gate-P).
+        검사: tools/mapping/verify.py — 샘플 10k 레코드 기준 손실/오류 보고.
+
+    - section: "Codegen — Models/DB/Graph/Clients"
+      mode: replace
+      content: |
+        도구: tools/ontogen/{parser.py, codegen_py.py, codegen_sql.py, codegen_graph.py, codegen_client.py}
+        산출물:
+          - Pydantic 모델(apis에서 공용)
+          - DDL/마이그(문서화 포함)
+          - Graph 어댑터(neo4j/networkx 스텁)
+          - API 클라이언트 스텁(dosctl/SDK)
+        정책: 생성물은 /generated/** 에 위치, CI에서 drift 검사.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - GET  /api/v1/ontology/types
+          - POST /api/v1/ontology/validate {schema|contract}
+          - POST /api/v1/ontology/codegen {targets[]}
+          - GET  /api/v1/decision/graph/{id}
+          - POST /api/v1/decision/graph/plan {goal, constraints}
+        CLI(dosctl):
+          - dosctl ontology validate|codegen|mapping verify
+          - dosctl decision graph show|plan --goal=eligibility --cost-cap=...
+
+    - section: "Dashboards & Docs"
+      mode: replace
+      content: |
+        dashboards/ontology/{coverage.json, drift.json, graph_paths.json}
+        docs/ontology/handbook.md, docs/ontology/style_guide.md, docs/decision_contract_v2.md
+
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        ABAC 필드 레벨 접근, pii/residency 태그 강제, Q게이트 레저 링크, Privacy/Residency 위반 사전 차단.
+        Codegen 산출물에 마스킹/레드액션 어노테이션 반영.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AG 성공 기준:
+          - Codegen 일관성: CI drift 0건, 스키마→코드 생성 p95 ≤ 10s
+          - Mapping 검증: 손실/오류 ≤ 0.5%(@10k 표본), PII/Residency 태깅 100%
+          - Decision Graph: 목표경로 계획 성공률 ≥ 99%, .dot/.json export 검증
+          - Contract v2 검증: 100% 통과, 위반 시 사유/위치 리포트
+          - Evidence Binder(Ontology) 업데이트
+
+  plan:
+    - section: "Milestones — Gate-AG"
+      mode: upsert
+      content: |
+        - Ontology v2 스키마/핸드북/스타일가이드
+        - Decision Graph 엔진/플래너
+        - DecisionContract v2 + 검증기
+        - Source Mapping 정의 + 검증
+        - Codegen 파이프라인(모델/DB/그래프/클라이언트)
+        - 대시/증빙·SLO 측정
+    - section: "Next Actions — Gate-AG"
+      mode: upsert
+      content: |
+        Day 181: 핵심 타입 스키마(Entity/Event/Decision/Policy) · 핸드북/스타일가이드
+        Day 182: Decision Graph 엔진/플래너 스켈레톤 · .dot/.json export
+        Day 183: Contract v2 스키마·검증기 · API/CLI validate
+        Day 184: Mapping 정의/검증 · PII/Residency 태깅 교차검사(AD/AF)
+        Day 185: Codegen 파이프라인(파이썬/SQL/그래프/클라이언트) · CI drift 체크 · 대시/증빙
+
+work:
+  claude:
+    - id: C-92
+      title: Ontology Handbook & Style Guide
+      deliverables:
+        - docs/ontology/handbook.md
+        - docs/ontology/style_guide.md
+      acceptance:
+        - 타입/ID/시간세맨틱/버저닝/네이밍 규칙·안티패턴 수록
+
+    - id: C-93
+      title: DecisionContract v2 Spec
+      deliverables:
+        - docs/decision_contract_v2.md
+        - examples/contracts/*.yaml
+      acceptance:
+        - pre/post 조건·SLA/메트릭/PII/Residency/증빙 훅 포함
+
+    - id: C-94
+      title: Mapping Guide & Playbook
+      deliverables:
+        - docs/mapping/playbook.md
+        - templates/mapping.map.yaml
+      acceptance:
+        - 손실/단위/열거형·오류보고 템플릿·검증 절차
+risks:
+  - name: 과도한 모델링(Over-modeling)로 개발 속도 저하
+    mitigation: 80/20 규칙·필수 타입부터 론칭·비핵심은 Post-MVP
+  - name: 스키마 드리프트/불일치
+    mitigation: CI drift 검사·버전 고정·마이그 가드
+  - name: ETL 매핑 손실/왜곡
+    mitigation: 표본 검증·유닛테스트·단위/열거 일관성 체크
+  - name: 다른 게이트와 용어 충돌
+    mitigation: 핸드북 네이밍 규칙·크로스 리뷰(Q/AD/AF/P/T)

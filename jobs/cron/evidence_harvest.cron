@@ -1,0 +1,4 @@
+# Evidence harvest cron (UTC)
+# m h dom mon dow command
+*/5 * * * * /usr/bin/python /srv/decisionos/jobs/evidence_harvest_reqlog.py --reqlog /var/log/ingress/reqlog.csv --evidence /var/evidence/latest.json >> /var/log/decisionos/evidence.log 2>&1
+*/5 * * * * /usr/bin/python /srv/decisionos/jobs/evidence_harvest_judgelog.py --judgelog /var/log/judge/judgelog.csv --evidence /var/evidence/latest.json --canary-json /var/evidence/canary-latest.json >> /var/log/decisionos/evidence.log 2>&1

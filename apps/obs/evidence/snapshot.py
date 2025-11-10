@@ -8,10 +8,10 @@ from __future__ import annotations
 import json
 import hashlib
 import os
-import datetime as dt
 from typing import Dict, Any, List
 from dataclasses import dataclass, asdict
 
+from apps.common.timeutil import time_utcnow
 from apps.rating.engine import RatingResult
 from apps.limits.quota import QuotaDecision
 
@@ -41,6 +41,9 @@ class Evidence:
     budget: Dict[str, Any]
     anomaly: Dict[str, Any]
     perf: Dict[str, Any] | None
+    perf_judge: Dict[str, Any] | None
+    judges: Dict[str, Any] | None
+    canary: Dict[str, Any] | None
     integrity: Dict[str, Any]
 
     def to_json(self, indent: int = 2) -> str:
@@ -52,7 +55,7 @@ class Evidence:
     def save(self, dirpath: str = "var/evidence") -> str:
         """파일 시스템에 저장 (타임스탬프 기반 파일명)"""
         os.makedirs(dirpath, exist_ok=True)
-        ts = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        ts = time_utcnow().strftime("%Y%m%dT%H%M%SZ")
         path = os.path.join(dirpath, f"evidence-{ts}.json")
         with open(path, "w", encoding="utf-8") as f:
             f.write(self.to_json())
@@ -77,6 +80,9 @@ def build_snapshot(
     anomaly_ewma: float,
     anomaly_ratio: float,
     perf: Dict[str, Any] | None = None,
+    judges: Dict[str, Any] | None = None,
+    perf_judge: Dict[str, Any] | None = None,
+    canary: Dict[str, Any] | None = None,
 ) -> Evidence:
     """
     전체 체인 실행 결과를 Evidence 스냅샷으로 빌드.
@@ -101,9 +107,10 @@ def build_snapshot(
     Returns:
         Evidence 객체 (to_json()으로 직렬화 가능)
     """
+    now_ts = time_utcnow()
     meta = {
         "version": version,
-        "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+        "generated_at": now_ts.isoformat().replace("+00:00", "Z"),
         "tenant": tenant,
     }
     witness = {
@@ -158,6 +165,12 @@ def build_snapshot(
     }
     if perf is not None:
         core["perf"] = perf
+    if perf_judge is not None:
+        core["perf_judge"] = perf_judge
+    if judges is not None:
+        core["judges"] = judges
+    if canary is not None:
+        core["canary"] = canary
     core_json = json.dumps(core, ensure_ascii=False, sort_keys=True)
     integrity = {"signature_sha256": sha256_text(core_json)}
 
@@ -170,5 +183,8 @@ def build_snapshot(
         budget=budget_dict,
         anomaly=anomaly_dict,
         perf=perf,
+        perf_judge=perf_judge,
+        judges=judges,
+        canary=canary,
         integrity=integrity,
     )

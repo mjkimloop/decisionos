@@ -1,0 +1,88 @@
+meta:
+  version: v0.1.7
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-D: Client PoV — 싱글 테넌트 배포/관측성/보안 증빙/현장 리허설 (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Tenancy & Config"
+      mode: replace
+      content: |
+        싱글 테넌트(고객별 분리) v0.1.7:
+        - tenant.yaml: {tenant_id, name, ip_allowlist, rbac_map, connectors, budgets}
+        - 구성 주입: X-Tenant-ID 헤더 또는 /t/{tenant}/ 경로 프리픽스
+        - 암호/키: filesystem keystore(mounted secrets/, mode 0400)
+        - 예산: budgets:{max_cost_usd, hard_timeout_ms, retries}
+        - 감사: audit.ndjson에 tenant_id 필수 포함
+    - section: "Interfaces — API/CLI"
+      mode: append
+      content: |
+        테넌트 인터페이스(v0.1.7):
+        - Header: X-Tenant-ID: <tenant>
+        - Path(대안): /api/v1/t/{tenant}/decide|simulate|explain|metrics
+        - Admin: POST /api/v1/t/{tenant}/config/reload (RBAC: admin)
+    - section: "Security Controls"
+      mode: append
+      content: |
+        추가 통제(고객 PoV):
+        - IP Allowlist(nginx/middleware) — tenant.yaml의 ip_allowlist 반영
+        - Secrets Handling — secrets/ 볼륨 마운트(읽기전용), .env.client만 참조
+        - Lineage — consent_snapshot + decision_input_hash 함께 보관
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        PoV 성공 기준(Gate‑D):
+        - 운영: 가동시간 99.5%+ (PoV 기간), /health 에러율 <1%
+        - 성능: /decide p95 < 800ms(모델 미호출), 오류율 < 1%
+        - 데이터: 초기 적재 ≥ 10k rows, DLQ < 2%
+        - 품질: Reality‑Seal 4게이트 유지, 리딩KPI 2/3 충족(2주 관찰)
+    - section: "Evidence Binder"
+      mode: replace
+      content: |
+        보안/운영 증빙 바인더(v0.1.7):
+        - logs/: 구조화 로그 샘플 + 회전 설정
+        - reports/: Reality‑Seal, rule coverage, ingest summary
+        - screenshots/: /metrics, /consent 호출, RBAC/401 캡처
+        - runbooks/: runbook_pov.md, rollback.md
+        - manifests/: 월간 manifest + 해시 검증 출력
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑D 마일스톤(현장 PoV 준비 완료):
+        - 테넌트 구성 적용(tenant.yaml) + 재로드 엔드포인트 동작
+        - 커넥터 자격증명 설정 후 초기 적재 ≥10k
+        - 관측성/보안 증빙 바인더 구비
+        - 드레스리허설(현장 시나리오) 1회 통과, Go/No‑Go 자료 승인
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 19: 테넌트 구성 로더/미들웨어 + X‑Tenant‑ID 전파
+        Day 20: DPA/Consent 라우팅 점검(tenant scope) + IP Allowlist 적용
+        Day 21: 커넥터 자격증명 설치(secrets/) + 초기 ingest(≥10k) + DLQ triage
+        Day 22: /metrics 테넌트 라벨 추가, 로그 보존/회전 정책 점검
+        Day 23: Reality‑Seal(고객 데이터) 재실행 + 리포트/바인더 정리
+        Day 24: 드레스리허설 + Go/No‑Go 미팅팩(요약/위험/롤백)
+
+work:
+  claude:
+    - id: C-09
+      title: DPA 조항 체크리스트 & 위험분담표(고객 버전)
+      deliverables:
+        - docs/dpa_checklist_client.md, docs/risk_allocation_client.md
+      acceptance:
+        - 동의/목적/보존/파기/제3자 제공 항목별 체크표
+    - id: C-10
+      title: Client Runbook Pack
+      deliverables:
+        - ops/runbook_pov_client.md, slides/pov_readout_deck.pptx(개요)
+      acceptance:
+        - 운영/장애/롤백/증빙 링크 포함, 발표용 요약
+    - id: L-03
+      title: 룰 미세튜닝(고객 데이터)
+      deliverables:
+        - packages/rules/triage/*.yaml 업데이트
+        - reports/rule_coverage_client.html
+      acceptance:
+        - 커버리지 ≥85%, 충돌 0, 변화 요약 포함

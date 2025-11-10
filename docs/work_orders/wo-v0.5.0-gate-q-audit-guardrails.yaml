@@ -1,0 +1,137 @@
+meta:
+  version: v0.5.0
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-Q: Audit & Guardrails · Explain/Replay · Change Mgmt · HITL (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Decision Ledger — Evidence & Integrity"
+      mode: replace
+      content: |
+        목적: 모든 결정의 재현·설명·증빙 가능 상태 보장.
+        스키마(decision_record v1):
+          - ids: decision_id, tenant_id, subject_id, corr_id
+          - time: decided_at, policy_ts, model_ts, rules_ts
+          - inputs: input_hash, feature_snapshot(json, masked by ABAC/W)
+          - outputs: decision, confidence, reason_codes[], scores{}
+          - context: rule_id@ver, model_id@ver, policy_id@ver, contract_id
+          - expl: rule_path[], shap_topk[]?, notes
+          - consent/dsr: consent_id?, dsar_id?
+          - security: prev_hash, curr_hash, signer, signature
+        보존: 7년, 해시체인(prev_hash→curr_hash)로 변조 방지, 월별 체크포인트 스냅샷.
+
+    - section: "Replay Engine — Deterministic Reconstruction"
+      mode: replace
+      content: |
+        구성: apps/audit/replay.py
+        입력: decision_id 또는 {ts, policy_id@ver, model_id@ver, rule_id@ver, features}
+        출력: 재현 결과(동일/불일치), 차이 분석(diff: 모델/규칙/데이터/환경)
+        모드: offline(batch), on-demand(API), bulk(export). 정책/모델/규칙 아카이브에서 버전 고정 로딩.
+
+    - section: "Explainability — Rule Path & Reason Codes"
+      mode: replace
+      content: |
+        규칙형: DSL 실행 트레이스→rule_path 추출, reason_codes 매핑 테이블(reason_code→고객 설명문).
+        모델형: 모델 어댑터가 shap/k-lime 등 지원 시 shap_topk[] 저장, 미지원 시 surrogate linear로 근사.
+        표준 API 응답 필드: reason_codes[], rule_path[], confidence, caveats.
+
+    - section: "Change Management — Models/Rules/Policies"
+      mode: replace
+      content: |
+        레지스트리: apps/change/{model_registry.py, rule_registry.py, policy_registry.py}
+        불변 아티팩트: 해시+서명, provenance(학습데이터 스냅샷/seed/파라미터)
+        게이트: pre-merge impact report(오탐/미탐, KPI deltas), 위험등급에 따른 4-eyes 승인(CAB-lite)
+        롤아웃: 카나리/코호트/플래그, 자동 롤백 훅(T) 연계, Evidence(Change) 보관.
+
+    - section: "HITL — Review/Override Workflow"
+      mode: replace
+      content: |
+        큐: apps/hitl/{inbox.py, reviewer.py}, 라우팅(리스크/민감도/금액)
+        SLA: Sev1 4h/1d, Sev2 1d/3d, CoI(이해상충) 차단
+        조치: approve/override/request-more-info, override 시 이유·근거·권한 기록, 모든 변경은 ledger patch로 트래킹
+        샘플링 QA: 무작위/위험중심 샘플 재검토 비율 타겟(≥5%)
+
+    - section: "APIs & CLI — Evidence/Explain/Replay/Change/HITL"
+      mode: replace
+      content: |
+        API:
+          - GET  /api/v1/decisions/{id}
+          - POST /api/v1/decisions/{id}/replay
+          - GET  /api/v1/decisions/{id}/evidence  # zip bundle
+          - POST /api/v1/change/propose {artifact, type[model|rule|policy], notes}
+          - POST /api/v1/change/approve {change_id}
+          - POST /api/v1/hitl/queue {decision_id|payload}
+          - POST /api/v1/hitl/{id}/action {approve|override|rfi, notes}
+        CLI(dosctl):
+          - dosctl audit get|replay|evidence
+          - dosctl change propose|approve|status
+          - dosctl hitl queue|action|report
+
+    - section: "Security/Privacy/Compliance"
+      mode: replace
+      content: |
+        ABAC(W) 마스킹·필드 레벨 접근, 민감 필드는 evidence-export 시 redaction.
+        Tamper-evident log(체인 해시+서명). DSAR/삭제 시 결재흐름과 증빙 레코드 남김.
+        지역 경계(Residency) 준수, 보존기간/삭제 스케줄 정책 문서화.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-Q 성공 기준:
+          - 재현성: 샘플 10k건 중 99.9% 결정이 **동일 출력** 재현(p95 ≤ 120s)
+          - 무결성: 해시체인 검증 100%, 무결성 실패 0건
+          - 설명성: rule_path/reason_codes 100% 제공, 모델형은 shap/surrogate 중 1개 이상
+          - 변경관리: 4-eyes 승인 로그·임팩트 리포트·카나리/롤백 증빙
+          - HITL: SLA 준수 p90, override 기록/감사 라벨 100%
+          - Evidence Binder(Audit) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Decision Ledger v1(체인 해시·7년 보존) · Evidence Export
+        - Replay Engine · Explain Layer(rule_path/shap or surrogate)
+        - Change Registry(모델/규칙/정책) · 4-eyes/CAB-lite
+        - HITL 큐/조치/SLA · 샘플링 QA
+        - API/CLI · 대시/리포트 · Evidence Bundle(Audit)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 151: decision_record 스키마·체인해시·evidence exporter
+        Day 152: replay.py(버전 고정 로딩)·불일치 diff 리포트
+        Day 153: explain(rule_path/reason_codes, shap-surrogate 어댑터)
+        Day 154: change registries·impact report·4-eyes/CAB-lite·카나리/롤백 훅
+        Day 155: HITL 큐/조치/SLA·API/CLI 정리·SLO 측정·Evidence(Audit)
+
+work:
+  claude:
+    - id: C-77
+      title: Audit Policy Pack & Reason Codes
+      deliverables:
+        - docs/audit_policy.md, docs/reason_codes_catalog.md
+      acceptance:
+        - 7년 보존·무결성·DSAR/삭제 절차·reason code↔설명문 매핑
+
+    - id: C-78
+      title: Change Mgmt Playbook (CAB-lite/4-eyes)
+      deliverables:
+        - ops/change_playbook.md, ops/impact_report_template.md
+      acceptance:
+        - 위험등급·승인흐름·임팩트 리포트 템플릿
+
+    - id: C-79
+      title: HITL Runbook & QA Sampling
+      deliverables:
+        - ops/hitl_runbook.md, ops/qa_sampling_plan.md
+      acceptance:
+        - SLA/Sev·샘플링 비율·CoI 통제·증빙 캡처 규칙
+risks:
+  - name: 재현 불일치(환경/시드/모델/데이터 차이)
+    mitigation: 아티팩트 고정·seed/환경 스냅샷·불일치 diff·차등 경보
+  - name: shap 계산 비용/지연
+    mitigation: 오프라인 선계산·샘플링·surrogate 대체·캐시
+  - name: 감사 데이터 민감도
+    mitigation: ABAC 마스킹·redaction·evidence 접근 통제/로깅
+  - name: 승인 병목
+    mitigation: 위험등급별 승인 레벨·SLA 타임아웃·위임 규칙

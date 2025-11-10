@@ -34,6 +34,10 @@ case "$ROLLOUT_MODE" in
   nginx)
     cmd=(kubectl rollout undo deployment/"$ROLLOUT_NAME" -n "$ROLLOUT_NAMESPACE")
     ;;
+  none|noop)
+    echo "[abort] ROLLOUT_MODE=$ROLLOUT_MODE → skipping external command"
+    exit 0
+    ;;
   *)
     echo "[abort] unsupported ROLLOUT_MODE=$ROLLOUT_MODE" >&2
     exit 1

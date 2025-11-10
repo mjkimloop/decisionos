@@ -1,0 +1,11 @@
+{
+  "org_id": "orgA",
+  "payload": {
+    "credit_score": 750,
+    "dti": 0.28,
+    "income_verified": true,
+    "employment_type": "salaried",
+    "region": "SEO"
+  }
+}
+

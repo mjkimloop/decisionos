@@ -1,0 +1,10 @@
+- channel: email
+  offset: 0h
+- channel: email
+  offset: 24h
+- channel: slack
+  offset: 72h
+- channel: account_manager
+  offset: 7d
+- channel: system
+  offset: 14d

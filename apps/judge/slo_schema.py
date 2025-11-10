@@ -9,16 +9,16 @@ from typing import Dict, List, Optional
 
 
 class SLOBudget(BaseModel):
-    """예산 정책"""
+    """예산 조건"""
 
     allow_levels: List[str] = Field(
         default_factory=lambda: ["ok", "warn"]
-    )  # "exceeded" 금지
-    max_spent: Optional[float] = None  # 선택: 절대 금액 상한
+    )  # "exceeded" 허용 여부
+    max_spent: Optional[float] = None  # 초과: 총 예산 한도
 
 
 class SLOQuota(BaseModel):
-    """할당량 정책"""
+    """쿼터 조건"""
 
     forbid_actions: Dict[str, List[str]] = Field(
         default_factory=dict
@@ -26,13 +26,13 @@ class SLOQuota(BaseModel):
 
 
 class SLOAnomaly(BaseModel):
-    """이상 탐지 정책"""
+    """이상 탐지 조건"""
 
     allow_spike: bool = False
 
 
 class SLOWitness(BaseModel):
-    """Witness 검증 정책"""
+    """Witness 스펙 조건"""
 
     require_csv_sha256: bool = True
     require_signature: bool = True
@@ -40,26 +40,57 @@ class SLOWitness(BaseModel):
 
 
 class SLOIntegrity(BaseModel):
-    """무결성 검증 정책"""
+    """무결성 조건"""
 
     require_signature: bool = True
 
 
 class SLOLatency(BaseModel):
-    """지연 시간 정책"""
+    """지연 시간 조건"""
 
     max_p95_ms: Optional[int] = None
     max_p99_ms: Optional[int] = None
 
 
 class SLOError(BaseModel):
-    """에러율 정책"""
+    """오류율 조건"""
 
     max_error_rate: Optional[float] = None
 
 
+class SLOJudgeInfraLatency(BaseModel):
+    max_p95_ms: Optional[int] = None
+    max_p99_ms: Optional[int] = None
+
+
+class SLOJudgeInfraAvailability(BaseModel):
+    min_availability: Optional[float] = None
+
+
+class SLOJudgeInfraSignature(BaseModel):
+    max_sig_error_rate: Optional[float] = None
+
+
+class SLOJudgeInfra(BaseModel):
+    latency: Optional[SLOJudgeInfraLatency] = None
+    availability: Optional[SLOJudgeInfraAvailability] = None
+    sig: Optional[SLOJudgeInfraSignature] = None
+
+
+class SLOCanaryThresholds(BaseModel):
+    max_p95_rel_increase: float = 0.15
+    max_error_abs_delta: float = 0.01
+    max_sig_error_delta: float = 0.0005
+
+
+class SLOCanary(BaseModel):
+    thresholds: SLOCanaryThresholds = SLOCanaryThresholds()
+    min_sample_count: int = 1000
+    guardband_minutes: int = 10
+
+
 class SLOQuorum(BaseModel):
-    """쿼럼 정책"""
+    """합의 조건"""
 
     k: int = 2
     n: int = 3
@@ -67,7 +98,7 @@ class SLOQuorum(BaseModel):
 
 
 class SLOSpec(BaseModel):
-    """전체 SLO 스펙"""
+    """전체 SLO 정의"""
 
     version: str = "v1"
     budget: SLOBudget = SLOBudget()
@@ -78,3 +109,5 @@ class SLOSpec(BaseModel):
     witness: SLOWitness = SLOWitness()
     integrity: SLOIntegrity = SLOIntegrity()
     quorum: SLOQuorum = SLOQuorum()
+    judge_infra: Optional[SLOJudgeInfra] = None
+    canary: Optional[SLOCanary] = None

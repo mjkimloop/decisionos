@@ -1,0 +1,11 @@
+{
+  "org_id": "orgC",
+  "payload": {
+    "credit_score": 620,
+    "dti": 0.38,
+    "income_verified": true,
+    "employment_type": "retired",
+    "region": "SEO"
+  }
+}
+

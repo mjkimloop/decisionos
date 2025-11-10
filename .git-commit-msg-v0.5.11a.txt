@@ -1,0 +1,55 @@
+feat(gate_s): metering contracts v1 + ingest/reconcile/idempotency + tests (v0.5.11a)
+
+Gate-S를 "실제 동작하는" 상태로 전환 완료.
+
+신규 파일:
+- apps/metering/schema.py (33줄)
+  - MeterEvent: tenant, metric, corr_id, ts, value, tags
+  - MeterBucket: window_start/end, count/sum/min/max
+  - ReconcileReport: buckets + duplicates
+  - idempotency_key(): sha256(tenant|metric|corr_id)
+
+- apps/metering/ingest.py (35줄)
+  - InMemoryIdempoStore: 멱등성 키 관리
+  - apply_event(): 중복 필터링
+  - filter_idempotent(): 이벤트 배치 처리
+
+- apps/metering/reconcile.py (45줄)
+  - aggregate_hourly(): hour 윈도우 집계
+  - _floor_hour(), _hour_window(): 시간 정규화
+  - count/sum/min/max 집계 로직
+
+- tests/gates/gate_s/test_metering_contract_v1.py (40줄)
+  - 멱등성 검증: 동일 corr_id 중복 필터 확인
+  - hour 윈도우 집계 검증: 2개 시간창 분리
+  - count=3, sum=22.0, min=5.0, max=10.0 정확성 확인
+
+- requirements-dev.txt (3줄)
+  - pytest, pytest-cov, pydantic>=2.7 추가
+
+테스트 결과:
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ 중복 1건 필터링 확인
+✓ 2개 시간창 집계 확인 (10:00-11:00, 11:00-12:00)
+✓ 첫 윈도우: count=3, sum=22.0, min=5.0, max=10.0
+✓ 둘째 윈도우: count=1, sum=3.0
+
+기능:
+- 멱등성: sha256(tenant|metric|corr_id) 기반 중복 제거
+- 윈도우: hour 단위 자동 분리 (floor to hour boundary)
+- 집계: count/sum/min/max 동시 계산
+- In-memory: 영속 스토어는 다음 단계 (Day 218)
+
+Work Order:
+- docs/work_orders/wo-v0.5.11a-gate-s-metering-v1.yaml
+- techspec: Gate-S — Metering v1 섹션 추가
+- plan: Milestones/Next Actions 업데이트
+
+다음 단계 (Day 218-220):
+- Day 218: pluggable store 인터페이스 분리
+- Day 219: watermark/지연 처리, 윈도 누수 테스트
+- Day 220: rating/quota/cost_guard 계약 연계
+
+Gate-S 상태: seed(xfail) → Green(실제 검증)
+
+No-Gemini. Claude Code 단독 구현.

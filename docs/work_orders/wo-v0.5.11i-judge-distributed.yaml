@@ -1,0 +1,63 @@
+meta:
+  version: v0.5.11i
+  date: 2025-11-10
+  status: locked
+  summary: "원격 저지(HTTP/RPC) k-of-n 합의, 서명검증, Degraded 시 Fail-Closed, Evidence에 투표 로그 포함"
+
+patches:
+  techspec:
+    - section: "Gate-AJ — Distributed Judges v1"
+      mode: upsert
+      content: |
+        목표: 로컬 저지(현재) + 원격 저지(HTTP) 혼합 k-of-n 합의.
+        구성:
+          - apps/judge/providers/base.py: JudgeProvider ABC (name, evaluate(evidence,slo)->{decision, reasons, meta})
+          - apps/judge/providers/local.py: 기존 slo_judge.evaluate 래핑
+          - apps/judge/providers/http.py: POST /judge {evidence,slo,ts,nonce,signature} → {decision,reasons,version}
+            - 타임아웃, 재시도(지수백오프), 회로차단(half-open) 지원
+            - HMAC-SHA256 서명(X-DecisionOS-Signature), 키ID(X-Key-Id)
+          - apps/judge/pool.py: quorum_decide(providers, k, n, policy)
+            - 정책: fail_closed_on_degrade=true 면 타임아웃/5xx/서명실패=fail 표로 간주
+          - apps/judge/errors.py: JudgeTimeout, JudgeBadSig, JudgeHTTPError
+        설정:
+          - configs/judge/providers.yaml:
+              providers:
+                - id: local-a; type: local
+                - id: http-b; type: http; url: "https://judge-b.internal/judge"; timeout_ms: 2000; require_sig: true; key_id: "k1"
+                - id: http-c; type: http; url: "https://judge-c.internal/judge"; timeout_ms: 2000; require_sig: true; key_id: "k1"
+          - 키: DECISIONOS_JUDGE_HMAC_KEY(기본), 회로차단 파라미터 env 기반
+    - section: "SLO-as-Code — Quorum Policy"
+      mode: upsert
+      content: |
+        slo_schema 확장 없음(운영 구성을 분리). SLO의 quorum{k,n,fail_closed_on_degrade}는 유지.
+        실행 시 providers.yaml로 실제 참여자 결정.
+    - section: "Security — Request Signing"
+      mode: upsert
+      content: |
+        클라이언트(dosctl/aggregator)가 evidence JSON 정규화 후 sha256 → HMAC-SHA256(signing_key).
+        헤더:
+          - X-DecisionOS-Signature: base64(hmac)
+          - X-Key-Id: key alias
+          - X-Timestamp: ISO8601, X-Nonce: 랜덤
+        서버(테스트용 mock)는 동일 규칙으로 검증. 불일치/누락 시 401.
+    - section: "Observability — Judge Votes in Evidence"
+      mode: upsert
+      content: |
+        Evidence에 judges 블록 추가(선택):
+        "judges": { "k":2,"n":3,"votes":[{"id":"local-a","decision":"pass","latency_ms":12,"reasons":[],"version":"..."}], "final":"pass" }
+        스냅샷 저장 시 포함 옵션. 무결성 서명에 포함.
+  plan:
+    - section: "Milestones — v0.5.11i"
+      mode: upsert
+      content: |
+        - Provider ABC/Local/HTTP 구현
+        - Pool quorum_decide 구현
+        - providers.yaml 샘플
+        - Evidence.judges 블록 병합
+        - CLI: dosctl judge quorum --slo ... --evidence ... --providers ... --quorum 2/3
+        - 테스트: unit 6, integration 2, e2e 1 (모두 Green)
+    - section: "Next Actions — v0.5.11i"
+      mode: upsert
+      content: |
+        Day 224: providers/base/local/http, pool, 서명 로직
+        Day 225: Evidence.judges 병합, CLI, 테스트/CI 매트릭스 업데이트

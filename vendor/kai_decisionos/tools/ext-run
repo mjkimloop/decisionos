@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from apps.ext.sandbox.runner import SandboxRunner
+from apps.ext.sandbox.limits import ResourceLimits
+from apps.ext.security.perm_model import PermissionSet
+from apps.ext.security.egress_guard import NetworkPolicy
+
+
+def load_entrypoint(entrypoint: str):
+    module_name, _, attribute = entrypoint.partition(":")
+    if not attribute:
+        raise ValueError("entrypoint must be in module:function form")
+    spec = importlib.util.spec_from_file_location(module_name, Path(module_name.replace(".", "/") + ".py"))
+    if not spec or not spec.loader:
+        raise ValueError(f"unable to import module {module_name}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    handler = getattr(module, attribute)
+    return handler
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run an extension manifest using the local sandbox.")
+    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument("--payload", type=Path, help="Optional JSON/YAML file to use as config payload")
+    args = parser.parse_args()
+
+    manifest = yaml.safe_load(args.manifest.read_text(encoding="utf-8"))
+    entrypoint = load_entrypoint(manifest.get("entrypoint", "extension:handle"))
+    permissions = PermissionSet(set(manifest.get("permissions", [])))
+    network_policy = NetworkPolicy(
+        allow_all=manifest.get("network", {}).get("allow_all", False),
+        allowed_domains=set(manifest.get("network", {}).get("egress", {}).get("allow", [])),
+    )
+    limits = manifest.get("resources", {})
+    limit_obj = ResourceLimits(
+        cpu_ms=limits.get("cpu_ms", 500),
+        memory_mb=limits.get("mem_mb", 64),
+        tmp_mb=limits.get("tmp_mb", 16),
+        timeout_ms=limits.get("timeout_ms", 1000),
+    )
+    ctx = {"extension": manifest.get("name", "extension"), "config": manifest.get("config", {})}
+    runner = SandboxRunner()
+    result = runner.execute(
+        entrypoint,
+        ctx,
+        manifest,
+        limits=limit_obj,
+        permissions=permissions,
+        network=network_policy,
+    )
+    print(result)
+
+
+if __name__ == "__main__":
+    main()

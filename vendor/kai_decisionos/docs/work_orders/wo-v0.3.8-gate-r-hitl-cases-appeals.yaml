@@ -1,0 +1,132 @@
+meta:
+  version: v0.3.8
+  date: 2025-11-03
+  status: locked
+  summary: "Gate-R: HITL Ops v2 · Case Management · Dispute/Appeals (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "HITL Ops v2 — Concepts & Roles"
+      mode: replace
+      content: |
+        목적: 규칙/모델/가드레일 이후 '사람 검토'가 필요한 결정을 안전·신속·감사가능하게 처리.
+        주요 객체:
+          - Case: 결정/리드/신청 단위의 검토 컨테이너
+          - Task: Case 하위의 수행 단위(검토, 자료요청, 콜백 등)
+          - Queue: 우선순위·스킬·조직 기준의 작업 대기열
+          - Action: approve|deny|request_docs|escalate|comment|close
+          - Appeal: 최초 결정에 대한 이의 제기 흐름(상위 심사)
+        역할/권한(RBAC 연계):
+          - reviewer, senior_reviewer, qa, ops_admin, auditor
+        연계:
+          - Guardrails v2(Gate-Q) review 모드 → Queue 적재
+          - DecisionContract → Case 초기 컨텍스트
+          - Audit Hash-chain → Case/Action 이벤트 서명/연결
+
+    - section: "Data Model — Case/Task/Appeal"
+      mode: replace
+      content: |
+        테이블(요지):
+          cases{ id, org_id, project_id, decision_id, status[open|pending|awaiting_docs|escalated|closed],
+                 priority[p0..p3], reason_codes[], sla_due_at, owner_user_id?, created_at, updated_at }
+          tasks{ id, case_id, kind[review|qa|request_docs|call|verify], status[ready|in_progress|blocked|done],
+                 assignee_user_id?, queue_id, due_at, payload_json, created_at, updated_at }
+          appeals{ id, case_id, level[int], status[submitted|in_review|resolved|rejected],
+                   submitted_by, resolution, created_at, updated_at }
+          case_notes{ id, case_id, author, body_md, redacted?:bool, created_at }
+          attachments{ id, case_id, task_id?, name, uri, sha256, size, mime, scanned[ok|flagged], created_at }
+          queues{ id, name, routing_rule, skills[], sla_policy_id }
+          sla_policies{ id, name, p95_hours, breach_actions[notify|auto_escalate] }
+        제약:
+          - attachments는 업로드시 AV 스캔·PII 스크럽 필수
+          - case_notes.redacted=true 시 원본은 보관소 암호화, UI는 마스킹
+
+    - section: "Routing & SLA"
+      mode: replace
+      content: |
+        라우팅:
+          - 규칙: priority, org/project, product, reason_code, risk_score, availability
+          - 알고리즘: weighted round-robin + skill match + fairness(최대 동시건수)
+          - 오버플로우: 대기열 초과 시 burst_queue → senior_queue
+        SLA:
+          - 기본: P0=4h, P1=24h, P2=48h, P3=72h (조정 가능)
+          - 측정: first_pick_time, resolution_time, re-open_rate
+          - 위반: 자동 notify → escalate → breach_action 실행
+
+    - section: "Dispute/Appeals Flow"
+      mode: replace
+      content: |
+        단계:
+          1) 고객/파트너가 이의 제출 → appeal level 1 생성
+          2) senior_reviewer 전담 큐로 라우팅
+          3) 추가 증빙 수집(attachments/notes) → 재평가
+          4) 결과: uphold(유지)/overturn(번복)/partial(조건부) + 설명서 재발급
+        정책:
+          - 동일 reviewer가 아닌 상위 reviewer 배정
+          - 최대 level=2 (정책에 따라 확장)
+          - 모든 변경은 audit hash-chain에 서명
+
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/cases/open {decision_id, priority?, context?}
+          - GET  /api/v1/cases/{id} | PATCH /api/v1/cases/{id} {status, owner, priority}
+          - POST /api/v1/tasks/next {queue_id?}  # pop & assign
+          - POST /api/v1/tasks/{id}/action {approve|deny|request_docs|escalate|comment, payload}
+          - POST /api/v1/appeals/submit {case_id, reason, attachments?[]}
+          - GET  /api/v1/appeals/{id} | POST /api/v1/appeals/{id}/resolve {resolution, message}
+          - GET  /api/v1/queues/{id}/stats | GET /api/v1/sla/report?from=&to=
+        CLI(dosctl):
+          - cases: `dosctl cases open|show|assign|close`
+          - tasks: `dosctl tasks next|do <action> --id ...`
+          - appeals: `dosctl appeals submit|resolve`
+          - ops: `dosctl ops queues ls|stats`, `dosctl ops sla report`
+        Webhooks:
+          - case.status.changed, task.assigned, sla.breach, appeal.resolved
+
+    - section: "UI — Inbox/Case/Appeals"
+      mode: replace
+      content: |
+        web/hitl/:
+          - Inbox: 개인 작업함, 대기열, 필터(우선순위/도메인/상태)
+          - Case View: 컨텍스트(입력, Reason Codes, Evidence Pack), 액션버튼, 체크리스트, 노트/첨부
+          - Appeals View: 제출 사유, 타임라인, 새 설명서 미리보기, 결론 발행
+          - 품질: 키보드 단축키, 대량 작업(approve/deny) 보호(2-step)
+
+    - section: "Security/Compliance"
+      mode: replace
+      content: |
+        - 모든 Case/Action 이벤트는 Gate-Q 감사 해시체인에 링크
+        - 노트·첨부 PII 스크럽, 다운로드 감사, 접근권한 reviewer 이상
+        - 데이터 보존: 7년(삭제요청은 분리 저장, 접근 통제), export는 서명된 PDF/JSON
+        - Redaction 정책: UI에서 노출 전 규칙 기반 마스킹
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-R 성공 기준:
+          - 라우팅 정확도 ≥ 98% (스킬·우선순위 매칭)
+          - SLA 준수(p95): P0≤4h, P1≤24h, P2≤48h, P3≤72h
+          - Appeal turnaround p95 ≤ 72h, 번복률/사유 리포트 제공
+          - 케이스 e2e(열기→작업→에스컬레이트→종료) + 이의제기 e2e 1건 성공
+          - 모든 이벤트가 감사 체인에 연결, 누락 0
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate-R 마일스톤(완료 조건):
+          - Case/Task/Queue/SLA 모델·API·CLI·UI
+          - 라우팅 엔진·오버플로우·페어니스·스킬 매칭
+          - Appeals 레이어·템플릿·evidence export
+          - 감사 연동·PII 스크럽·보존/레드액션
+          - SLO/리포트·운영 런북/Evidence Binder(Ops)
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 91: 데이터 모델·마이그레이션·/cases·/tasks 기본 API + dosctl(cases|tasks)
+        Day 92: 라우팅 엔진(스킬/우선순위/공정성) + /queues, SLA 타이머/브리치
+        Day 93: Appeals API/UI + export(설명서 PDF/JSON), 템플릿
+        Day 94: Inbox/Case UI·단축키·첨부 업로드(AV/PII)
+        Day 95: SLO 시험·리포트·감사 링크 검증·런북/Evidence 업데이트 

@@ -1,0 +1,8 @@
+{
+  "org_id": "org_epsilon",
+  "payload": {
+    "credit_score": 495,
+    "dti": 0.68,
+    "income_verified": false
+  }
+}

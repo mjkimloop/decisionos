@@ -1,0 +1,11 @@
+pytest
+pytest-cov
+pydantic>=2.7
+httpx
+PyYAML
+pytest-asyncio
+aiohttp
+pytest-aiohttp
+fastapi
+uvicorn
+boto3>=1.34

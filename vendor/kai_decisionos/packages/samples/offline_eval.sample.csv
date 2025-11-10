@@ -1,0 +1,13 @@
+employment_type,income_monthly,property_type,region,estimated_value,senior_loan_amt,target_amt,purpose,label
+salaried,4200,apartment,SEO,450000000,200000000,100000000,home_purchase,1
+self_employed,2500,condo,BSN,280000000,150000000,80000000,home_improvement,0
+salaried,5200,house,ICN,600000000,250000000,120000000,home_purchase,1
+contract,3100,apartment,TGG,320000000,200000000,70000000,refinance,0
+retired,1800,condo,SEO,180000000,50000000,30000000,medical,0
+self_employed,7000,house,BSN,900000000,300000000,200000000,business,1
+salaried,3900,apartment,ICN,350000000,180000000,60000000,education,0
+contract,4600,house,TGG,500000000,220000000,90000000,home_improvement,1
+salaried,8000,apartment,SEO,750000000,200000000,150000000,investment,1
+self_employed,4200,condo,BSN,260000000,120000000,60000000,car_purchase,0
+retired,2300,apartment,ICN,210000000,60000000,40000000,medical,0
+contract,5500,house,SEO,650000000,300000000,150000000,home_purchase,1

@@ -1,0 +1,134 @@
+meta:
+  version: v0.3.3
+  date: 2025-11-02
+  status: locked
+  summary: "Gate‑N: SSO/OAuth · Org/Projects · Fine‑Grained RBAC (No‑Gemini)"
+
+work:
+  claude:
+    - id: C-34
+      title: Security Controls & Role Matrix
+      deliverables:
+        - docs/security_controls.md
+        - docs/rbac_matrix.md
+      acceptance:
+        - "역할별 권한표·스코프·승격/JIT 규칙·2인 승인 명시"
+    - id: C-35
+      title: SSO Guide & Runbooks
+      deliverables:
+        - docs/sso_guide.md
+        - ops/runbook_access_review.md
+      acceptance:
+        - "테넌트 연동 가이드·주기적 리뷰 체크리스트"
+
+  codex:
+    - id: X-61
+      title: OIDC Provider & Session Mgmt
+      deliverables:
+        - auth/oidc/provider.py
+        - auth/jwks.py
+        - apps/gateway/routers/oauth.py
+        - auth/session.py
+      acceptance:
+        - "컨포먼스 테스트 통과, 토큰 회전/재사용 탐지, 로그아웃 동작"
+    - id: X-62
+      title: Org/Projects API & Migrations
+      deliverables:
+        - db/migrations/20251102_org_projects.sql
+        - apps/orgs/service.py
+        - apps/gateway/routers/orgs.py
+        - apps/gateway/routers/projects.py
+      acceptance:
+        - "리소스 스코프가 정책/결정/팩/볼트/분석에 연결"
+    - id: X-63
+      title: RBAC Engine & Enforcement
+      deliverables:
+        - apps/rbac/engine.py
+        - apps/gateway/middleware/rbac_guard.py
+        - config/roles.yaml
+        - config/permissions.yaml
+      acceptance:
+        - "deny 우선, 스코프/역할 매핑, 단위·통합테스트 40+"
+    - id: X-64
+      title: Invites/Users/PAT & Audit Chain
+      deliverables:
+        - apps/gateway/routers/users.py
+        - apps/users/invite.py
+        - apps/tokens/pat.py
+        - apps/audit/log.py
+        - apps/gateway/routers/audit.py
+      acceptance:
+        - "초대/수락/만료, PAT 스코프, 감사 해시체인 검증 스크립트 제공"
+    - id: X-65
+      title: Admin Mini UI
+      deliverables:
+        - web/admin/index.html
+      acceptance:
+        - "역할 부여/회수·프로젝트 생성·감사 조회 동작"
+    - id: P-12
+      title: dosctl 확장(org/rbac)
+      deliverables:
+        - "cli/dosctl/main.py: org create|project add|project ls"
+        - "cli/dosctl/main.py: rbac roles|grant|revoke"
+        - "cli/dosctl/main.py: pat create|revoke"
+      acceptance:
+        - "로컬에서 관리 작업 e2e 가능"
+
+risks:
+  - name: SSO 오구성으로 전체 잠금
+    mitigation: 백도어 루트 계정 보관(오프라인 키), per-tenant bypass flag(시간 제한)
+  - name: 권한 상승/수평 이동
+    mitigation: 최소권한 기본값, deny 우선, 감사 체인·경보, JIT 만료 강제
+  - name: 토큰 유출
+    mitigation: 짧은 access, 회전 refresh, IP/UA 바인딩·철회 API, 키 롤테이션
+
+patches:
+  techspec:
+    - section: "SSO/OIDC"
+      mode: replace
+      content: |
+        OAuth 2.1 + OIDC(v0.3.3):
+        - Flow: Authorization Code + PKCE, state/nonce 검사
+        - Keys: JWKS, 키 롤테이션, 토큰 회전/재사용 탐지
+        - RP-Logout 지원, Introspection(옵션)
+    - section: "Org & Projects"
+      mode: replace
+      content: |
+        자원 모델(v0.3.3): Org → Project → Env
+        - 스코프: 결정/정책/팩/볼트/분석은 프로젝트 스코프, 과금은 Org 스코프
+        - 마이그레이션: org_projects.sql, 기존 리소스 스코프 매핑
+    - section: "RBAC"
+      mode: replace
+      content: |
+        세분화 RBAC(v0.3.3):
+        - roles.yaml↔permissions.yaml 매핑, scope(org/project/env)
+        - deny 우선, 2인 승인(keys.rotate·vault.unseal)
+    - section: "Audit & Sessions"
+      mode: replace
+      content: |
+        감사/세션(v0.3.3):
+        - 감사: 해시체인 로그, 액터/스코프/행위/결과 기록
+        - 세션: 동시세션 제한·위험탐지, JIT 권한승격·정기 접근검토
+    - section: "Interfaces"
+      mode: append
+      content: |
+        Gate‑N 신규/확장 엔드포인트:
+        - /oauth/authorize, /oauth/token, /oauth/jwks
+        - /api/v1/orgs, /api/v1/projects
+        - /api/v1/rbac/roles|grant|revoke
+        - /api/v1/users/invite|accept, /api/v1/tokens/pat
+        - /api/v1/audit/*
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Gate‑N: SSO/OIDC·Org/Projects·세분화 RBAC 도입
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 91: OIDC Provider/Session 관리
+        Day 92: Org/Projects 마이그레이션·API
+        Day 93: RBAC 엔진/가드, roles/permissions 설계
+        Day 94: Invites/Users/PAT + 감사 체인
+        Day 95: Admin Mini UI + dosctl org/rbac
+

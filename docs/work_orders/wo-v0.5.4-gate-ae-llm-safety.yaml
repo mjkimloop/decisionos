@@ -1,0 +1,138 @@
+meta:
+  version: v0.5.4
+  date: 2025-11-06
+  status: locked
+  summary: "Gate-AE: LLM Safety v2 — PI/JB/DLP/Toolcall Guard & Router Hardening (No-Gemini)"
+
+patches:
+  techspec:
+    - section: "Safety Architecture — Scope"
+      mode: replace
+      content: |
+        목표: LLM 경로에 대한 공격/유출/오남용을 '정책→탐지→조치→증빙' 루프에 통합.
+        구성요소:
+          - safety_policies: 허용/금지/경계 규칙(콘텐츠/행동/데이터/툴).
+          - detectors: PI(프롬프트 인젝션)/JB(탈옥)/DLP/PII/허위출처/악성URL/설정유도.
+          - toolcall_guard: 함수·커넥터 호출 전/후 파라미터 검증·샌드박스·쿼터.
+          - router_hardening: 모델/경로 선택 시 안전 스코어 반영(코스트/품질/위험).
+          - safety_ledger: Q게이트 레저와 링크된 증빙/결정 기록.
+          - redteam_harness: 공격 말뭉치·시나리오·성공률/차단률 측정.
+
+    - section: "Detectors — Signals & Scores"
+      mode: replace
+      content: |
+        시그널:
+          - PI/JB 패턴: 탈출 토큰, 시스템 프롬프트 노출 유도, 권한 상승 문구.
+          - DLP/PII: 키/비밀번호/주민·계좌·카드·주소/이메일/고유식별자.
+          - URL/파일: 비허용 도메인, 확장자 블록, 피싱/멀웨어 휴리스틱.
+          - Hallucination proxy: 출처 없는 단언, 금지된 근거 재사용.
+        스코어:
+          - risk_score∈[0,1], reason_codes[], signals{} (가중 합성, 임계치 다단계: warn/block).
+          - false_positive_budget: 테넌트별 월간 허용 FP 비율 상한(운영 튜닝).
+
+    - section: "Toolcall Guard — Sandbox & Quotas"
+      mode: replace
+      content: |
+        전/후 훅:
+          - pre: 파라미터 스키마 검증, ABAC 정책 검사, DLP 필터(키/토큰/PII 샘플링).
+          - exec: 샌드박스(타임/메모리/네트워크 범위), graylist 도메인 차단.
+          - post: 반환 객체 표본 DLP 스캔, 레드액션/마스킹.
+        쿼터/스로틀: 테넌트/워크스페이스/액터별 호출 한도(Gate-S limits 연계).
+        증빙: toolcall_id, trace_id, policy_id@ver, safety_decision 레코드화.
+
+    - section: "Router Hardening — Cost/Quality/Safety"
+      mode: replace
+      content: |
+        router_policy:
+          - 안전 임계 초과 시: 경량 검열모델→안전필터→안전등급 높은 경로로 상승.
+          - 고위험 요청: 고비용 모델 허용(품질 우선), 로그 강화·HITL 큐.
+          - 저위험: 저비용 경로·배치/캐시 적극 사용.
+        메트릭: blocked, escalated, downgraded 비율·추가 비용·품질 영향.
+
+    - section: "Red Team Harness — Corpora & Scenarios"
+      mode: replace
+      content: |
+        corpora: jailbreak_sets, prompt_injection_sets, dlp_leak_sets, tool_abuse_sets, rag_poison_sets.
+        scenarios: zero-shot, few-shot, chain-of-thought誘導, toolcall-bypass, long-context overflow.
+        실행: apps/safety/redteam/{runner.py, corpora/*.jsonl, reports/*}
+        결과: ASR(Attack Success Rate), BPR(Block/Prevent Rate), FPR/TPR, Latency overhead.
+
+    - section: "APIs & CLI"
+      mode: replace
+      content: |
+        API:
+          - POST /api/v1/safety/scan {text|payload, context, tool?} -> {risk_score, reason_codes, action}
+          - POST /api/v1/safety/policy/set {rules}
+          - GET  /api/v1/safety/policy/{id}
+          - POST /api/v1/safety/redteam/run {suite, scope}
+          - GET  /api/v1/safety/ledger/{decision_id}
+        CLI(dosctl):
+          - dosctl safety scan|policy set|get|redteam run|report
+
+    - section: "Dashboards & Evidence"
+      mode: replace
+      content: |
+        dashboards/safety/{overview.json, router.json, redteam.json}
+        Evidence(Safety): 차단/경보 샘플, FP/TP 혼동행렬, 정책 버전 히스토리, 레드팀 리포트.
+
+    - section: "Security/Privacy/Compliance"
+      mode: replace
+      content: |
+        ABAC(Gate-W)로 정책/결과 접근 최소화, 민감 로그 마스킹·TTL.
+        Q게이트 레저에 safety_decision 요약 링크, DSAR 시 redaction 적용.
+        거버넌스: 정책 변경은 Gate-Q(4-eyes) 승인.
+
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate-AE 성공 기준:
+          - 레드팀 ASR ≤ 3% (중간 난이도 셋), BPR ≥ 97%
+          - 운영 FP(사용자 경로) ≤ 1.5% (월간), Latency overhead p95 ≤ 120ms
+          - toolcall 차단 누락 0건(고위험 도메인/액션), 우회 재현률 ≤ 1%
+          - Router 하드닝 후 품질 저하 Δscore ≤ 1.0pt, 추가비용 Δcost ≤ +5%
+          - Evidence Binder(Safety) 업데이트
+
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        - Safety Policies v2 · Detector Suite(PI/JB/DLP/URL/PII)
+        - Toolcall Guard(전/후 훅·샌드박스·쿼터)
+        - Router Hardening(정책 통합)
+        - Red Team Harness(코퍼스/시나리오/리포트)
+        - 대시/증빙·SLO 측정
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 171: safety_policies 초안 · detectors(PI/JB/DLP) 스캐폴드
+        Day 172: toolcall_guard 전/후 훅 · 샌드박스/쿼터 통합(Gate-S limits)
+        Day 173: router_hardening 통합 · 안전 스코어 반영 로직
+        Day 174: redteam runner · corpora seed · 리포트 카드
+        Day 175: API/CLI · 대시보드 · SLO 측정·Evidence(Safety) 정리
+
+work:
+  claude:
+    - id: C-87
+      title: Safety Policies v2 & Red Team Suites
+      deliverables:
+        - docs/safety/policies_v2.md
+        - data/redteam/{jailbreak.jsonl, prompt_injection.jsonl, dlp.jsonl, tool_abuse.jsonl, rag_poison.jsonl}
+      acceptance:
+        - 정책 규칙/예외/튜닝 가이드·코퍼스 최소 500 샘플
+
+    - id: C-88
+      title: User Messaging & FP Handling
+      deliverables:
+        - ux/safety_messages_ko.md
+        - ops/fp_tuning_playbook.md
+      acceptance:
+        - 차단/경고 UX 문구/로깅·FP 튜닝 절차
+risks:
+  - name: FP 과다로 UX 저하/업무 중단
+    mitigation: FP 예산/튜닝 가이드·화이트리스트·Non-blocking Warn 단계
+  - name: 우회 공격/장기 컨텍스트 오염
+    mitigation: 세션 분할·메모리 청소·컨텍스트 필터·출처 검증
+  - name: 샌드박스 성능/호환성
+    mitigation: 경로별 제한치 튜닝·캐시/배치·Fail-safe 차단
+  - name: 비용 상승(하드닝 승급)
+    mitigation: AC 옵티마이저와 연동해 비용 상한·카나리·롤백

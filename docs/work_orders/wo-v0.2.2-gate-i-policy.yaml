@@ -1,0 +1,112 @@
+meta:
+  version: v0.2.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-I: Policy Engine·PII Vault·HITL(승인/오버라이드) — No-Gemini"
+
+patches:
+  techspec:
+    - section: "Data Classification"
+      mode: replace
+      content: |
+        데이터 등급 체계(v0.2.2):
+        - PUBLIC, INTERNAL, CONFIDENTIAL, PII(민감)
+        - 태깅: 스키마 레벨 label, 필드 레벨 label, 소스별 default
+        - 처리원칙: PII는 Vault 필수, 로그/트레이스/리포트 출력 금지
+    - section: "Policy Engine"
+      mode: replace
+      content: |
+        선언형 정책엔진(v0.2.2):
+        - 정책 타입: access, data, consent, retention, decision, routing, feature
+        - 정책 DSL(YAML):
+          kind: decision | access | data
+          version: v1
+          match: {tenant, route, labels[], user_role}
+          when:  expr(DSL)  # 예: dsr>40 && income<200
+          then:  actions[]  # 예: {deny|allow|require_hitl|mask|route:local}
+          audit: {reason_code, message}
+        - 평가 순서: system → tenant → product → route → rule
+        - 집행 지점: gateway(mw), ingest(pre), executor(pre/post), export(pre)
+        - 버저닝/검증: 정책 해시/사인, dry-run 모드, 시뮬레이터 포함
+    - section: "PII Vault"
+      mode: replace
+      content: |
+        PII 금고(v0.2.2):
+        - 저장소: table vault_blobs(id, key_id, algo, iv, tag, ciphertext, meta, created_at)
+        - 암호화: AES-256-GCM(엔벌로프) — master_key(keystore)로 data_key 랩핑/언랩
+        - 키 저장소: filesystem keystore(secrets/keys/*, 0400), KMS 연동 옵셔널
+        - 키 로테이션: rotate_keys.sh → rewrap 배치, key_id 버전 관리
+        - API: seal(subject, field, bytes)->token, unseal(token, scope)->bytes
+        - 의무사항: 접근 시 consent 검증·RBAC·audit append
+        - 토크나이즈: vault_token: vt_<hash_prefix> 사용(리포트/로그는 토큰만)
+    - section: "Human-in-the-Loop (HITL)"
+      mode: replace
+      content: |
+        승인/오버라이드 UI(v0.2.2):
+        - 역할: agent(요청), reviewer(승인/반려), admin(정책관리)
+        - 워크플로우: require_hitl 액션 → /hitl/queue 적재 → reviewer가 사유코드 선택 후 승인/반려 → executor 재시도
+        - SLA: 대기 95%<30m, 최대 24h 타임아웃(자동 반려 또는 escalate)
+        - 사유코드/가이드: reason_codes.yaml (거절/예외/수동서류)
+    - section: "Interfaces — API/CLI"
+      mode: replace
+      content: |
+        엔드포인트:
+        - Policy
+          - GET  /api/v1/policy/list
+          - POST /api/v1/policy/apply (dry_run:bool)
+          - POST /api/v1/policy/validate (schema/lint)
+          - POST /api/v1/policy/simulate {payload}
+        - Vault
+          - POST /api/v1/vault/seal   {subject, field, data_b64}
+          - POST /api/v1/vault/unseal {token, scope}
+          - POST /api/v1/vault/rotate_keys (admin)
+        - HITL
+          - GET  /api/v1/hitl/queue?state=pending
+          - POST /api/v1/hitl/action {task_id, approve|reject, reason_code, note}
+          - GET  /api/v1/hitl/stats
+        보안: /policy/*·/vault/*·/hitl/* 모두 RBAC+HMAC 옵션, PII는 항상 Vault 토큰만 외부 노출
+    - section: "SLO & Acceptance"
+      mode: replace
+      content: |
+        Gate‑I 성공 기준:
+        - 정책 적용: 시뮬레이터/린터 통과, 운영 트래픽에 require_hitl/deny/route 액션 집행 확인
+        - Vault: seal/unseal e2e, 키 로테이션 리허설, PII 로그 누출 0
+        - HITL: 대기열 처리 SLA 95%<30m, 승인·반려 로그/audit 연결, 자동 에스컬레이션 동작
+  plan:
+    - section: "Milestones"
+      mode: replace
+      content: |
+        Gate‑I 마일스톤(완료 조건):
+        - Policy Engine v1 배포(DSL+평가기) + /policy 시뮬레이터
+        - PII Vault v1 배포(seal/unseal/rotate) + consent/RBAC 연동
+        - HITL v1(대기열·승인 액션·SLA·에스컬레이트) + 리포트
+        - Reality‑Seal 재실행(보안/재현성 영향 0) + PII 스캔 통과
+    - section: "Next Actions"
+      mode: replace
+      content: |
+        Day 46: 정책 DSL 스키마/린터 + 평가 순서/집행 지점 구현
+        Day 47: Vault service(seal/unseal) + 키 저장소/로테이션 스크립트
+        Day 48: HITL API/대기열/승인·반려 + reason_codes.yaml
+        Day 49: /policy validate/simulate + dosctl policy/vault/hitl 확장
+        Day 50: PoV 시나리오 리허설(정책→HITL→재시도) + Reality‑Seal 재실행
+
+work:
+  claude:
+    - id: C-21
+      title: Policy Manual & Reason Codes
+      deliverables:
+        - docs/policy_manual.md, config/reason_codes.yaml
+      acceptance:
+        - 정책 타입별 예제·판정표, 사유코드/메시지·UX 가이드 포함
+    - id: C-22
+      title: PII Vault Threat Model & DPA 부속
+      deliverables:
+        - docs/vault_threat_model.md, docs/legal/DPA_vault_addendum.md
+      acceptance:
+        - 위협 시나리오/완화책·감사 항목 정리
+    - id: C-23
+      title: HITL 운영 가이드·스크립트
+      deliverables:
+        - docs/hitl_playbook.md, ops/hitl_escalation.md
+      acceptance:
+        - SLA·에스컬레이션 규칙·소통 템플릿 포함

@@ -1,0 +1,12 @@
+# Single-tenant configuration (Gate-D sample)
+tenant_id: demo-tenant
+name: Demo Org
+ip_allowlist: ["127.0.0.1/32", "::1/128"]
+rbac_map:
+  admin: ["*"]
+  agent: ["decide", "simulate"]
+  auditor: ["explain", "metrics.read"]
+budgets:
+  max_cost_usd: 0.02
+  hard_timeout_ms: 1500
+secrets_path: secrets/
