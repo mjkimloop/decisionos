@@ -1,0 +1,27 @@
+meta:
+  version: v0.5.11e
+  date: 2025-11-10
+  status: locked
+  summary: "Gate-T + Gate-S Integration — Witness CSV → Metering → Rating/Quota smoke test"
+
+patches:
+  techspec:
+    - section: "Gate-T + Gate-S Integration v1"
+      mode: upsert
+      content: |
+        - Witness CSV 더미 파서: apps/obs/witness/io.py (parse_witness_csv).
+        - Integration test: Witness 4건 → Metering 시간 집계 → Rating 요금 → Quota 한도.
+        - 전체 파이프라인 검증: tokens=130 (over=30 → 0.6 KRW), quota=throttle.
+        - v1: 더미 CSV만 지원 (실제 witness 포맷은 별도).
+  plan:
+    - section: "Milestones — Gate-S v1.4"
+      mode: upsert
+      content: |
+        - apps/obs/witness/io.py (CSV 파서)
+        - tests/integration/test_witness_vs_metering_rating_quota_v1.py
+        - End-to-end smoke: witness → metering → rating → quota
+    - section: "Next Actions — Integration"
+      mode: upsert
+      content: |
+        Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering) ✓
+        Day 222: Cost-Guard 조치의 Evidence 연동 + RBAC hook

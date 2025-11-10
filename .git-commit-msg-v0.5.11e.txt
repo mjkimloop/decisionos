@@ -1,0 +1,52 @@
+test(integration): witness CSV → metering → rating/quota smoke (v0.5.11e)
+
+Gate-T + Gate-S 통합 테스트 완료. End-to-end 파이프라인 검증.
+
+신규 모듈 (1개):
+1. apps/obs/witness/ - Witness CSV 파서
+   - io.py (393 bytes): parse_witness_csv
+
+Integration Test:
+- tests/integration/test_witness_vs_metering_rating_quota_v1.py
+- 파이프라인: Witness CSV 4건 → Metering 집계 → Rating 요금 → Quota 한도
+- 검증 포인트:
+  1. CSV 파싱: 4건 이벤트 MeterEvent 변환
+  2. Metering: 시간 윈도우 집계 (tokens=130, storage_gb=8)
+  3. Rating: overage 계산 (tokens over=30 → 0.6 KRW)
+  4. Quota: 한도 점검 (used=130 > hard=120 → deny)
+
+Watermark 처리:
+- Event timestamps: 10:15-10:22, processing now=10:25
+- All events within 15min max_lag_sec → late_dropped=0
+- Event-time window assignment verified
+
+전체 Gate-S 테스트 결과:
+✓ test_inmemory_idempotency_basic PASSED
+✓ test_sqlite_idempotency_persistent PASSED
+✓ test_metering_contract_v1_idempotency_and_hour_aggregate PASSED
+✓ test_watermark_lateness_v1_drop_and_keep PASSED
+✓ test_rating_simple_overage PASSED
+✓ test_quota_soft_and_hard PASSED
+✓ test_budget_levels_and_ewma_spike PASSED
+✓ test_metering_contract_shape_seed XPASS
+✓ test_witness_to_metering_to_rating_to_quota PASSED
+
+9 tests total: 8 passed, 1 xpassed in 0.60s
+
+Work Order:
+- docs/work_orders/wo-v0.5.11e-integration-witness-metering.yaml
+- techspec: Gate-T + Gate-S Integration v1
+- plan: Milestones — Gate-S v1.4
+
+v1 제외사항 (후속 단계):
+- 실제 witness 포맷 파서 (현재 CSV 더미만)
+- Witness 암호화 서명 검증
+- Multi-tenant aggregation
+
+다음 단계 (Day 222):
+- Cost-Guard 조치의 Evidence 연동
+- RBAC hook 통합
+
+Gate-S + Gate-T 상태: Green + Full Integration
+
+No-Gemini. Claude Code 단독 구현.
