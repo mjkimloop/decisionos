@@ -1,0 +1,44 @@
+meta:
+  version: v0.5.11g
+  date: 2025-11-10
+  status: locked
+  summary: "slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI"
+
+patches:
+  techspec:
+    - section: "Gate-AJ — SLO-as-Code v1"
+      mode: upsert
+      content: |
+        목적: Evidence(JSON) ↔ slo.json 비교로 배포/롤아웃 판정 자동화.
+        구성요소:
+          - SLO 스키마: configs/slo/*.json (pydantic 검증)
+          - Local Judge: apps.judge.slo_judge.evaluate(evidence, slo)
+          - Quorum: apps.judge.quorum.decide(providers, k_of_n)
+          - RBAC: judge.run 권한 확인(Hook)
+          - CLI: dosctl judge slo --slo ... --evidence ... --quorum 2/3
+        기본 정책(예):
+          - budget.level ∉ {"exceeded"}
+          - quota.forbid: {"tokens": ["deny"]}
+          - anomaly.is_spike == false (옵션)
+          - witness.csv_sha256 필수 & integrity.signature 검증
+        Fail-Closed:
+          - SLO/증빙 파싱 실패, 무결성 검증 실패, witness 누락 시 → FAIL
+    - section: "Security — RBAC Hooks for Judge"
+      mode: upsert
+      content: |
+        - 정책키: "judge.run"
+        - CLI 실행 전에 pep.enforce("judge.run", actor, resource)
+        - 실패 시 403 스타일 에러로 중단
+  plan:
+    - section: "Milestones — v0.5.11g"
+      mode: upsert
+      content: |
+        - slo_schema.py, slo_judge.py, quorum.py 구현
+        - CLI: dosctl judge slo ... 추가
+        - 테스트: gate_aj 3종(단일판정, 쿼럼 2/3, 무결성 실패)
+        - 샘플 slo 파일 2종 추가 (canary, strict)
+    - section: "Next Actions — v0.5.11g"
+      mode: upsert
+      content: |
+        Day 223: 코드/테스트/CLI Green
+        Day 224: CI 매트릭스(gate_aj) 확장 및 샘플 evidence/slo 아카이브

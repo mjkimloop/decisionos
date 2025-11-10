@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11fedcbaccbabaaa
+version: v0.5.11gfedcbaccbabaaa
 date: 2025-11-10
 status: locked
-summary: Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
+summary: slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
 -->
 
 # DecisionOS Implementation Plan
@@ -603,3 +603,13 @@ Day 222: Cost-Guard 조치의 Evidence 연동 + RBAC hook
 ## Next Actions — v0.5.11f
 Day 222: 통합 테스트 Green 및 Evidence 샘플 커밋
 Day 223: slo.json 기반 Judge(멀티쿼럼) 연계 스냅샷(v0.5.11g)
+
+## Milestones — v0.5.11g
+- slo_schema.py, slo_judge.py, quorum.py 구현
+- CLI: dosctl judge slo ... 추가
+- 테스트: gate_aj 3종(단일판정, 쿼럼 2/3, 무결성 실패)
+- 샘플 slo 파일 2종 추가 (canary, strict)
+
+## Next Actions — v0.5.11g
+Day 223: 코드/테스트/CLI Green
+Day 224: CI 매트릭스(gate_aj) 확장 및 샘플 evidence/slo 아카이브

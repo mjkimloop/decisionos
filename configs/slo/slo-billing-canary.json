@@ -1,0 +1,28 @@
+{
+  "version": "v1",
+  "budget": {
+    "allow_levels": ["ok", "warn"],
+    "max_spent": 1.0
+  },
+  "quota": {
+    "forbid_actions": {
+      "tokens": ["deny"]
+    }
+  },
+  "anomaly": {
+    "allow_spike": false
+  },
+  "witness": {
+    "require_csv_sha256": true,
+    "require_signature": true,
+    "min_rows": 1
+  },
+  "integrity": {
+    "require_signature": true
+  },
+  "quorum": {
+    "k": 2,
+    "n": 3,
+    "fail_closed_on_degrade": true
+  }
+}

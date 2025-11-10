@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11fedcbaccbabaaaaa
+version: v0.5.11gfedcbaccbabaaaaa
 date: 2025-11-10
 status: locked
-summary: Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
+summary: slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
 -->
 
 
@@ -2328,3 +2328,28 @@ Evidence 필수 필드:
   - budget.level과 anomaly.is_spike가 테스트 시나리오대로 판정
   - 파일 저장: var/evidence/evidence-YYYYMMDDTHHMMSS.json 생성
 <!-- AUTOGEN:END:Integration — Witness↔Metering↔Rating/Quota↔Cost-Guard v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-AJ — SLO-as-Code v1 -->
+목적: Evidence(JSON) ↔ slo.json 비교로 배포/롤아웃 판정 자동화.
+구성요소:
+  - SLO 스키마: configs/slo/*.json (pydantic 검증)
+  - Local Judge: apps.judge.slo_judge.evaluate(evidence, slo)
+  - Quorum: apps.judge.quorum.decide(providers, k_of_n)
+  - RBAC: judge.run 권한 확인(Hook)
+  - CLI: dosctl judge slo --slo ... --evidence ... --quorum 2/3
+기본 정책(예):
+  - budget.level ∉ {"exceeded"}
+  - quota.forbid: {"tokens": ["deny"]}
+  - anomaly.is_spike == false (옵션)
+  - witness.csv_sha256 필수 & integrity.signature 검증
+Fail-Closed:
+  - SLO/증빙 파싱 실패, 무결성 검증 실패, witness 누락 시 → FAIL
+<!-- AUTOGEN:END:Gate-AJ — SLO-as-Code v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Security — RBAC Hooks for Judge -->
+- 정책키: "judge.run"
+- CLI 실행 전에 pep.enforce("judge.run", actor, resource)
+- 실패 시 403 스타일 에러로 중단
+<!-- AUTOGEN:END:Security — RBAC Hooks for Judge -->

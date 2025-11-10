@@ -141,3 +141,6 @@
 ## v0.5.11f — 2025-11-10
 - Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성
 
+## v0.5.11g — 2025-11-10
+- slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
+

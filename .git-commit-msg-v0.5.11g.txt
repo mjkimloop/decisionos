@@ -1,0 +1,91 @@
+gate_aj(slo): slo.json + local judge + 2/3 quorum + CLI + RBAC hook (v0.5.11g)
+
+slo.json 기반 멀티-저지 쿼럼 판정 시스템 완성. Evidence ↔ SLO 비교로 배포 자동화.
+
+신규 모듈 (4개):
+1. apps/judge/ - SLO Judge 및 쿼럼 판정
+   - slo_schema.py (2.0 KB): SLOSpec, SLOBudget, SLOQuota, SLOAnomaly 등
+   - slo_judge.py (2.8 KB): evaluate(evidence, slo) → ("pass"|"fail", reasons)
+   - quorum.py (1.5 KB): decide(providers, k, n) → 멀티-저지 합의
+
+2. apps/cli/dosctl/ - CLI 도구
+   - slo_judge.py (2.3 KB): dosctl judge slo 명령 구현
+
+SLO 스키마 (Pydantic 검증):
+- budget: allow_levels(ok/warn/exceeded), max_spent
+- quota: forbid_actions(metric → [deny/throttle])
+- anomaly: allow_spike (true/false)
+- witness: require_csv_sha256, require_signature
+- integrity: require_signature (SHA-256 재계산 검증)
+- quorum: k/n, fail_closed_on_degrade
+
+Judge 판정 로직:
+1. SLO 파싱 (ValidationError → fail)
+2. Evidence 필수 키 검증 (meta/witness/usage/rating/quota/budget/anomaly/integrity)
+3. Witness CSV SHA-256 존재 확인
+4. Integrity 서명 재계산 및 일치 검증
+5. Budget level 허용 목록 확인
+6. Quota forbid_actions 위반 검증
+7. Anomaly spike 허용 여부 확인
+8. 모든 검증 통과 → "pass", 하나라도 실패 → "fail" + reasons
+
+Quorum 합의:
+- k-of-n 투표 (예: 2/3 = 3개 중 2개 이상 pass 필요)
+- 각 provider(judge)는 독립적으로 판정
+- final decision: pass_count >= k → "pass", 아니면 "fail"
+
+CLI 사용법:
+```powershell
+dosctl judge slo --slo configs/slo/slo-billing-canary.json --evidence var/evidence/latest.json --quorum 2/3
+```
+
+Exit code:
+- 0: pass (배포 승인)
+- 2: fail (배포 거부)
+- 3: RBAC 거부 (향후)
+
+SLO 샘플 파일 (2종):
+1. slo-billing-canary.json (관대):
+   - allow_levels: [ok, warn]
+   - forbid_actions: {tokens: [deny]}
+   - allow_spike: false
+
+2. slo-billing-strict.json (엄격):
+   - allow_levels: [ok]
+   - forbid_actions: {tokens: [deny, throttle]}
+   - allow_spike: false
+
+Gate-AJ 테스트 결과:
+✓ test_local_judge_pass_canary PASSED
+✓ test_local_judge_fail_budget_quota PASSED
+✓ test_quorum_2_of_3_pass PASSED
+✓ test_quorum_1_of_3_fail PASSED
+✓ test_missing_evidence_keys PASSED
+
+5개 테스트 모두 통과 (0.36초)
+
+Fail-Closed 정책:
+- SLO 파싱 실패 → fail
+- Evidence 필수 키 누락 → fail
+- Witness CSV SHA-256 누락 → fail
+- Integrity 서명 불일치 → fail
+- Budget/Quota/Anomaly 정책 위반 → fail
+
+RBAC Hook (플러그 준비):
+- 환경변수: DECISIONOS_ENFORCE_RBAC=1
+- 정책키: "judge.run"
+- TODO: pep.enforce(policy, actor, resource) 연동
+
+Work Order:
+- docs/work_orders/wo-v0.5.11g-judge-slo-quorum.yaml
+- techspec: Gate-AJ — SLO-as-Code v1, Security — RBAC Hooks
+- plan: Milestones — v0.5.11g
+
+다음 단계 (Day 224):
+- CI 매트릭스(gate_aj) 확장
+- 샘플 evidence/slo 아카이브
+- 프로덕션 Judge 연동 (원격 저지 추가)
+
+Gate-AJ 상태: Green + SLO-as-Code Ready
+
+No-Gemini. Claude Code 단독 구현.
