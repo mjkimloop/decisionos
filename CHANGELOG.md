@@ -144,3 +144,6 @@
 ## v0.5.11g — 2025-11-10
 - slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
 
+## v0.5.11h — 2025-11-10
+- Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
+

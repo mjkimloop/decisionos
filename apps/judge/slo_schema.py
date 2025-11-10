@@ -45,6 +45,19 @@ class SLOIntegrity(BaseModel):
     require_signature: bool = True
 
 
+class SLOLatency(BaseModel):
+    """지연 시간 정책"""
+
+    max_p95_ms: Optional[int] = None
+    max_p99_ms: Optional[int] = None
+
+
+class SLOError(BaseModel):
+    """에러율 정책"""
+
+    max_error_rate: Optional[float] = None
+
+
 class SLOQuorum(BaseModel):
     """쿼럼 정책"""
 
@@ -60,6 +73,8 @@ class SLOSpec(BaseModel):
     budget: SLOBudget = SLOBudget()
     quota: SLOQuota = SLOQuota()
     anomaly: SLOAnomaly = SLOAnomaly()
+    latency: SLOLatency = SLOLatency()
+    error: SLOError = SLOError()
     witness: SLOWitness = SLOWitness()
     integrity: SLOIntegrity = SLOIntegrity()
     quorum: SLOQuorum = SLOQuorum()

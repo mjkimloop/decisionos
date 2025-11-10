@@ -40,6 +40,7 @@ class Evidence:
     quota: Dict[str, Any]
     budget: Dict[str, Any]
     anomaly: Dict[str, Any]
+    perf: Dict[str, Any] | None
     integrity: Dict[str, Any]
 
     def to_json(self, indent: int = 2) -> str:
@@ -75,6 +76,7 @@ def build_snapshot(
     anomaly_is_spike: bool,
     anomaly_ewma: float,
     anomaly_ratio: float,
+    perf: Dict[str, Any] | None = None,
 ) -> Evidence:
     """
     전체 체인 실행 결과를 Evidence 스냅샷으로 빌드.
@@ -154,6 +156,8 @@ def build_snapshot(
         "budget": budget_dict,
         "anomaly": anomaly_dict,
     }
+    if perf is not None:
+        core["perf"] = perf
     core_json = json.dumps(core, ensure_ascii=False, sort_keys=True)
     integrity = {"signature_sha256": sha256_text(core_json)}
 
@@ -165,5 +169,6 @@ def build_snapshot(
         quota=quota_dict,
         budget=budget_dict,
         anomaly=anomaly_dict,
+        perf=perf,
         integrity=integrity,
     )

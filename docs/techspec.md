@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11gfedcbaccbabaaaaa
+version: v0.5.11hgfedcbaccbabaaaaa
 date: 2025-11-10
 status: locked
-summary: slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
+summary: Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
 -->
 
 
@@ -2353,3 +2353,45 @@ Fail-Closed:
 - CLI 실행 전에 pep.enforce("judge.run", actor, resource)
 - 실패 시 403 스타일 에러로 중단
 <!-- AUTOGEN:END:Security — RBAC Hooks for Judge -->
+
+
+<!-- AUTOGEN:BEGIN:Gate-T — Performance Witness v1 -->
+입력: reqlog CSV (컬럼: ts, status, latency_ms)
+산출: PerfSummary {p50, p95, p99, error_rate, count, window:{start,end}}
+모듈:
+  - apps/obs/witness/perf.py
+    - parse_reqlog_csv(f) -> List[Req]
+    - summarize_perf(reqs) -> Dict[p50,p95,p99,error_rate,count,window]
+  - apps/cli/dosctl/witness_perf.py
+    - dosctl witness perf --csv <path> --out var/evidence/perf-latest.json
+<!-- AUTOGEN:END:Gate-T — Performance Witness v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — perf block -->
+Evidence.perf 예시:
+{
+  "latency_ms": {"p50": 320, "p95": 900, "p99": 1500},
+  "error_rate": 0.012,
+  "count": 12450,
+  "window": {"start": "...", "end": "..."}
+}
+build_snapshot()는 perf 인자 제공 시 perf 블록 병합.
+<!-- AUTOGEN:END:Evidence — perf block -->
+
+
+<!-- AUTOGEN:BEGIN:SLO-as-Code — Latency & Error -->
+slo_schema 확장:
+  - SLOLatency {max_p95_ms:int|null, max_p99_ms:int|null}
+  - SLOError {max_error_rate: float|null}
+평가 규칙:
+  - perf 누락 시 fail-closed (latency/error 정책이 존재할 때)
+  - p95 > max_p95_ms 또는 p99 > max_p99_ms → fail
+  - error_rate > max_error_rate → fail
+<!-- AUTOGEN:END:SLO-as-Code — Latency & Error -->
+
+
+<!-- AUTOGEN:BEGIN:Judge — perf checks -->
+apps/judge/slo_judge.evaluate():
+  - SLO.latency / SLO.error 존재 시 Evidence.perf 필수
+  - 위반 사유를 reasons[]에 추가: latency.p95_over, latency.p99_over, error.rate_over
+<!-- AUTOGEN:END:Judge — perf checks -->

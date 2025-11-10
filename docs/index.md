@@ -1,5 +1,7 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11h — 2025-11-10 — Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
+
 - v0.5.11g — 2025-11-10 — slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
 
 - v0.5.11f — 2025-11-10 — Witness → Metering → Rating/Quota → Cost-Guard(예산·EWMA) 통합 + Evidence 스냅샷(JSON) 생성

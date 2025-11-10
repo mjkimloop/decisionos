@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11gfedcbaccbabaaa
+version: v0.5.11hgfedcbaccbabaaa
 date: 2025-11-10
 status: locked
-summary: slo.json 스키마 + Evidence 비교 Judge(단일) + Multi-Judge(2/3 합의) + RBAC Hook + CLI
+summary: Gate-T 성능 증빙(p50/p95/p99, error_rate) + Evidence.perf + SLO(latency/error) + Judge 확장 + CLI
 -->
 
 # DecisionOS Implementation Plan
@@ -613,3 +613,14 @@ Day 223: slo.json 기반 Judge(멀티쿼럼) 연계 스냅샷(v0.5.11g)
 ## Next Actions — v0.5.11g
 Day 223: 코드/테스트/CLI Green
 Day 224: CI 매트릭스(gate_aj) 확장 및 샘플 evidence/slo 아카이브
+
+## Milestones — v0.5.11h
+- Witness: perf.py + CLI 추가
+- Evidence: perf 블록 병합 지원
+- SLO 스키마/저지: latency/error 정책 추가
+- 샘플 SLO v2 2종 (canary/strict)
+- 테스트: gate_t(1), gate_aj(2), integration(1) Green
+
+## Next Actions — v0.5.11h
+Day 223: perf witness/CLI 구현 및 단위테스트
+Day 224: slo(latency/error) + judge 확장, 통합테스트 및 CI 매트릭스 업데이트

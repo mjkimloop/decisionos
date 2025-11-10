@@ -96,4 +96,34 @@ def evaluate(
     if not spec.anomaly.allow_spike and evidence["anomaly"].get("is_spike", False):
         reasons.append("anomaly.spike_forbidden")
 
+    # perf 검증 (latency/error 정책이 존재할 때)
+    perf_required = (
+        spec.latency.max_p95_ms is not None
+        or spec.latency.max_p99_ms is not None
+        or spec.error.max_error_rate is not None
+    )
+    if perf_required:
+        if "perf" not in evidence or evidence["perf"] is None:
+            reasons.append("perf.missing")
+        else:
+            perf = evidence["perf"]
+            # latency 검증
+            if spec.latency.max_p95_ms is not None:
+                p95 = perf.get("latency_ms", {}).get("p95", 0)
+                if p95 > spec.latency.max_p95_ms:
+                    reasons.append(f"latency.p95_over:{p95}>{spec.latency.max_p95_ms}")
+
+            if spec.latency.max_p99_ms is not None:
+                p99 = perf.get("latency_ms", {}).get("p99", 0)
+                if p99 > spec.latency.max_p99_ms:
+                    reasons.append(f"latency.p99_over:{p99}>{spec.latency.max_p99_ms}")
+
+            # error 검증
+            if spec.error.max_error_rate is not None:
+                err_rate = perf.get("error_rate", 0)
+                if err_rate > spec.error.max_error_rate:
+                    reasons.append(
+                        f"error.rate_over:{err_rate}>{spec.error.max_error_rate}"
+                    )
+
     return ("pass" if not reasons else "fail"), reasons

@@ -1,0 +1,35 @@
+{
+  "version": "v1",
+  "budget": {
+    "allow_levels": ["ok"],
+    "max_spent": 0.5
+  },
+  "quota": {
+    "forbid_actions": {
+      "tokens": ["deny", "throttle"]
+    }
+  },
+  "anomaly": {
+    "allow_spike": false
+  },
+  "latency": {
+    "max_p95_ms": 900,
+    "max_p99_ms": 1800
+  },
+  "error": {
+    "max_error_rate": 0.01
+  },
+  "witness": {
+    "require_csv_sha256": true,
+    "require_signature": true,
+    "min_rows": 1
+  },
+  "integrity": {
+    "require_signature": true
+  },
+  "quorum": {
+    "k": 2,
+    "n": 3,
+    "fail_closed_on_degrade": true
+  }
+}
