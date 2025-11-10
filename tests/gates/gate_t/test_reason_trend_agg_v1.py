@@ -28,3 +28,4 @@ def test_reason_trend_aggregates(tmp_path):
     totals = dict(trend["total_top"])
     assert totals["perf.p95_over"] == 2
     assert totals["quota.forbidden_action"] == 1
+    assert trend.get("last_updated") is not None

@@ -41,6 +41,7 @@ def scan_dir(root: str = "var/evidence") -> Dict[str, Any]:
     root_path = Path(root)
     root_path.mkdir(parents=True, exist_ok=True)
     files: List[Dict[str, Any]] = []
+    latest_mtime = 0.0
     for entry in sorted(root_path.glob("*.json")):
         if entry.name == "index.json":
             continue
@@ -84,13 +85,26 @@ def scan_dir(root: str = "var/evidence") -> Dict[str, Any]:
                     "generated_at": None,
                 }
             )
+        finally:
+            try:
+                stat = entry.stat()
+                latest_mtime = max(latest_mtime, stat.st_mtime)
+            except FileNotFoundError:
+                continue
     summary = {
         "count": len(files),
         "tampered": sum(1 for f in files if f.get("tampered")),
         "wip": sum(1 for f in files if f.get("tier") == "WIP"),
         "locked": sum(1 for f in files if f.get("tier") == "LOCKED"),
     }
-    return {"generated_at": _iso(datetime.now(timezone.utc).timestamp()), "root": str(root_path), "files": files, "summary": summary}
+    last_updated = _iso(latest_mtime) if latest_mtime else None
+    return {
+        "generated_at": _iso(datetime.now(timezone.utc).timestamp()),
+        "last_updated": last_updated,
+        "root": str(root_path),
+        "files": files,
+        "summary": summary,
+    }
 
 
 def write_index(root: str = "var/evidence", out: str | None = None) -> str:

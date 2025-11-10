@@ -101,24 +101,7 @@ jobs:
           python -m jobs.reason_trend_daily --days 7 --topK 10 --out var/reports
       - name: Compose Artifact Links
         run: |
-          python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-repo = os.getenv("GITHUB_REPOSITORY")
-base = os.getenv("GITHUB_SERVER_URL", "https://github.com")
-run_id = os.getenv("GITHUB_RUN_ID")
-run_url = f"{base}/{repo}/actions/runs/{run_id}" if repo and run_id else ""
-artifacts = [
-    {"name": "reason-trend", "url": run_url + "#artifacts"} if run_url else None,
-    {"name": "evidence", "url": run_url + "#artifacts"} if run_url else None,
-]
-payload = {"artifacts": [a for a in artifacts if a]}
-out = Path("var/reports")
-out.mkdir(parents=True, exist_ok=True)
-out.joinpath("artifacts.json").write_text(json.dumps(payload), encoding="utf-8")
-PY
+          python scripts/ci/compose_artifacts.py
       - name: Strict SLO Gate
         env:
           DECISIONOS_ALLOW_SCOPES: judge:run
@@ -157,16 +140,7 @@ PY
       - name: Summarize Hardening
         if: always()
         run: |
-          COUNT=$(python - <<'PY'
-import json
-from pathlib import Path
-try:
-    data = json.loads(Path("var/evidence/index.json").read_text())
-    print(data.get("count", 0))
-except Exception:
-    print("n/a")
-PY
-)
+          COUNT=$(python scripts/ci/count_evidence.py)
           {
             echo "### v0.5.11m — Immutability/Chaos/Clock ✅"
             echo "- clock guard executed"

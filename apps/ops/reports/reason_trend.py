@@ -1,30 +1,61 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
-def _iter_evidence_paths(root: str) -> List[str]:
-    root_path = Path(root)
-    if not root_path.exists():
-        return []
-    index_path = root_path / "index.json"
+def _collect_paths_and_meta(root: Path) -> Tuple[List[str], str | None, str]:
+    if not root.exists():
+        return [], None, "missing"
+
+    index_path = root / "index.json"
     if index_path.exists():
-        data = json.loads(index_path.read_text(encoding="utf-8"))
+        raw = index_path.read_text(encoding="utf-8")
+        try:
+            data = json.loads(raw) or {}
+        except json.JSONDecodeError:
+            data = {}
         items = data.get("files") or data.get("items") or []
-        return [
-            str(root_path / item["path"])
-            for item in items
-            if item.get("tier") in {"WIP", "LOCKED"}
-        ]
-    return sorted(
+        paths: List[str] = []
+        for item in items:
+            if item.get("tier") not in {"WIP", "LOCKED"}:
+                continue
+            rel = item.get("path")
+            if not rel:
+                continue
+            candidate = root / rel
+            if candidate.is_file():
+                paths.append(str(candidate))
+        last_updated = data.get("last_updated") or data.get("generated_at")
+        signature = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        return paths, last_updated, signature
+
+    paths = sorted(
         str(path)
-        for path in root_path.iterdir()
+        for path in root.iterdir()
         if path.is_file() and path.name.endswith(".json") and path.name.startswith("evidence-")
     )
+    latest_ts = 0.0
+    sig_parts: List[str] = []
+    for path_str in paths:
+        candidate = Path(path_str)
+        try:
+            stat = candidate.stat()
+        except FileNotFoundError:
+            continue
+        latest_ts = max(latest_ts, stat.st_mtime)
+        sig_parts.append(f"{candidate.name}:{int(stat.st_mtime_ns)}:{stat.st_size}")
+    last_updated = (
+        dt.datetime.fromtimestamp(latest_ts, tz=dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        if latest_ts
+        else None
+    )
+    signature = hashlib.sha256("|".join(sig_parts).encode("utf-8")).hexdigest() if sig_parts else "missing"
+    return paths, last_updated, signature
 
 
 def _load_json(path: str) -> Dict[str, Any]:
@@ -56,8 +87,14 @@ def _extract_timestamp(evidence_obj: Dict[str, Any]) -> dt.datetime | None:
         return None
 
 
+def get_index_signature(evidence_dir: str = "var/evidence") -> Tuple[str, str | None]:
+    _, last_updated, signature = _collect_paths_and_meta(Path(evidence_dir))
+    return signature, last_updated
+
+
 def aggregate_reason_trend(evidence_dir: str = "var/evidence", days: int = 7) -> Dict[str, Any]:
-    paths = _iter_evidence_paths(evidence_dir)
+    root_path = Path(evidence_dir)
+    paths, last_updated, signature = _collect_paths_and_meta(root_path)
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
     daily: Dict[str, Counter] = defaultdict(Counter)
     total = Counter()
@@ -78,6 +115,8 @@ def aggregate_reason_trend(evidence_dir: str = "var/evidence", days: int = 7) ->
         "total_top": total.most_common(20),
         "by_day": {day: counts.most_common(20) for day, counts in sorted(daily.items())},
         "count_evidence": sum(sum(counts.values()) for counts in daily.values()),
+        "last_updated": last_updated,
+        "index_signature": signature,
     }
 
 
@@ -93,6 +132,7 @@ def save_trend_reports(
     lines = [
         f"# Reason Trend (last {trend['window_days']} days)",
         f"- generated_at: {trend['generated_at']}",
+        f"- last_updated: {trend.get('last_updated')}",
         f"- total reason count: {trend['count_evidence']}",
         "## Top Reasons (overall)",
     ]

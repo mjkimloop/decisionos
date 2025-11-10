@@ -1,7 +1,13 @@
 from __future__ import annotations
+
 import base64
-import hmac, hashlib, json, os, time
+import hashlib
+import hmac
+import json
+import os
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 @dataclass
@@ -14,11 +20,16 @@ class MultiKeyLoader:
     """ENV(JSON) 기반 멀티키 로더. 예:
     DECISIONOS_JUDGE_KEYS='[{"key_id":"k1","secret":"base64|hex|plain","state":"active"}]'
     """
-    def __init__(self, env_var: str = "DECISIONOS_JUDGE_KEYS"):
+    def __init__(self, env_var: str = "DECISIONOS_JUDGE_KEYS", file_env: str = "DECISIONOS_JUDGE_KEYS_FILE"):
         self.env_var = env_var
+        self.file_env = file_env
         self._cache_ts = 0
         self._ttl = 5
         self._keys: Dict[str, KeyMaterial] = {}
+        self._loaded_at: Optional[float] = None
+        self._last_error: Optional[str] = None
+        self._source_hash: Optional[str] = None
+        self._file_mtime: Optional[float] = None
 
     def _parse_secret(self, s: str) -> bytes:
         if s.startswith("hex:"):
@@ -27,19 +38,50 @@ class MultiKeyLoader:
             return base64.b64decode(s[4:])
         return s.encode("utf-8")
 
-    def _reload_if_needed(self):
-        now = time.time()
-        if now - self._cache_ts < self._ttl:
-            return
+    def _read_source(self) -> str:
+        file_path = os.getenv(self.file_env)
+        if file_path:
+            path = Path(file_path)
+            if path.exists():
+                return path.read_text(encoding="utf-8")
         raw = os.getenv(self.env_var)
         if raw:
-            data = json.loads(raw)
+            return raw
+        legacy = os.getenv("DECISIONOS_JUDGE_HMAC_KEY")
+        if legacy:
+            return json.dumps([{"key_id": "legacy", "secret": legacy, "state": "active"}])
+        return "[]"
+
+    def force_reload(self) -> None:
+        self._cache_ts = 0
+        self._reload_if_needed(force=True)
+
+    def _reload_if_needed(self, force: bool = False):
+        file_path = os.getenv(self.file_env)
+        if file_path:
+            try:
+                mtime = os.path.getmtime(file_path)
+            except OSError:
+                mtime = None
         else:
-            legacy = os.getenv("DECISIONOS_JUDGE_HMAC_KEY")
-            if legacy:
-                data = [{"key_id": "legacy", "secret": legacy, "state": "active"}]
-            else:
-                data = []
+            mtime = None
+        if mtime is not None and self._file_mtime is not None and mtime != self._file_mtime:
+            force = True
+        self._file_mtime = mtime
+
+        now = time.time()
+        if not force and now - self._cache_ts < self._ttl:
+            return
+        source = self._read_source()
+        try:
+            data = json.loads(source)
+        except Exception as exc:
+            self._keys = {}
+            self._cache_ts = now
+            self._loaded_at = None
+            self._last_error = f"{type(exc).__name__}: {exc}"
+            self._source_hash = None
+            return
         m: Dict[str, KeyMaterial] = {}
         for item in data:
             km = KeyMaterial(
@@ -50,6 +92,9 @@ class MultiKeyLoader:
             m[km.key_id] = km
         self._keys = m
         self._cache_ts = now
+        self._loaded_at = now
+        self._last_error = None
+        self._source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     def get(self, key_id: str) -> Optional[KeyMaterial]:
         self._reload_if_needed()
@@ -61,6 +106,25 @@ class MultiKeyLoader:
             if km.state == "active":
                 return km
         return None
+
+    def info(self) -> Dict[str, Optional[float] | Optional[str] | int]:
+        self._reload_if_needed()
+        age = None
+        if self._loaded_at:
+            age = max(0.0, time.time() - self._loaded_at)
+        return {
+            "key_count": len(self._keys),
+            "loaded_at": datetime_from_timestamp(self._loaded_at),
+            "age_seconds": age,
+            "last_error": self._last_error,
+            "source_hash": self._source_hash,
+        }
+
+
+def datetime_from_timestamp(ts: Optional[float]) -> Optional[str]:
+    if not ts:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 def canonical_json(obj) -> bytes:
     return json.dumps(obj, separators=(",",":"), sort_keys=True).encode("utf-8")
