@@ -204,7 +204,7 @@ pii_rules:
     strategy: redact
     severity: critical
     examples:
-      - input: "API_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+      - input: "API_KEY=sk_test_EXAMPLE_NOT_REAL_KEY_123"
         output: "API_KEY=[REDACTED_API_KEY]"
 
   - name: aws_access_key
@@ -422,7 +422,7 @@ test_cases:
     rules_applied: [phone_us]
 
   - description: "API key in environment variable"
-    input: "API_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc"
+    input: "API_KEY=sk_test_EXAMPLE_NOT_REAL_KEY_123"
     expected_output: "API_KEY=[REDACTED_API_KEY]"
     rules_applied: [api_key_generic]
 
