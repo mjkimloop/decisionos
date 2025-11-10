@@ -76,11 +76,9 @@ jobs:
       - name: Prepare local providers
         run: |
           mkdir -p var
-          cat <<'EOF' > var/providers-local.yaml
-providers:
-  - id: local-a
-    type: local
-EOF
+          echo 'providers:' > var/providers-local.yaml
+          echo '  - id: local-a' >> var/providers-local.yaml
+          echo '    type: local' >> var/providers-local.yaml
       - name: Run Gates (infra & canary)
         id: gates
         run: |
