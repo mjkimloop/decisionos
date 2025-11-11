@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: Prod Cutover Runbook 등록 + TechSpec/Plan 반영 + CI 사전 점검 단계
+summary: PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
 -->
 
 # DecisionOS Implementation Plan
@@ -770,3 +770,33 @@ Day 5: LOCK 티어 전환 및 태그 고정
 - Release Gate: shadow/mirror → harvest → Evidence 병합 → infra & canary 게이트.
 - PR 주석에 게이트 결과 요약/Artifacts 링크/Top-impact 레이블러 포함.
 <!-- AUTOGEN:END:CI — Pre-Gate & Release Gate -->
+
+## Milestones — v0.5.11q-1
+Day 1: 템플릿/검증 스크립트 추가, CI 단계 삽입
+Day 2: 게이트 요약(gate_summary.json)·사유(reasons.json)·아티팩트(manifest.json) 연동
+Day 3: PR 코멘트 자동화 E2E 확인 및 문구/형식 튜닝
+
+
+<!-- AUTOGEN:BEGIN:Workflow — release_gate steps (추가) -->
+- name: Validate artifact links
+  run: |
+    python scripts/ci/validate_artifacts.py --manifest var/reports/artifacts-manifest.json
+- name: Compose & post PR comment
+  env:
+    GITHUB_TOKEN: secrets.GITHUB_TOKEN
+  run: |
+    python scripts/ci/annotate_release_gate.py \
+      --template .github/pr_comment_template.md \
+      --status-json var/reports/gate_summary.json \
+      --reasons-json var/reports/reasons.json \
+      --manifest var/reports/artifacts-manifest.json \
+      --out var/reports/pr_comment.md \
+      --repo "github.repository" \
+      --pr "github.event.pull_request.number"
+<!-- AUTOGEN:END:Workflow — release_gate steps (추가) -->
+
+
+<!-- AUTOGEN:BEGIN:Runbooks — Reviewer UX -->
+- PR 코멘트 상단에 Gates 상태(Infra/Canary), 주 사유 Top-N(code→message) 테이블, Evidence/Reports 링크, Run 링크가 노출된다.
+- 링크 검증 실패 시 워크플로가 실패하므로 재시도 전 아티팩트 퍼블릭 접근 권한/서명 URL/보존 기한을 확인한다.
+<!-- AUTOGEN:END:Runbooks — Reviewer UX -->

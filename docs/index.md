@@ -1,5 +1,7 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11q-1 — 2025-11-11 — PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
+
 - v0.5.11q — 2025-11-11 — Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
 
 - v0.5.11p-1 — 2025-11-11 — Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가

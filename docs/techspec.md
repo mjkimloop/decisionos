@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: Prod Cutover Runbook 등록 + TechSpec/Plan 반영 + CI 사전 점검 단계
+summary: PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
 -->
 
 
@@ -2845,3 +2845,10 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - Infra: readiness, p95/p99, error_rate, min_samples/window_sec/grace_burst.
 - Canary: 연속 pass N회 & burst=0 조건 충족 시 승격.
 <!-- AUTOGEN:END:SLO — Infra & Canary Gates -->
+
+
+<!-- AUTOGEN:BEGIN:CI — PR Comment & Artifacts Validation -->
+- PR 코멘트는 템플릿 기반으로 자동 생성하며, 게이트 상태/주 사유(code+message+count)/아티팩트 링크(Evidence, Gate Reports, Ops Cards)를 포함한다.
+- 모든 외부 링크는 릴리스 게이트 완료 직후 유효성 검사를 통과해야 하며, 2xx/302/304만 허용한다. 실패 시 워크플로 실패(fail-closed).
+- 주석 본문에는 업데이트 식별을 위한 마커 <!--DECISIONOS:PR:RELEASE_GATE--> 를 포함한다.
+<!-- AUTOGEN:END:CI — PR Comment & Artifacts Validation -->
