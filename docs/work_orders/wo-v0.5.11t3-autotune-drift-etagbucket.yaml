@@ -1,0 +1,29 @@
+meta:
+  version: v0.5.11t-3
+  date: 2025-11-11
+  summary: "Calibrated-Δ 기반 자동 승격 임계 재조정 + posterior drift 모니터 + Cards Stream ETag-Delta/버킷 통합"
+scope:
+  - Autotune: calibrated Δ, obs variance, 승격 임계(delta_threshold, p_win_threshold, min_windows) 자동 조정
+  - Drift: prior p_win ↔ posterior(관측) 괴리 측정(KL/abs-diff) 및 알람/리즌 코드 기록
+  - Cards stream: period+bucket(day|hour) 분포, ETag-Delta(X-Delta-Base-ETag) 연동, 304/continuity-token
+deliverables:
+  - apps/ops/optimizer/autotune.py
+  - jobs/autotune_promote_threshold.py
+  - apps/ops/monitor/drift.py
+  - jobs/posterior_drift_check.py
+  - apps/ops/api_cards.py (highlights/stream v2: bucket/etag-delta)
+  - tests/ops/test_autotune_threshold_v1.py
+  - tests/ops/test_posterior_drift_alarm_v1.py
+  - tests/ops/test_highlights_stream_etag_bucket_v1.py
+ci:
+  pre_gate:
+    - "샘플 ab_report/calibration/canary.windows 준비"
+  gate:
+    - "신규 3 테스트 Green"
+  post_gate:
+    - "autotune 실행 → policy.autotuned.json"
+    - "drift 체크 → var/alerts/posterior_drift.json"
+acceptance:
+  - policy.autotuned.json에 {delta_threshold,p_win_threshold,min_windows} 포함
+  - posterior_drift.json severity in {info, warn, critical}, reason_codes 배열
+  - /ops/cards/highlights/stream?bucket=day 에 대해 If-None-Match / X-Delta-Base-ETag 처리로 304 동작

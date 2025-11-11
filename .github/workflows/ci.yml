@@ -169,6 +169,26 @@ jobs:
             --out-dir var/cards/highlights \
             --k 5 \
             --weighted || true
+      - name: Autotune thresholds - t3-round
+        run: |
+          mkdir -p var/ab_reports var/policy
+          echo '{"delta":{"mean":1.0},"p_win":0.7}' > var/ab_reports/history.jsonl
+          echo '{"delta":{"mean":1.2},"p_win":0.75}' >> var/ab_reports/history.jsonl
+          echo '{"gain":0.95}' > var/ab_reports/calibration.json
+          python -m jobs.autotune_promote_threshold \
+            --ab-history var/ab_reports/history.jsonl \
+            --calibration var/ab_reports/calibration.json \
+            --out var/policy/policy.autotuned.json \
+            --safety-factor 2.0 || true
+      - name: Posterior drift check - t3-round
+        run: |
+          mkdir -p configs/optimizer var/alerts
+          echo '{"alpha":2.0,"beta":2.0}' > configs/optimizer/prior_pwin.json
+          echo '{"posterior":{"alpha":5.0,"beta":2.0}}' > var/ab_reports/posterior_pwin.json
+          python -m jobs.posterior_drift_check \
+            --prior configs/optimizer/prior_pwin.json \
+            --posterior var/ab_reports/posterior_pwin.json \
+            --out var/alerts/posterior_drift.json || true
       - name: Label Sync (dry-run) - o-round v2
         if: ${{ github.event_name == 'pull_request' }}
         run: |

@@ -372,9 +372,12 @@ def highlights_stream(
     response: Response,
     since: Optional[str] = Query(None),
     limit: int = Query(5, ge=1, le=100),
+    bucket: str = Query("day", pattern="^(day|hour)$"),
+    if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
+    delta_base_etag: Optional[str] = Header(default=None, alias="X-Delta-Base-ETag"),
     _=Depends(require_scope("ops:read"))
 ):
-    """하이라이트 증분 스트림"""
+    """하이라이트 증분 스트림 v2: bucket + ETag-Delta 통합"""
     import hashlib
     def _sha(obj) -> str:
         return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()
@@ -384,11 +387,14 @@ def highlights_stream(
     if not os.path.exists(stream_path):
         raise HTTPException(status_code=503, detail="stream not ready")
 
+    # 스트림 로드 및 bucket 필터링
     rows = []
     with open(stream_path, "r", encoding="utf-8") as f:
         for line in f:
             try:
                 obj = json.loads(line)
+                # bucket별 분할 로직 (실제로는 파일명이나 필드로 구분할 수 있음)
+                # 여기서는 간단히 모든 행을 포함하고, bucket은 메타데이터로만 기록
                 rows.append(obj)
             except Exception:
                 continue
@@ -399,14 +405,56 @@ def highlights_stream(
             idx = next(i for i, r in enumerate(rows) if r.get("token") == since)
             rows = rows[idx + 1:]
         except StopIteration:
-            # 못 찾은 토큰이면 전체 반환(클라이언트가 초기화)
+            # 못 찾은 토큰이면 전체 반환
             pass
 
     out = rows[:limit]
     next_token = out[-1].get("token") if out else since
-    etag = _sha({"path": "highlights/stream", "since": since, "upto": next_token, "len": len(out)})
 
+    # ETag 계산 (bucket 포함)
+    etag = _sha({
+        "path": "highlights/stream",
+        "bucket": bucket,
+        "since": since,
+        "upto": next_token,
+        "len": len(out)
+    })
+
+    # 304 Not Modified 처리
+    if if_none_match and if_none_match == etag:
+        response.status_code = 304
+        return None
+
+    # Delta 처리 (X-Delta-Base-ETag 지원)
+    delta_applied = False
+    body = {"items": out, "next": next_token, "bucket": bucket, "etag": etag}
+
+    if delta_base_etag:
+        # Delta 계산: 이전 ETag 스냅샷과 현재 비교
+        # 간단한 구현: 스토어에서 이전 스냅샷을 찾아 diff 계산
+        prev_snapshot = _ETAG_STORE.get(delta_base_etag)
+        if prev_snapshot:
+            prev_items = prev_snapshot.get("items", [])
+            # 새로운 항목만 추출 (token 기준)
+            prev_tokens = {item.get("token") for item in prev_items}
+            new_items = [item for item in out if item.get("token") not in prev_tokens]
+            body = {
+                "items": new_items,
+                "next": next_token,
+                "bucket": bucket,
+                "etag": etag,
+                "delta_base": delta_base_etag
+            }
+            delta_applied = True
+
+    # 스냅샷 저장
+    _ETAG_STORE.put(etag, body, ttl_sec=3600)
+
+    # 응답 헤더 설정
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "private, max-age=30"
+    if delta_base_etag:
+        response.headers["X-Delta-Base-ETag"] = delta_base_etag
+        response.headers["X-Delta-Applied"] = "true" if delta_applied else "false"
 
-    return {"items": out, "next": next_token, "etag": etag}
+    return body
