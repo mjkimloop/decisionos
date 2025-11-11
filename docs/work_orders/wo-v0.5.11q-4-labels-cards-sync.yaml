@@ -1,0 +1,43 @@
+meta:
+  version: v0.5.11q-4
+  date: 2025-11-11
+  status: locked
+  summary: "라벨-카드 자동 전파, 이유군 롤업, 포크-세이프 코멘터, 라벨 드리프트 리포트 + CI 통합"
+
+patches:
+  techspec:
+    - section: "Ops — Labels↔Cards Sync"
+      mode: upsert
+      content: |
+        - 라벨 카탈로그(label_catalog.json)의 팔레트/설명 변경 시 Ops Cards API 캐시 무효화(ETag seed = SHA256(label_catalog.json)).
+        - Cards 응답에 palette/description 포함. reason-trends/top-impact 모두 지원.
+    - section: "Ops — Reason Group Rollups"
+      mode: upsert
+      content: |
+        - reason:* 라벨을 상위 군(Infra/Perf/Canary/Cost 등)으로 롤업하는 맵(reason_groups.json).
+        - Top-impact는 군/모듈 가중치 기반 집계 지원.
+    - section: "CI — Fork-safe PR Commenter"
+      mode: upsert
+      content: |
+        - GitHub App 토큰(설정: GH_APP_ID, GH_APP_PK) 우선. 불가 시 안전 스킵.
+        - 코멘트 업서트(마커 기반) 유지.
+    - section: "Reporting — Labels Drift"
+      mode: upsert
+      content: |
+        - 실라벨 ↔ 카탈로그 차이를 labels_drift.json으로 산출, 아티팩트 업로드.
+        - 기본: 워닝만, 삭제는 휴먼 승인 필요.
+  plan:
+    - section: "Milestones — q-4"
+      mode: upsert
+      content: |
+        D+0: 스크립트/라우터 추가, CI 단계 삽입
+        D+1: Cards API 응답에 palette/rollup 반영, ETag seed 연결
+        D+2: Drift 리포트 모니터링, 라벨 변경 시 카드 즉시 반영 확인
+  ci:
+    - section: "CI Steps"
+      mode: upsert
+      content: |
+        - Ensure labels (기존)
+        - Drift report 생성 + 업로드
+        - (내부 리포만) Labels→Cards Sync 호출(ops:write 필요)
+        - Fork-safe comment upsert (App 토큰)

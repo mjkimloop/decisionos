@@ -18,6 +18,7 @@ markers = [
     "gate_p: Gate-P tests",
     "gate_o: Gate-O tests",
     "gate_ah: Gate-AH tests (Ops/Deploy)",
+    "gate_ops: Gate-Ops tests (Cards/Aggregation)",
     "e2e: End-to-end integration tests",
 ]
 asyncio_mode = "auto"

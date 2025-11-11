@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: 라벨 가시성(색상·설명 자동 생성) 및 PR 코멘트 diff-permalink 자동 첨부
+summary: 라벨-카드 자동 전파, 이유군 롤업, 포크-세이프 코멘터, 라벨 드리프트 리포트 + CI 통합
 -->
 
 # DecisionOS Implementation Plan
@@ -881,3 +881,16 @@ Day 3: 운영 문서 보강(라벨 팔레트, 설명 규칙)
 - 팔레트 규칙: infra(ee0701), perf(1f77b4), canary(f39c12), quota(8e44ad), budget(27ae60), anomaly(16a085), misc(95a5a6).
 - 라벨 설명은 '자동 생성(Reason Codes 기반)' 문구 포함. 수정해도 CI가 카탈로그를 우선 적용.
 <!-- AUTOGEN:END:Runbooks — Labels & Diff -->
+
+## Milestones — q-4
+D+0: 스크립트/라우터 추가, CI 단계 삽입
+D+1: Cards API 응답에 palette/rollup 반영, ETag seed 연결
+D+2: Drift 리포트 모니터링, 라벨 변경 시 카드 즉시 반영 확인
+
+
+<!-- AUTOGEN:BEGIN:CI Steps -->
+- Ensure labels (기존)
+- Drift report 생성 + 업로드
+- (내부 리포만) Labels→Cards Sync 호출(ops:write 필요)
+- Fork-safe comment upsert (App 토큰)
+<!-- AUTOGEN:END:CI Steps -->

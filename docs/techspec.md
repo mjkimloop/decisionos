@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: 라벨 가시성(색상·설명 자동 생성) 및 PR 코멘트 diff-permalink 자동 첨부
+summary: 라벨-카드 자동 전파, 이유군 롤업, 포크-세이프 코멘터, 라벨 드리프트 리포트 + CI 통합
 -->
 
 
@@ -2866,3 +2866,27 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - reason 라벨 메타(색상·설명)는 label_catalog.json로 선언하고, CI에서 존재하지 않으면 생성, 다르면 PATCH로 동기화.
 - 코멘트 본문은 PR의 base..head 비교 permalink를 포함(강제). GH 이벤트가 PR이 아니면 최근 base SHA로 폴백.
 <!-- AUTOGEN:END:CI — Reason Labels Visibility & Diff Permalink -->
+
+
+<!-- AUTOGEN:BEGIN:Ops — Labels↔Cards Sync -->
+- 라벨 카탈로그(label_catalog.json)의 팔레트/설명 변경 시 Ops Cards API 캐시 무효화(ETag seed = SHA256(label_catalog.json)).
+- Cards 응답에 palette/description 포함. reason-trends/top-impact 모두 지원.
+<!-- AUTOGEN:END:Ops — Labels↔Cards Sync -->
+
+
+<!-- AUTOGEN:BEGIN:Ops — Reason Group Rollups -->
+- reason:* 라벨을 상위 군(Infra/Perf/Canary/Cost 등)으로 롤업하는 맵(reason_groups.json).
+- Top-impact는 군/모듈 가중치 기반 집계 지원.
+<!-- AUTOGEN:END:Ops — Reason Group Rollups -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Fork-safe PR Commenter -->
+- GitHub App 토큰(설정: GH_APP_ID, GH_APP_PK) 우선. 불가 시 안전 스킵.
+- 코멘트 업서트(마커 기반) 유지.
+<!-- AUTOGEN:END:CI — Fork-safe PR Commenter -->
+
+
+<!-- AUTOGEN:BEGIN:Reporting — Labels Drift -->
+- 실라벨 ↔ 카탈로그 차이를 labels_drift.json으로 산출, 아티팩트 업로드.
+- 기본: 워닝만, 삭제는 휴먼 승인 필요.
+<!-- AUTOGEN:END:Reporting — Labels Drift -->

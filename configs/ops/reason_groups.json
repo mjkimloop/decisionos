@@ -1,0 +1,10 @@
+{
+  "groups": [
+    { "name": "Infra",  "match": ["reason:infra-latency", "reason:infra-error", "reason:infra-availability"] },
+    { "name": "Perf",   "match": ["reason:perf"] },
+    { "name": "Canary", "match": ["reason:canary"] },
+    { "name": "Cost",   "match": ["reason:budget-exceeded", "reason:quota"] },
+    { "name": "Anomaly","match": ["reason:anomaly"] }
+  ],
+  "weights": { "Infra": 1.0, "Perf": 0.8, "Canary": 0.9, "Cost": 0.7, "Anomaly": 0.6 }
+}
