@@ -1,0 +1,50 @@
+meta:
+  version: v0.5.11q
+  date: 2025-11-11
+  status: locked
+  summary: "Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표"
+
+patches:
+  techspec:
+    - section: "Ops API — Cache Invalidation v2"
+      mode: upsert
+      content: |
+        - evidence index의 last_updated/sha를 ETag와 캐시 키로 사용
+        - 응답 헤더: ETag, Last-Modified, Cache-Control, Surrogate-Control
+        - 304 Not Modified 경로 명시(If-None-Match/If-Modified-Since)
+    - section: "Judge — HA & Readiness"
+      mode: upsert
+      content: |
+        - /readyz: keyset freshness, replay store ping, clock skew 검사
+        - 키 핫리로드(파일/ENV)와 실패시 fail-closed
+    - section: "Key Management — KMS/SSM Loader"
+      mode: upsert
+      content: |
+        - 선택적 KMS/SSM 플러그인 (boto3 optional)
+        - 그레이스 윈도 + 로테이션 이벤트 기반 갱신
+    - section: "Replay Store — Redis Baseline"
+      mode: upsert
+      content: |
+        - DECISIONOS_REPLAY_BACKEND=redis 권장, TTL/히트율/거부율 지표 노출
+    - section: "Evidence — Lock & GC"
+      mode: upsert
+      content: |
+        - LOCKED만 배포 승인. GC: WIP 보존(n일), LOCKED 보관
+    - section: "Canary — Auto Promote/Abort"
+      mode: upsert
+      content: |
+        - N연속 통과 + 버스트 없음 → promote
+        - SLO 위반/버스트 → abort_on_gate_fail
+    - section: "Observability — Prometheus"
+      mode: upsert
+      content: |
+        - judge/ops 지표: p95/p99, availability, signature_error_rate, replay_block_rate
+  plan:
+    - section: "Milestones — v0.5.11q"
+      mode: upsert
+      content: |
+        D1-2: Ops API 캐시/ETag + /readyz 강화
+        D3-4: KMS/Redis 플러그인 스모크
+        D5: Evidence LOCK/GC 게이트 강제
+        D6: 카나리 자동 승격/중단
+        D7: 부하→증빙→게이트→승격 CI 시퀀스 green

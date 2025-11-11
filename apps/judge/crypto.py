@@ -8,7 +8,10 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from apps.judge.keyloader_kms import load_from_ssm
+from datetime import datetime, timezone
 
 @dataclass
 class KeyMaterial:
@@ -39,18 +42,32 @@ class MultiKeyLoader:
         return s.encode("utf-8")
 
     def _read_source(self) -> str:
+        data: List[Dict[str, Any]] = []
         file_path = os.getenv(self.file_env)
         if file_path:
             path = Path(file_path)
             if path.exists():
-                return path.read_text(encoding="utf-8")
-        raw = os.getenv(self.env_var)
-        if raw:
-            return raw
-        legacy = os.getenv("DECISIONOS_JUDGE_HMAC_KEY")
-        if legacy:
-            return json.dumps([{"key_id": "legacy", "secret": legacy, "state": "active"}])
-        return "[]"
+                try:
+                    data.extend(json.loads(path.read_text(encoding="utf-8")) or [])
+                except Exception:
+                    pass
+        raw_env = os.getenv(self.env_var)
+        if raw_env:
+            try:
+                data.extend(json.loads(raw_env) or [])
+            except Exception:
+                pass
+        if not data:
+            legacy = os.getenv("DECISIONOS_JUDGE_HMAC_KEY")
+            if legacy:
+                data.append({"key_id": "legacy", "secret": legacy, "state": "active"})
+
+        plugin = load_from_ssm()
+        if plugin:
+            data.extend(plugin)
+        if not data:
+            return "[]"
+        return json.dumps(data)
 
     def force_reload(self) -> None:
         self._cache_ts = 0
@@ -115,6 +132,7 @@ class MultiKeyLoader:
         return {
             "key_count": len(self._keys),
             "loaded_at": datetime_from_timestamp(self._loaded_at),
+            "loaded_at_epoch": self._loaded_at,
             "age_seconds": age,
             "last_error": self._last_error,
             "source_hash": self._source_hash,

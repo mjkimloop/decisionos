@@ -19,13 +19,16 @@ class ReplayStoreABC(ABC):
 
     @abstractmethod
     def seen_or_insert(self, key_id: str, nonce: str, ts_epoch: int) -> bool:
-        """True 반환 시 재사용/유효범위 밖 → fail-closed."""
+        """True 반환 시 재생/무효이므로 fail-closed."""
 
     def purge_expired(self) -> None:  # pragma: no cover - optional
-        """선택적 정리 훅."""
+        """만료 엔트리 삭제."""
 
     def close(self) -> None:  # pragma: no cover - optional
-        """선택적 종료 훅."""
+        """자원 정리."""
+
+    def health_check(self) -> tuple[bool, str]:
+        return True, "ok"
 
 
 class SQLiteReplayStore(ReplayStoreABC):
@@ -70,6 +73,13 @@ class SQLiteReplayStore(ReplayStoreABC):
         except Exception:
             pass
 
+    def health_check(self) -> tuple[bool, str]:
+        try:
+            self._conn.execute("SELECT 1")
+            return True, "ok"
+        except Exception as exc:  # pragma: no cover
+            return False, f"sqlite:{exc}"
+
 
 class RedisReplayStore(ReplayStoreABC):
     def __init__(self, url: str = "redis://localhost:6379/0") -> None:
@@ -88,6 +98,13 @@ class RedisReplayStore(ReplayStoreABC):
             return True
         return not bool(inserted)
 
+    def health_check(self) -> tuple[bool, str]:  # pragma: no cover
+        try:
+            self._client.ping()
+            return True, "ok"
+        except Exception as exc:
+            return False, f"redis:{exc}"
+
 
 __all__ = [
     "ReplayStoreABC",
@@ -95,4 +112,17 @@ __all__ = [
     "RedisReplayStore",
     "TTL_SEC",
     "SKEW_SEC",
+    "build_replay_store",
 ]
+
+
+def build_replay_store() -> ReplayStoreABC:
+    backend = os.getenv("DECISIONOS_REPLAY_BACKEND", "redis").lower()
+    if backend == "redis" and redis is not None:
+        url = os.getenv("DECISIONOS_REDIS_URL", "redis://localhost:6379/0")
+        try:
+            return RedisReplayStore(url=url)
+        except Exception:
+            pass
+    path = os.getenv("DECISIONOS_REPLAY_SQLITE", "var/judge/replay.sqlite")
+    return SQLiteReplayStore(path=path)

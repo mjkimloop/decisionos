@@ -1,0 +1,5 @@
+{
+  "required_pass_windows": 3,
+  "max_burst": 0,
+  "notes": "N 연속 통과 & 버스트 없음이면 promote"
+}

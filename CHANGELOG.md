@@ -177,3 +177,6 @@
 ## v0.5.11p-1 — 2025-11-11
 - Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
 
+## v0.5.11q — 2025-11-11
+- Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
+

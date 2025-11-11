@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11p-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11qp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: Ops Reason Trend 카드 API에 캐싱/ETag 및 RBAC(ops:read) 보호 추가
+summary: Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
 -->
 
 
@@ -2788,3 +2788,43 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
   - GET /ops/reason-trend/card
   - GET /ops/reason-trend/card.html
 <!-- AUTOGEN:END:Ops — Reason Trend Card API v1.1 (Cache/ETag/RBAC) -->
+
+
+<!-- AUTOGEN:BEGIN:Ops API — Cache Invalidation v2 -->
+- evidence index의 last_updated/sha를 ETag와 캐시 키로 사용
+- 응답 헤더: ETag, Last-Modified, Cache-Control, Surrogate-Control
+- 304 Not Modified 경로 명시(If-None-Match/If-Modified-Since)
+<!-- AUTOGEN:END:Ops API — Cache Invalidation v2 -->
+
+
+<!-- AUTOGEN:BEGIN:Judge — HA & Readiness -->
+- /readyz: keyset freshness, replay store ping, clock skew 검사
+- 키 핫리로드(파일/ENV)와 실패시 fail-closed
+<!-- AUTOGEN:END:Judge — HA & Readiness -->
+
+
+<!-- AUTOGEN:BEGIN:Key Management — KMS/SSM Loader -->
+- 선택적 KMS/SSM 플러그인 (boto3 optional)
+- 그레이스 윈도 + 로테이션 이벤트 기반 갱신
+<!-- AUTOGEN:END:Key Management — KMS/SSM Loader -->
+
+
+<!-- AUTOGEN:BEGIN:Replay Store — Redis Baseline -->
+- DECISIONOS_REPLAY_BACKEND=redis 권장, TTL/히트율/거부율 지표 노출
+<!-- AUTOGEN:END:Replay Store — Redis Baseline -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Lock & GC -->
+- LOCKED만 배포 승인. GC: WIP 보존(n일), LOCKED 보관
+<!-- AUTOGEN:END:Evidence — Lock & GC -->
+
+
+<!-- AUTOGEN:BEGIN:Canary — Auto Promote/Abort -->
+- N연속 통과 + 버스트 없음 → promote
+- SLO 위반/버스트 → abort_on_gate_fail
+<!-- AUTOGEN:END:Canary — Auto Promote/Abort -->
+
+
+<!-- AUTOGEN:BEGIN:Observability — Prometheus -->
+- judge/ops 지표: p95/p99, availability, signature_error_rate, replay_block_rate
+<!-- AUTOGEN:END:Observability — Prometheus -->

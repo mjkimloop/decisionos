@@ -14,6 +14,7 @@ from apps.judge.crypto import MultiKeyLoader, verify_with_multikey
 from apps.judge.replay_plugins import RedisReplayStore, ReplayStoreABC, SQLiteReplayStore
 from apps.judge import slo_judge
 from apps.policy.pep import require
+from apps.judge.readyz import check_ready
 
 _DEFAULT_WINDOW = int(os.getenv("DECISIONOS_JUDGE_METRIC_WINDOW", "600"))
 _metrics = JudgeMetrics(window_seconds=_DEFAULT_WINDOW)
@@ -127,9 +128,11 @@ def create_app(replay_store: Optional[ReplayStoreABC] = None) -> FastAPI:
 
     @app.get("/readyz")
     async def readyz(request: Request):
-        if getattr(request.app.state, "replay_store", None) is None:
-            raise HTTPException(status_code=503, detail="replay store unavailable")
-        return {"status": "ready"}
+        replay_store = getattr(request.app.state, "replay_store", None)
+        ok, info = check_ready(_key_loader, replay_store)
+        if not ok:
+            raise HTTPException(status_code=503, detail={"status": "fail", "checks": info})
+        return {"status": "ready", "checks": info}
 
     @app.get("/metrics")
     async def metrics_endpoint(request: Request):
