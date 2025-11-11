@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
+summary: PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동
 -->
 
 # DecisionOS Implementation Plan
@@ -800,3 +800,48 @@ Day 3: PR 코멘트 자동화 E2E 확인 및 문구/형식 튜닝
 - PR 코멘트 상단에 Gates 상태(Infra/Canary), 주 사유 Top-N(code→message) 테이블, Evidence/Reports 링크, Run 링크가 노출된다.
 - 링크 검증 실패 시 워크플로가 실패하므로 재시도 전 아티팩트 퍼블릭 접근 권한/서명 URL/보존 기한을 확인한다.
 <!-- AUTOGEN:END:Runbooks — Reviewer UX -->
+
+## Milestones — v0.5.11q-2
+Day 1: upsert/label/top-impact 스크립트 추가 및 CI 단계 삽입
+Day 2: 템플릿 없이도 Top-Impact 섹션 자동 주입(존재 시)
+Day 3: 라벨/가중치 설정 튜닝 및 운영 문서 반영
+
+
+<!-- AUTOGEN:BEGIN:Workflow — release_gate steps (추가/변경) -->
+- name: Compute Top-Impact
+  run: |
+    python scripts/ops/compute_top_impact.py \
+      --reasons var/reports/reasons.json \
+      --weights configs/ops/impact_weights.json \
+      --out var/reports/top_impact.json
+- name: Upsert PR comment (with Top-Impact)
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    python scripts/ci/annotate_release_gate.py \
+      --template .github/pr_comment_template.md \
+      --status-json var/reports/gate_summary.json \
+      --reasons-json var/reports/reasons.json \
+      --manifest var/reports/artifacts-manifest.json \
+      --top-impact var/reports/top_impact.json \
+      --out var/reports/pr_comment.md \
+      --repo "${{ github.repository }}" \
+      --pr "${{ github.event.pull_request.number || '' }}"
+- name: Auto-label PR by reasons
+  if: ${{ github.event_name == 'pull_request' }}
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    python scripts/ci/label_by_reasons.py \
+      --reasons var/reports/reasons.json \
+      --map configs/ops/reason_labels.json \
+      --repo "${{ github.repository }}" \
+      --pr "${{ github.event.pull_request.number || '' }}"
+<!-- AUTOGEN:END:Workflow — release_gate steps (추가/변경) -->
+
+
+<!-- AUTOGEN:BEGIN:Runbooks — PR Gate UX -->
+- 코멘트는 매 실행마다 새로 달지 않고 기존 코멘트를 갱신(upsert)한다.
+- 라벨은 prefix(기본: reason:)로 부여되며 과도한 라벨 부착을 방지하기 위해 최대 N개로 제한된다.
+- Top-Impact는 weights(기본: infra>canary>perf>quota>budget>anomaly>misc) 기반 상위 K만 표시.
+<!-- AUTOGEN:END:Runbooks — PR Gate UX -->

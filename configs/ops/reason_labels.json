@@ -1,0 +1,13 @@
+{
+  "prefix": "reason:",
+  "max_labels": 6,
+  "map": [
+    { "match": "infra.latency.*", "labels": ["infra-latency"] },
+    { "match": "infra.error.*",   "labels": ["infra-error"] },
+    { "match": "perf.*",          "labels": ["perf"] },
+    { "match": "canary.*",        "labels": ["canary"] },
+    { "match": "quota.*",         "labels": ["quota"] },
+    { "match": "budget.exceeded", "labels": ["budget-exceeded"] },
+    { "match": "anomaly.*",       "labels": ["anomaly"] }
+  ]
+}

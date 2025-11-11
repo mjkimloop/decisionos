@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
+summary: PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동
 -->
 
 
@@ -2852,3 +2852,11 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - 모든 외부 링크는 릴리스 게이트 완료 직후 유효성 검사를 통과해야 하며, 2xx/302/304만 허용한다. 실패 시 워크플로 실패(fail-closed).
 - 주석 본문에는 업데이트 식별을 위한 마커 <!--DECISIONOS:PR:RELEASE_GATE--> 를 포함한다.
 <!-- AUTOGEN:END:CI — PR Comment & Artifacts Validation -->
+
+
+<!-- AUTOGEN:BEGIN:CI — PR Comment Upsert, Reason Labeling, Top-Impact -->
+- PR 코멘트는 마커 <!--DECISIONOS:PR:RELEASE_GATE--> 로 식별하여 **업서트**(있으면 PATCH, 없으면 POST)한다.
+- 실패 사유(reasons.json)를 코드 패턴-라벨 매핑으로 자동 라벨링한다. 허용 라벨 수, 프리픽스, 심각도별 한도는 설정 파일로 제어.
+- 모듈 가중치(impact_weights.json) 기반으로 Top-Impact 모듈을 산출하여 pr 코멘트에 섹션으로 추가한다.
+- 모듈 추정 규칙: reason.code의 첫 토큰(예: infra.latency → infra). 명시적 module 필드가 있으면 우선.
+<!-- AUTOGEN:END:CI — PR Comment Upsert, Reason Labeling, Top-Impact -->

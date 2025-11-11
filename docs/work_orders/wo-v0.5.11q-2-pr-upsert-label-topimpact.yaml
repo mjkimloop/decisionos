@@ -1,0 +1,71 @@
+meta:
+  version: v0.5.11q-2
+  date: 2025-11-11
+  status: locked
+  summary: "PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동"
+
+patches:
+  techspec:
+    - section: "CI — PR Comment Upsert, Reason Labeling, Top-Impact"
+      mode: upsert
+      content: |
+        - PR 코멘트는 마커 <!--DECISIONOS:PR:RELEASE_GATE--> 로 식별하여 **업서트**(있으면 PATCH, 없으면 POST)한다.
+        - 실패 사유(reasons.json)를 코드 패턴-라벨 매핑으로 자동 라벨링한다. 허용 라벨 수, 프리픽스, 심각도별 한도는 설정 파일로 제어.
+        - 모듈 가중치(impact_weights.json) 기반으로 Top-Impact 모듈을 산출하여 pr 코멘트에 섹션으로 추가한다.
+        - 모듈 추정 규칙: reason.code의 첫 토큰(예: infra.latency → infra). 명시적 module 필드가 있으면 우선.
+  plan:
+    - section: "Milestones — v0.5.11q-2"
+      mode: upsert
+      content: |
+        Day 1: upsert/label/top-impact 스크립트 추가 및 CI 단계 삽입
+        Day 2: 템플릿 없이도 Top-Impact 섹션 자동 주입(존재 시)
+        Day 3: 라벨/가중치 설정 튜닝 및 운영 문서 반영
+  ci:
+    - section: "Workflow — release_gate steps (추가/변경)"
+      mode: upsert
+      content: |
+        - name: Compute Top-Impact
+          run: |
+            python scripts/ops/compute_top_impact.py \
+              --reasons var/reports/reasons.json \
+              --weights configs/ops/impact_weights.json \
+              --out var/reports/top_impact.json
+        - name: Upsert PR comment (with Top-Impact)
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run: |
+            python scripts/ci/annotate_release_gate.py \
+              --template .github/pr_comment_template.md \
+              --status-json var/reports/gate_summary.json \
+              --reasons-json var/reports/reasons.json \
+              --manifest var/reports/artifacts-manifest.json \
+              --top-impact var/reports/top_impact.json \
+              --out var/reports/pr_comment.md \
+              --repo "${{ github.repository }}" \
+              --pr "${{ github.event.pull_request.number || '' }}"
+        - name: Auto-label PR by reasons
+          if: ${{ github.event_name == 'pull_request' }}
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run: |
+            python scripts/ci/label_by_reasons.py \
+              --reasons var/reports/reasons.json \
+              --map configs/ops/reason_labels.json \
+              --repo "${{ github.repository }}" \
+              --pr "${{ github.event.pull_request.number || '' }}"
+  ops_docs:
+    - section: "Runbooks — PR Gate UX"
+      mode: upsert
+      content: |
+        - 코멘트는 매 실행마다 새로 달지 않고 기존 코멘트를 갱신(upsert)한다.
+        - 라벨은 prefix(기본: reason:)로 부여되며 과도한 라벨 부착을 방지하기 위해 최대 N개로 제한된다.
+        - Top-Impact는 weights(기본: infra>canary>perf>quota>budget>anomaly>misc) 기반 상위 K만 표시.
+notes:
+  apply:
+    - "새 파일을 저장:"
+    - "  - scripts/ops/compute_top_impact.py"
+    - "  - scripts/ci/label_by_reasons.py"
+    - "  - configs/ops/impact_weights.json"
+    - "  - configs/ops/reason_labels.json"
+    - "기존 scripts/ci/annotate_release_gate.py 를 v3로 교체(업서트 지원)"
+    - "CI에 Compute Top-Impact/Upsert/Label 단계 추가"

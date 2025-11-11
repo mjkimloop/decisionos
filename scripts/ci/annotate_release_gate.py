@@ -1,156 +1,119 @@
-from __future__ import annotations
+#!/usr/bin/env python3
+import argparse, json, os, subprocess, sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-import argparse
-import json
-import os
-import re
-from typing import Any, Dict, List, Tuple
+MARKER = "<!--DECISIONOS:PR:RELEASE_GATE-->"
 
-import httpx
+def load_json(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-from apps.i18n.messages import reason_message
-from apps.judge.slo_judge import evaluate
+def render_template(tpl: str, ctx: dict) -> str:
+    out = tpl
+    for k, v in ctx.items():
+        out = out.replace("{{" + k + "}}", str(v))
+    return out
 
+def build_reasons_rows(reasons):
+    rows = []
+    for r in reasons or []:
+        rows.append(f"| `{r.get('code','')}` | {str(r.get('message','')).replace('|','\\|')} | {r.get('count',0)} |")
+    return "\n".join(rows) if rows else "| — | — | 0 |"
 
-def _load_json(path: str) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+def build_topimpact_block(path: str) -> str:
+    if not path or not Path(path).exists():
+        return ""
+    data = load_json(path)
+    lst = data.get("top_impact") or []
+    if not lst:
+        return ""
+    lines = ["\n#### Top-Impact Modules (weighted)\n| module | score | events |\n|---|---:|---:|"]
+    for it in lst:
+        lines.append(f"| `{it.get('module')}` | {it.get('score')} | {it.get('events')} |")
+    return "\n".join(lines) + "\n"
 
+def gh_api(args_list, token):
+    env = os.environ.copy()
+    env["GH_TOKEN"] = token
+    return subprocess.check_output(["gh","api",*args_list], env=env).decode("utf-8")
 
-def _extract_pr_number_from_ref(ref: str | None) -> int | None:
-    match = re.match(r"refs/pull/(\d+)/", ref or "")
-    return int(match.group(1)) if match else None
-
-
-def _load_artifacts_json(path: str | None) -> List[Dict[str, str]]:
-    if path and os.path.exists(path):
-        raw = _load_json(path)
-        artifacts = raw.get("artifacts") or []
-        return [a for a in artifacts if a.get("url")]
-    repo = os.getenv("GITHUB_REPOSITORY")
-    base = os.getenv("GITHUB_SERVER_URL", "https://github.com")
-    run_id = os.getenv("GITHUB_RUN_ID")
-    if repo and run_id:
-        return [{"name": "Artifacts", "url": f"{base}/{repo}/actions/runs/{run_id}#artifacts"}]
-    return []
-
-
-def _normalize_reasons(raw_reasons: List[Any], locale: str) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
-    normalized: List[Dict[str, str]] = []
-    details: List[Dict[str, str]] = []
-    seen: set[str] = set()
-
-    for entry in raw_reasons or []:
-        if isinstance(entry, dict):
-            code = entry.get("code") or entry.get("message") or "unknown"
-            message = entry.get("message") or reason_message(code, locale)
-            if code not in seen:
-                normalized.append({"code": code, "message": message})
-                seen.add(code)
-            continue
-        text = str(entry)
-        if ":" in text:
-            code, detail = text.split(":", 1)
-        else:
-            code, detail = text, ""
-        code = code.strip()
-        detail = detail.strip()
-        message = reason_message(code, locale)
-        if code not in seen:
-            normalized.append({"code": code, "message": message})
-            seen.add(code)
-        if detail:
-            details.append({"code": code, "detail": detail})
-    return normalized, details
-
-
-def _summarize(
-    decision: str,
-    info: Dict[str, Any],
-    trend: Dict[str, Any] | None,
-    locale: str,
-    artifacts: List[Dict[str, str]],
-) -> str:
-    icon = "✅ PASS" if decision == "pass" else "❌ FAIL"
-    lines = [f"## Release Gate: {icon}"]
-
-    reasons = info.get("reasons") or []
-    if reasons:
-        lines.append("### 현재 주 사유")
-        for reason in reasons[:5]:
-            lines.append(f"- `{reason['code']}` — {reason.get('message')}")
+def upsert_comment(repo: str, pr: str, body: str, token: str):
+    # list comments and find marker
+    raw = gh_api([f"repos/{repo}/issues/{pr}/comments"], token)
+    comments = json.loads(raw)
+    target_id = None
+    for c in comments:
+        if isinstance(c.get("body"), str) and MARKER in c["body"]:
+            target_id = c.get("id")
+            break
+    if target_id:
+        gh_api(["-X","PATCH", f"repos/{repo}/issues/comments/{target_id}", "-f", f"body={body}"], token)
+        print(f"[annotate] updated comment #{target_id}")
     else:
-        lines.append("_사유 없음(모든 기준 충족)_")
+        gh_api([f"repos/{repo}/issues/{pr}/comments","-f", f"body={body}"], token)
+        print("[annotate] created new comment")
 
-    if trend:
-        lines.append(f"\n### 최근 추세(Top-10, {trend.get('window_days', 7)}일)")
-        for code, count in (trend.get("total_top") or [])[:10]:
-            lines.append(f"- `{code}` x {count}")
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--template", required=True)
+    ap.add_argument("--status-json", required=True)
+    ap.add_argument("--reasons-json", required=True)
+    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--top-impact", default="")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--repo", default="")
+    ap.add_argument("--pr", default="")
+    args = ap.parse_args()
 
-    evidence_path = "var/evidence/latest.json"
-    if os.path.exists(evidence_path):
-        lines.append(f"\n📎 Evidence: `{evidence_path}`")
-    report_path = "var/reports/reason_trend.md"
-    if os.path.exists(report_path):
-        lines.append(f"📊 Trend Report: `{report_path}`")
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        print("GITHUB_TOKEN missing", file=sys.stderr)
+        sys.exit(3)
 
-    if artifacts:
-        lines.append("\n### Artifacts")
-        for artifact in artifacts:
-            lines.append(f"- [{artifact.get('name', 'artifact')}]({artifact.get('url')})")
+    with open(args.template, "r", encoding="utf-8") as f:
+        tpl = f.read()
 
-    return "\n".join(lines)
+    status = load_json(args.status_json)
+    reasons = load_json(args.reasons_json)
+    manifest = load_json(args.manifest)
 
+    ctx = {
+        "STATUS": status.get("status","UNKNOWN").upper(),
+        "STATUS_EMOJI": "✅" if status.get("status") == "pass" else "❌",
+        "INFRA_STATUS": status.get("infra_status","n/a"),
+        "CANARY_STATUS": status.get("canary_status","n/a"),
+        "RUN_URL": status.get("run_url","(run url)"),
+        "REASONS_ROWS": build_reasons_rows(reasons),
+        "EVIDENCE_URL": manifest.get("EVIDENCE_URL",""),
+        "REPORT_URL": manifest.get("REPORT_URL",""),
+        "OPS_TRENDS_URL": manifest.get("OPS_TRENDS_URL",""),
+        "OPS_IMPACT_URL": manifest.get("OPS_IMPACT_URL",""),
+        "INSPECTOR": os.environ.get("GITHUB_ACTOR","ci"),
+        "GENERATED_AT": datetime.now(timezone.utc).isoformat(),
+    }
+    body = render_template(tpl, ctx)
 
-def _post_pr_comment(repo: str, pr: int, body: str, token: str) -> None:
-    url = f"https://api.github.com/repos/{repo}/issues/{pr}/comments"
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
-    with httpx.Client(timeout=30) as client:
-        client.post(url, json={"body": body}, headers=headers)
+    # optional Top-Impact block injection
+    block = build_topimpact_block(args.top_impact)
+    if block:
+        # inject before Artifacts section or append at end
+        insert_at = body.find("#### Artifacts")
+        body = (body[:insert_at] + block + body[insert_at:]) if insert_at != -1 else (body + "\n" + block)
 
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write(body)
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Annotate release gate result on PRs.")
-    parser.add_argument("--slo", required=True)
-    parser.add_argument("--evidence", required=True)
-    parser.add_argument("--trend")
-    parser.add_argument("--artifacts")
-    parser.add_argument("--pr", type=int)
-    parser.add_argument("--locale", default=os.getenv("DECISIONOS_LOCALE", "ko-KR"))
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    if args.repo and args.pr:
+        try:
+            upsert_comment(args.repo, args.pr, body, token)
+        except subprocess.CalledProcessError as e:
+            print(f"[annotate] gh api failed: {e}", file=sys.stderr)
+            sys.exit(3)
+    else:
+        print("[annotate] GH context missing; wrote file only.")
 
-    try:
-        slo = _load_json(args.slo)
-        evidence = _load_json(args.evidence)
-        decision, raw_reasons = evaluate(evidence, slo)
-    except Exception as exc:
-        decision = "fail"
-        raw_reasons = [f"infra.error:{exc}"]
-
-    reasons, details = _normalize_reasons(raw_reasons, args.locale)
-    info = {"reasons": reasons, "meta": {"reason_detail": details}}
-    trend = _load_json(args.trend) if args.trend and os.path.exists(args.trend) else None
-    artifacts = _load_artifacts_json(args.artifacts)
-
-    body = _summarize(decision, info, trend, args.locale, artifacts)
-    print(body)
-
-    if os.getenv("GITHUB_EVENT_NAME") != "pull_request":
-        return
-
-    pr_number = args.pr or _extract_pr_number_from_ref(os.getenv("GITHUB_REF"))
-    repo = os.getenv("GITHUB_REPOSITORY")
-    token = os.getenv("GITHUB_TOKEN")
-
-    if args.dry_run or not (pr_number and repo and token):
-        return
-
-    try:
-        _post_pr_comment(repo, pr_number, body, token)
-    except Exception as exc:
-        print(f"[warn] PR comment failed: {exc}")
-
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

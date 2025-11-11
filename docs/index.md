@@ -1,5 +1,7 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.5.11q-2 — 2025-11-11 — PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동
+
 - v0.5.11q-1 — 2025-11-11 — PR 주석 자동 템플릿 도입 + 아티팩트 링크 유효성 검사 + CI 릴리스 게이트 주석 강화
 
 - v0.5.11q — 2025-11-11 — Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
