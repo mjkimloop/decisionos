@@ -4,8 +4,9 @@ from typing import Any, Dict, List
 from apps.experiment.stage_file import write_stage_atomic
 
 EVIDENCE_LATEST = os.getenv("DECISIONOS_EVIDENCE_LATEST", "var/evidence/latest.json")
-REQUIRED_PASS = int(os.getenv("DECISIONOS_AUTO_PROMOTE_N", "3"))
-ALLOW_BURST = int(os.getenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "0"))
+REQUIRED_PASS = int(os.getenv("DECISIONOS_AUTO_PROMOTE_N", "5"))
+ALLOW_BURST = int(os.getenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1"))
+MIN_OBSERVATION_MIN = int(os.getenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30"))
 
 def _read_latest() -> Dict[str, Any]:
     with open(EVIDENCE_LATEST, "r", encoding="utf-8") as f:
@@ -19,8 +20,19 @@ def decide() -> str:
         return "hold"
 
     recent = windows[-REQUIRED_PASS:]
+
+    # 버스트 체크: 최근 N개 윈도우 중 ALLOW_BURST 초과 시 abort
     if any(w.get("burst", 0) > ALLOW_BURST for w in recent):
         return "abort"
+
+    # 최소 관찰 시간 체크 (분 단위)
+    first_timestamp = recent[0].get("timestamp_unix", 0)
+    last_timestamp = recent[-1].get("timestamp_unix", 0)
+    observation_minutes = (last_timestamp - first_timestamp) / 60.0
+    if observation_minutes < MIN_OBSERVATION_MIN:
+        return "hold"
+
+    # 모든 윈도우 통과 시 promote
     if all(w.get("pass", False) for w in recent):
         return "promote"
     return "hold"
