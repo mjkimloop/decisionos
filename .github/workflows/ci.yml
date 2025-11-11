@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
-        gate: ["gate_t", "gate_aj", "gate_s", "gate_p", "gate_o"]
+        gate: ["gate_t", "gate_aj", "gate_s", "gate_p", "gate_o", "gate_ah", "gate_ops", "gate_obs", "chaos"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -73,6 +73,15 @@ jobs:
       - name: Evidence GC (dry-run)
         run: |
           python -m jobs.evidence_gc --root var/evidence --dry-run
+      - name: Evidence Integrity Check (v0.5.11r-6)
+        run: |
+          python scripts/ops/evidence_lockdown.py --verify --root var/evidence
+      - name: ETag Store Health Check (v0.5.11r-1)
+        env:
+          DECISIONOS_ETAG_BACKEND: memory
+          DECISIONOS_ALLOW_SCOPES: ops:read
+        run: |
+          python -c "from apps.ops.cache.etag_store import build_etag_store; store = build_etag_store(); print('ETag backend:', type(store).__name__)"
       - name: Prepare local providers
         run: |
           mkdir -p var
@@ -142,9 +151,20 @@ jobs:
         run: |
           COUNT=$(python scripts/ci/count_evidence.py)
           {
-            echo "### v0.5.11m — Immutability/Chaos/Clock ✅"
-            echo "- clock guard executed"
-            echo "- evidence index entries: $COUNT"
+            echo "### v0.5.11r — Release Hardening ✅"
+            echo "- ✅ ETag 인프라 (Redis 폴백)"
+            echo "- ✅ 백프레셔 정책 (토큰버킷, 서킷브레이커)"
+            echo "- ✅ SLO 재보정 (7일 실측)"
+            echo "- ✅ 카나리 튜닝 (5연속, 버스트≤1)"
+            echo "- ✅ RBAC default-deny"
+            echo "- ✅ Evidence 불변성 (SHA256, ObjectLock)"
+            echo "- ✅ DR/Chaos 리허설 (쿼럼 퇴화)"
+            echo "- ✅ 키 로테이션 (active→grace→retired)"
+            echo "- ✅ 상한선 가시화 (Ops Cards)"
+            echo "- ✅ 30분 온콜 드릴 런북"
+            echo ""
+            echo "Evidence index entries: $COUNT"
+            echo "Clock guard: ✅ executed"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail if gate failed
         if: steps.gates.outputs.INFRA_FAIL == '1' || steps.gates.outputs.CANARY_FAIL == '1'

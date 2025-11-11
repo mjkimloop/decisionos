@@ -1,0 +1,154 @@
+meta:
+  version: v0.5.11r
+  date: 2025-11-11
+  status: proposed
+  summary: "Release Hardening — ETag 인프라 전환, 백프레셔 표준화, SLO 재보정, 카나리 자동승격 튜닝, RBAC 전면화, Evidence 불변성/인덱스, DR/카오스 리허설, 키 로테이션/스큐 가드, 비용·성능 상한 가시화, 런북 확정"
+
+scope:
+  - "ETag 인프라: In-Memory ↔ Redis 전환 및 폴백"
+  - "백프레셔/서킷브레이커 공통 상수화(Provider/Server)"
+  - "SLO 재보정(min_samples/window_sec 기반, 7d 실측 반영)"
+  - "카나리 자동 승격 정책(consecutive_passes, grace_burst) 튜닝"
+  - "RBAC default-deny 전면 적용(ops:read, judge:run, deploy:promote/abort)"
+  - "Evidence 인덱스/GC/ObjectLock 불변성 체인 강화"
+  - "DR/카오스 시나리오(지연/오류) 리허설 및 fail-closed 검증"
+  - "키 로테이션(멀티키)/시계 스큐 가드 운영화"
+  - "Ops Cards에 비용/쿼터/p95 상한선 가시화(ETag v2 Key 반영)"
+  - "런북/운영문서 최신화 및 30분 온콜 드릴"
+
+patches:
+  techspec:
+    - section: "Ops — ETag Infra & Cache"
+      mode: upsert
+      content: |
+        - Backend: inmem(default), redis(DECISIONOS_REDIS_URL)
+        - TTL: 3600s(버킷 단위), Key: etag:v2:{period}:{bucket}:{weights_hash}:{catalog_hash}
+        - 폴백: Redis 장애 시 inmem로 자동 전환, 5xx=0 보장
+    - section: "Traffic — Backpressure & Circuit Breaker"
+      mode: upsert
+      content: |
+        - TokenBucket(qps, burst), Exponential Backoff, Open/half-open/close 임계 표준화
+        - Judge Provider/Server 공통 상수: QPS_MAX, BURST_MAX, OPEN_AFTER_N_ERRORS, COOL_DOWN_SEC
+    - section: "SLO — Recalibration Guidelines"
+      mode: upsert
+      content: |
+        - 7일 reqlog 요약(p50/p95/p99/error_rate), min_samples/window_sec 반영
+        - false-positive ≤ 2%, gate 실패율 ≤ 1% 목표
+    - section: "Canary — Auto Promote/Abort"
+      mode: upsert
+      content: |
+        - policy.json: consecutive_passes, grace_burst, max_step_pct
+        - N연속 통과 승격, 버스트 즉시 abort
+    - section: "Security — RBAC Default Deny"
+      mode: upsert
+      content: |
+        - DECISIONOS_ALLOW_SCOPES 요구, 모든 CLI/API/파이프라인 pep.require()
+        - 스코프: ops:read, judge:run, deploy:promote, deploy:abort
+    - section: "Evidence — Immutability & Index/GC"
+      mode: upsert
+      content: |
+        - indexer: tier(WIP/LOCKED), tampered, sha256, generated_at
+        - GC: WIP 보존 N일, LOCKED 보존 무기한(ObjectLock)
+    - section: "DR/Chaos — Scenarios"
+      mode: upsert
+      content: |
+        - 지연 스파이크, 5xx 버스트, Redis 장애 → fail-closed, stage=stable 복구
+    - section: "Key Rotation & Clock"
+      mode: upsert
+      content: |
+        - MultiKeyLoader(KMS/ENV), grace_window, clock_guard 프리게이트 강제
+    - section: "Ops Cards — Limits & Targets"
+      mode: upsert
+      content: |
+        - 비용/쿼터 상한, p95 목표선, Top-impact 라벨·그룹 가중치 반영(ETag v2)
+    - section: "Runbook — 30-min Oncall Drill"
+      mode: upsert
+      content: |
+        - 승격/차단/증빙 링크 공유까지 30분 내 수행 체크리스트
+
+  plan:
+    - section: "Milestones — v0.5.11r"
+      mode: upsert
+      content: |
+        Day 1-2: ETag Redis 전환 스테이징·폴백 검증
+        Day 3: Backpressure 상수화 및 Chaos 스파이크 테스트
+        Day 4: 7d 실측 기반 SLO 재보정, canary policy 튜닝
+        Day 5: RBAC default-deny 전면 적용
+        Day 6: Evidence Index/GC/ObjectLock 파이프라인 완성
+        Day 7: DR 리허설, 온콜 30분 드릴, 문서 확정
+    - section: "Acceptance — r-round"
+      mode: upsert
+      content: |
+        - 캐시 히트율 ≥80%, Redis 장애 시 5xx=0
+        - 스파이크 10x 3분 내 SLA 위반 없이 429/503 수렴
+        - canary 3연속 통과 평균 승격 ≤15m, 버스트 즉시 abort
+        - 모든 위험 경로 스코프 미부여 시 403
+        - Evidence tampered=0, PR 코멘트에서 1클릭 검증
+        - 키 로테이션 무중단, 스큐 초과 시 503 Degraded
+
+actions:
+  code_changes:
+    - "apps/ops/etag_store.py: Redis/InMem 백엔드 통합(TTL, 폴백)"
+    - "apps/judge/providers/http.py & apps/judge/server.py: 토큰버킷, 백오프, 서킷브레이커 상수화"
+    - "configs/slo/*-v2.json: p95/p99/error_rate, min_samples, window_sec 업데이트"
+    - "configs/canary/policy.json: consecutive_passes, grace_burst 조정"
+    - "apps/policy/pep.py: default-deny 재검증(필수 스코프)"
+    - "jobs/evidence_indexer.py, jobs/evidence_objectlock.py, jobs/evidence_gc.py: 파이프라인 유지"
+    - "pipeline/chaos/chaos_inject.sh, pipeline/release/abort_on_gate_fail.sh: 최신 정책 반영"
+    - "apps/judge/keyloader_kms.py, jobs/clock_guard.py: 운영 스케줄 반영"
+    - "apps/ops/api.py: Limits/Targets 카드 노출(ETag v2 키 반영)"
+    - "docs/ops/RUNBOOK-*.md: 온콜 드릴 포함 최신화"
+  tests:
+    - marker: gate_ops
+      files:
+        - "tests/gates/gate_ops/test_etag_store_backends_v1.py"
+        - "tests/gates/gate_ops/test_backpressure_circuit_v1.py"
+    - marker: gate_aj
+      files:
+        - "tests/gates/gate_aj/test_slo_recalibration_baseline_v1.py"
+    - marker: gate_ah
+      files:
+        - "tests/gates/gate_ah/test_canary_policy_tuning_v1.py"
+        - "tests/gates/gate_ah/test_abort_on_gate_fail_v1.py"
+    - marker: gate_t
+      files:
+        - "tests/gates/gate_t/test_evidence_index_gc_objectlock_v1.py"
+        - "tests/gates/gate_t/test_clock_guard_v1.py"
+
+ci:
+  workflow: ".github/workflows/ci.yml"
+  jobs:
+    pre_gate:
+      - "Clock guard (jobs/clock_guard.py)"
+      - "Evidence index & GC dry-run (jobs/evidence_indexer.py, jobs/evidence_gc.py)"
+      - "ETag backend smoke (inmem/redis) & health"
+      - "Artifacts: index.json, gc-report.json, pre_gate_summary.md"
+    gates:
+      - "pytest -m 'gate_t or gate_aj or gate_ah or gate_ops' --ignore vendor --ignore kai-decisionos"
+      - "dosctl witness perf → Evidence 병합"
+      - "dosctl judge slo (infra + canary) — fail-closed"
+      - "Artifacts: test reports, latest evidence"
+    post_gate:
+      - "ensure_labels.py(라벨 동기화)"
+      - "annotate_release_gate.py(PR 코멘트/라벨/증빙 링크/Top-impact)"
+      - "Upload artifacts & step summary"
+  env:
+    required:
+      - "DECISIONOS_ALLOW_SCOPES"
+      - "DECISIONOS_ETAG_BACKEND (inmem|redis)"
+      - "DECISIONOS_REDIS_URL (redis일 때)"
+      - "DECISIONOS_JUDGE_KEYS or DECISIONOS_JUDGE_HMAC_KEY"
+      - "AWS creds (ObjectLock 사용 시)"
+  exit_policy:
+    - "pre_gate 실패 → 워크플로우 즉시 실패"
+    - "gates 실패 → 즉시 실패 + abort_on_gate_fail.sh 권고"
+    - "post_gate 실패 → 워크플로우 실패(가시성·라벨링 보장)"
+
+commands:
+  apply:
+    - "python scripts/wo_apply.py docs/work_orders/wo-v0.5.11r-release-hardening.yaml"
+    - "python scripts/doc_guard.py"
+  smoke:
+    - "pytest -q -m gate_ops"
+    - "python -m apps.cli.dosctl.witness_perf --csv var/log/reqlog.csv --out var/evidence/perf-latest.json"
+    - "python -m apps.cli.dosctl.judge_quorum --slo configs/slo/slo-billing-strict-v2.json --evidence var/evidence/latest.json"
