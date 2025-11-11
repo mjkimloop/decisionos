@@ -1,0 +1,62 @@
+meta:
+  version: v0.5.11q
+  date: 2025-11-11
+  status: locked
+  summary: "Prod Cutover Runbook 등록 + TechSpec/Plan 반영 + CI 사전 점검 단계"
+
+patches:
+  techspec:
+    - section: "Release — Prod Cutover (v0.5.11q)"
+      mode: upsert
+      content: |
+        본 릴리스는 Ops API(ETag/RBAC), Judge Readiness(fail-closed), Evidence 불변성(Indexer/ObjectLock), Canary 자동화(자동 승격/중단)로 구성된다.
+        컷오버는 본 런북(v0.5.11q-cutover-runbook.md)에 정의된 절차를 따른다.
+    - section: "Security — RBAC & Keys"
+      mode: upsert
+      content: |
+        - RBAC: default-deny, 최소 스코프(ops:read, judge:run, deploy:promote, deploy:abort).
+        - Keys: KMS/SSM → ENV → legacy 우선순위, active/grace 타이머 준수.
+    - section: "Evidence — Immutability & Index"
+      mode: upsert
+      content: |
+        - Indexer: WIP→LOCKED 티어, tampered 판정/요약 생성.
+        - ObjectLock: 릴리스별 Evidence를 S3 ObjectLock으로 업로드.
+    - section: "SLO — Infra & Canary Gates"
+      mode: upsert
+      content: |
+        - Infra: readiness, p95/p99, error_rate, min_samples/window_sec/grace_burst.
+        - Canary: 연속 pass N회 & burst=0 조건 충족 시 승격.
+
+  plan:
+    - section: "Milestones — v0.5.11q Cutover"
+      mode: upsert
+      content: |
+        Day 1: RBAC/Keys/Clock 프리게이트 점검
+        Day 2: Evidence Index/GC/ObjectLock dry-run
+        Day 3: Canary start + Release gates(Infra/Canary)
+        Day 4: Auto promote/abort + Post-verify(Ops cards)
+        Day 5: LOCK 티어 전환 및 태그 고정
+
+  ops_docs:
+    - section: "Runbooks"
+      mode: upsert
+      content: |
+        신규 문서: docs/work_orders/v0.5.11q-cutover-runbook.md
+        운영팀은 본 문서를 기준으로 배포/승격/롤백을 수행한다.
+
+  ci:
+    - section: "CI — Pre-Gate & Release Gate"
+      mode: upsert
+      content: |
+        - Pre-Gate: clock_guard → evidence index → GC dry-run → 아티팩트 업로드.
+        - Release Gate: shadow/mirror → harvest → Evidence 병합 → infra & canary 게이트.
+        - PR 주석에 게이트 결과 요약/Artifacts 링크/Top-impact 레이블러 포함.
+
+notes:
+  apply:
+    - "Save files:"
+    - "  - docs/work_orders/v0.5.11q-cutover-runbook.md  (위 문서 전체)"
+    - "  - docs/work_orders/wo-v0.5.11q-cutover-runbook.yaml (본 YAML)"
+    - "Run:"
+    - "  python scripts/wo_apply.py docs/work_orders/wo-v0.5.11q-cutover-runbook.yaml"
+    - "  python scripts/doc_guard.py"

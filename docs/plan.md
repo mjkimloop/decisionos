@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11qp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
+summary: Prod Cutover Runbook 등록 + TechSpec/Plan 반영 + CI 사전 점검 단계
 -->
 
 # DecisionOS Implementation Plan
@@ -750,3 +750,23 @@ D3-4: KMS/Redis 플러그인 스모크
 D5: Evidence LOCK/GC 게이트 강제
 D6: 카나리 자동 승격/중단
 D7: 부하→증빙→게이트→승격 CI 시퀀스 green
+
+## Milestones — v0.5.11q Cutover
+Day 1: RBAC/Keys/Clock 프리게이트 점검
+Day 2: Evidence Index/GC/ObjectLock dry-run
+Day 3: Canary start + Release gates(Infra/Canary)
+Day 4: Auto promote/abort + Post-verify(Ops cards)
+Day 5: LOCK 티어 전환 및 태그 고정
+
+
+<!-- AUTOGEN:BEGIN:Runbooks -->
+신규 문서: docs/work_orders/v0.5.11q-cutover-runbook.md
+운영팀은 본 문서를 기준으로 배포/승격/롤백을 수행한다.
+<!-- AUTOGEN:END:Runbooks -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Pre-Gate & Release Gate -->
+- Pre-Gate: clock_guard → evidence index → GC dry-run → 아티팩트 업로드.
+- Release Gate: shadow/mirror → harvest → Evidence 병합 → infra & canary 게이트.
+- PR 주석에 게이트 결과 요약/Artifacts 링크/Top-impact 레이블러 포함.
+<!-- AUTOGEN:END:CI — Pre-Gate & Release Gate -->

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11qp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: Prod Cutover 준비: Ops API 캐싱/ETag · Judge HA(/readyz) · KMS/Redis · Evidence LOCK/GC · 카나리 자동승격 · Prometheus 지표
+summary: Prod Cutover Runbook 등록 + TechSpec/Plan 반영 + CI 사전 점검 단계
 -->
 
 
@@ -2616,9 +2616,8 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 
 
 <!-- AUTOGEN:BEGIN:Evidence — Immutability & Index -->
-- var/evidence/ 아래 스냅샷은 생성 후 수정 금지. 수정 시 새 파일로만.
-- S3 업로드 시 버저닝+ObjectLock(Governance)+SSE-KMS.
-- evidence-index.json(append-only): 파일명, sha256, s3_etag, created_at, actor.
+- Indexer: WIP→LOCKED 티어, tampered 판정/요약 생성.
+- ObjectLock: 릴리스별 Evidence를 S3 ObjectLock으로 업로드.
 <!-- AUTOGEN:END:Evidence — Immutability & Index -->
 
 
@@ -2828,3 +2827,21 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 <!-- AUTOGEN:BEGIN:Observability — Prometheus -->
 - judge/ops 지표: p95/p99, availability, signature_error_rate, replay_block_rate
 <!-- AUTOGEN:END:Observability — Prometheus -->
+
+
+<!-- AUTOGEN:BEGIN:Release — Prod Cutover (v0.5.11q) -->
+본 릴리스는 Ops API(ETag/RBAC), Judge Readiness(fail-closed), Evidence 불변성(Indexer/ObjectLock), Canary 자동화(자동 승격/중단)로 구성된다.
+컷오버는 본 런북(v0.5.11q-cutover-runbook.md)에 정의된 절차를 따른다.
+<!-- AUTOGEN:END:Release — Prod Cutover (v0.5.11q) -->
+
+
+<!-- AUTOGEN:BEGIN:Security — RBAC & Keys -->
+- RBAC: default-deny, 최소 스코프(ops:read, judge:run, deploy:promote, deploy:abort).
+- Keys: KMS/SSM → ENV → legacy 우선순위, active/grace 타이머 준수.
+<!-- AUTOGEN:END:Security — RBAC & Keys -->
+
+
+<!-- AUTOGEN:BEGIN:SLO — Infra & Canary Gates -->
+- Infra: readiness, p95/p99, error_rate, min_samples/window_sec/grace_burst.
+- Canary: 연속 pass N회 & burst=0 조건 충족 시 승격.
+<!-- AUTOGEN:END:SLO — Infra & Canary Gates -->
