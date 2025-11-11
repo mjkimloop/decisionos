@@ -1,0 +1,42 @@
+{
+  "catalog_hash_alg": "sha256",
+  "groups": {
+    "infra": { "weight": 1.3, "visibility": "public" },
+    "perf":  { "weight": 1.1, "visibility": "public" },
+    "canary":{ "weight": 1.2, "visibility": "public" }
+  },
+  "labels": [
+    {
+      "name": "reason:infra-latency",
+      "color": "ee0701",
+      "description": "Infra latency breach",
+      "group": "infra",
+      "priority": 100,
+      "aliases": ["infra:latency", "latency-breach"]
+    },
+    {
+      "name": "reason:infra-error",
+      "color": "b60205",
+      "description": "Infra 5xx/429 surge",
+      "group": "infra",
+      "priority": 95,
+      "aliases": ["infra:error", "error-surge"]
+    },
+    {
+      "name": "reason:perf",
+      "color": "1f77b4",
+      "description": "P95/P99 degradation",
+      "group": "perf",
+      "priority": 80,
+      "aliases": []
+    },
+    {
+      "name": "reason:canary",
+      "color": "f39c12",
+      "description": "Canary deviation detected",
+      "group": "canary",
+      "priority": 70,
+      "aliases": []
+    }
+  ]
+}

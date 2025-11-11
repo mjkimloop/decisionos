@@ -1,0 +1,26 @@
+meta:
+  version: v0.5.11r-o
+  date: 2025-11-11
+  summary: "Labels/PR 주석 정밀화 + Canary 정책 미세튜닝(o-round)"
+scope:
+  - Label 카탈로그 v2: priority/visibility/aliases/hash
+  - PR 코멘트 v5: 요약·증빙·중복억제(upsert)·라벨/카탈로그 해시 표기
+  - Canary policy v2: step_schedule/ewma_tolerance/holdback/cooldown/stickiness
+actions:
+  code:
+    - scripts/ensure_labels.py (v2)
+    - scripts/annotate_release_gate.py (v5)
+    - configs/labels/label_catalog.v2.json
+    - configs/canary/policy.v2.json
+    - jobs/canary_auto_promote.py (v2 파라미터 지원)
+  tests:
+    - tests/scripts/test_ensure_labels_sync_v2.py
+    - tests/pipeline/test_canary_policy_v2.py
+ci:
+  add_jobs:
+    - "Label sync dry-run on PR"
+    - "Canary policy lint & simulate"
+acceptance:
+  - "라벨 생성/동기화: 색상·설명·가시성 변경 반영, 별칭 merge"
+  - "PR 코멘트: 단 1개 마커 upsert, diff/permalink·artifact 링크·카탈로그 해시 포함"
+  - "카나리: step_schedule 반영, EWMA 편차 기반 abort, N연속 통과 승격"

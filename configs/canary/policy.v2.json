@@ -1,0 +1,16 @@
+{
+  "consecutive_passes": 3,
+  "grace_burst": 0,
+  "max_step_pct": 25,
+  "holdback_pct_min": 5,
+  "cooldown_sec": 300,
+  "stickiness": "ip",
+  "ewma_tolerance": 0.35,
+  "burst_threshold": 0.6,
+  "step_schedule": [
+    {"pct": 5,  "min_duration_sec": 300},
+    {"pct": 10, "min_duration_sec": 300},
+    {"pct": 25, "min_duration_sec": 600},
+    {"pct": 50, "min_duration_sec": 900}
+  ]
+}

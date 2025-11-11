@@ -2,11 +2,25 @@ from __future__ import annotations
 import os, json, sys
 from typing import Any, Dict, List
 from apps.experiment.stage_file import write_stage_atomic
+from pathlib import Path
 
 EVIDENCE_LATEST = os.getenv("DECISIONOS_EVIDENCE_LATEST", "var/evidence/latest.json")
 REQUIRED_PASS = int(os.getenv("DECISIONOS_AUTO_PROMOTE_N", "5"))
 ALLOW_BURST = int(os.getenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1"))
 MIN_OBSERVATION_MIN = int(os.getenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30"))
+
+def _load_policy(path: str) -> Dict[str, Any]:
+    """카나리 정책 v2 로드 (defaults 포함)"""
+    with open(path, "r", encoding="utf-8") as f:
+        p = json.load(f)
+    # v2 defaults
+    p.setdefault("holdback_pct_min", 0)
+    p.setdefault("cooldown_sec", 300)
+    p.setdefault("stickiness", "none")
+    p.setdefault("ewma_tolerance", 0.3)
+    p.setdefault("burst_threshold", 0.5)
+    p.setdefault("step_schedule", [])
+    return p
 
 def _read_latest() -> Dict[str, Any]:
     with open(EVIDENCE_LATEST, "r", encoding="utf-8") as f:

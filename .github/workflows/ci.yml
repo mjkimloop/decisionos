@@ -128,16 +128,23 @@ jobs:
             var/reports/**/*.json
             reports/**/*.xml
             var/rollout/**
-      - name: PR Comment (Summary)
+      - name: Label Sync (dry-run) - o-round v2
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          python scripts/ensure_labels.py --repo "${{ github.repository }}" \
+            --catalog configs/labels/label_catalog.v2.json --dry-run
+      - name: Annotate PR (v5) - o-round
         if: ${{ github.event_name == 'pull_request' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -m scripts.ci.annotate_release_gate \
-            --slo configs/slo/slo-billing-strict-v2.json \
+          python scripts/annotate_release_gate.py \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}" \
             --evidence var/evidence/latest.json \
-            --trend var/reports/reason_trend.json \
-            --artifacts var/reports/artifacts.json
+            --catalog configs/labels/label_catalog.v2.json \
+            --diff-link "https://github.com/${{ github.repository }}/compare/${{ github.base_ref }}...${{ github.head_ref }}" \
+            --artifacts-json '{"evidence":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
       - name: Label PR Top Impact
         if: ${{ github.event_name == 'pull_request' }}
         env:
