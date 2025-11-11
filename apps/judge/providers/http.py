@@ -10,6 +10,11 @@ import httpx
 from .base import JudgeProvider
 from apps.judge.crypto import MultiKeyLoader, hmac_sign
 from apps.judge.errors import JudgeBadSignature, JudgeHTTPError, JudgeTimeout
+from apps.judge.backpressure import (
+    TokenBucket, CircuitBreaker, calculate_backoff_ms,
+    RATE_LIMIT_PER_SECOND, RATE_LIMIT_BURST,
+    CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_TIMEOUT_SEC
+)
 
 
 class HTTPJudgeProvider(JudgeProvider):
@@ -28,10 +33,11 @@ class HTTPJudgeProvider(JudgeProvider):
         retries: int = 2,
         require_signature: bool = True,
         key_id: Optional[str] = None,
-        breaker_max_failures: int = 3,
-        breaker_reset_seconds: float = 5.0,
+        breaker_max_failures: int = CIRCUIT_BREAKER_THRESHOLD,
+        breaker_reset_seconds: float = CIRCUIT_BREAKER_TIMEOUT_SEC,
         verify_ssl: bool = True,
         client_factory: Optional[Callable[[], httpx.AsyncClient]] = None,
+        enable_rate_limit: bool = True,
     ) -> None:
         super().__init__(provider_id)
         self.url = url
@@ -39,33 +45,41 @@ class HTTPJudgeProvider(JudgeProvider):
         self.retries = retries
         self.require_signature = require_signature
         self.key_id = key_id or "k1"
-        self._breaker_max_failures = breaker_max_failures
-        self._breaker_reset_seconds = breaker_reset_seconds
-        self._breaker_open_until: Optional[float] = None
-        self._failure_count = 0
         self._verify_ssl = verify_ssl
         self._client_factory = client_factory or (
             lambda: httpx.AsyncClient(timeout=self.timeout, verify=self._verify_ssl)
         )
         self._key_loader = MultiKeyLoader()
 
-    def _circuit_open(self) -> bool:
-        if self._breaker_open_until is None:
-            return False
-        if time.time() >= self._breaker_open_until:
-            self._breaker_open_until = None
-            self._failure_count = 0
-            return False
-        return True
+        # 표준 백프레셔 정책
+        self._rate_limiter = TokenBucket(
+            capacity=RATE_LIMIT_BURST,
+            refill_rate=RATE_LIMIT_PER_SECOND
+        ) if enable_rate_limit else None
 
-    def _register_failure(self) -> None:
-        self._failure_count += 1
-        if self._failure_count >= self._breaker_max_failures:
-            self._breaker_open_until = time.time() + self._breaker_reset_seconds
+        self._circuit_breaker = CircuitBreaker(
+            threshold=breaker_max_failures,
+            timeout_sec=int(breaker_reset_seconds),
+            half_open_requests=3
+        )
 
-    def _reset_breaker(self) -> None:
-        self._failure_count = 0
-        self._breaker_open_until = None
+    def _record_failure(self) -> None:
+        """실패 기록 - 서킷 브레이커에 전파"""
+        try:
+            def fail_func():
+                raise Exception("Judge evaluation failed")
+            self._circuit_breaker.call(fail_func)
+        except Exception:
+            pass  # 서킷 브레이커에 실패 기록됨
+
+    def get_backpressure_stats(self) -> Dict[str, Any]:
+        """백프레셔 상태 반환"""
+        stats = {
+            "circuit_breaker": self._circuit_breaker.get_stats(),
+        }
+        if self._rate_limiter:
+            stats["rate_limiter"] = self._rate_limiter.get_stats()
+        return stats
 
     def _build_headers(self, payload: Dict[str, Any]) -> Dict[str, str]:
         headers: Dict[str, str] = {
@@ -81,11 +95,16 @@ class HTTPJudgeProvider(JudgeProvider):
         return headers
 
     async def evaluate(self, evidence: Dict[str, Any], slo: Dict[str, Any]) -> Dict[str, Any]:
-        if self._circuit_open():
-            raise JudgeHTTPError(503, f"circuit open for provider {self.provider_id}")
+        # 레이트 리밋 체크
+        if self._rate_limiter and not self._rate_limiter.consume():
+            raise JudgeHTTPError(429, f"rate limit exceeded for provider {self.provider_id}")
+
+        # 서킷 브레이커 체크
+        breaker_stats = self._circuit_breaker.get_stats()
+        if breaker_stats["state"] == "open":
+            raise JudgeHTTPError(503, f"circuit breaker OPEN for provider {self.provider_id}")
 
         attempt = 0
-        delay = 0.2
         last_exc: Optional[Exception] = None
 
         while attempt <= self.retries:
@@ -120,28 +139,34 @@ class HTTPJudgeProvider(JudgeProvider):
                         "id": self.provider_id,
                     }
                     vote["meta"].setdefault("latency_ms", round(latency_ms, 2))
-                    self._reset_breaker()
+
+                    # 성공 시 서킷 브레이커 리셋
+                    def success_func():
+                        return vote
+                    self._circuit_breaker.call(success_func)
                     return vote
+
             except httpx.TimeoutException as exc:
                 last_exc = JudgeTimeout(str(exc))
-                self._register_failure()
+                self._record_failure()
             except JudgeBadSignature as exc:
                 last_exc = exc
-                self._register_failure()
+                self._record_failure()
                 break
             except JudgeHTTPError as exc:
                 last_exc = exc
                 if exc.status_code >= 500:
-                    self._register_failure()
+                    self._record_failure()
                 else:
                     break
             except httpx.RequestError as exc:
                 last_exc = exc
-                self._register_failure()
+                self._record_failure()
             finally:
                 if attempt <= self.retries:
-                    await asyncio.sleep(delay)
-                    delay *= 3
+                    # 지수 백오프
+                    backoff_ms = calculate_backoff_ms(attempt - 1)
+                    await asyncio.sleep(backoff_ms / 1000)
 
         assert last_exc is not None
         raise last_exc
