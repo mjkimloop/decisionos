@@ -107,6 +107,7 @@ def evaluate(evidence: Dict[str, Any], slo: Dict[str, Any]) -> Tuple[str, List[s
 
     _evaluate_infra(spec.judge_infra, evidence, reasons)
     _evaluate_canary(spec.canary, evidence, reasons)
+    _evaluate_drift(spec.drift, evidence, reasons)
 
     return ("pass" if not reasons else "fail"), reasons
 
@@ -174,3 +175,47 @@ def _evaluate_canary(spec: Optional[SLOCanary], evidence: Dict[str, Any], reason
         reasons.append(f"canary.error_delta_over:{deltas['error_delta']}>{thresholds.max_error_abs_delta}")
     if "sig_error_delta" in deltas and deltas["sig_error_delta"] > thresholds.max_sig_error_delta:
         reasons.append(f"canary.sig_error_delta_over:{deltas['sig_error_delta']}>{thresholds.max_sig_error_delta}")
+
+
+def _evaluate_drift(spec: Optional[Any], evidence: Dict[str, Any], reasons: List[str]) -> None:
+    """
+    Drift SLO 검증
+    posterior_drift.json 파일을 읽어서 severity, abs_diff, kl 검사
+    """
+    if spec is None:
+        return
+
+    import os
+    from apps.judge.slo_schema import SLODrift
+
+    # SLODrift 타입 검증
+    if not isinstance(spec, SLODrift):
+        return
+
+    path = spec.source
+    if not os.path.exists(path):
+        reasons.append("drift.source_missing")
+        return
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+    except Exception:
+        reasons.append("drift.source_unreadable")
+        return
+
+    sev = str(d.get("severity", "info"))
+    abs_diff = float(d.get("abs_diff", 0.0))
+    kl = float(d.get("kl", 0.0))
+
+    # Severity 검사
+    if sev in set(spec.forbid_severity):
+        reasons.append(f"drift.severity_forbidden:{sev}")
+
+    # abs_diff 검사
+    if abs_diff > spec.max_abs_diff:
+        reasons.append(f"drift.abs_over:{abs_diff}>{spec.max_abs_diff}")
+
+    # KL divergence 검사
+    if kl > spec.max_kl:
+        reasons.append(f"drift.kl_over:{kl}>{spec.max_kl}")

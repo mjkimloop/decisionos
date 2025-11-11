@@ -1,0 +1,32 @@
+meta:
+  version: v0.5.11t-4
+  date: 2025-11-11
+  summary: "Autotune 안전장치(바운드·slew·롤백) + Drift SLO 게이트 연계 + 버킷 explain 가시화"
+scope:
+  - Autotune Guard: bounds/slew_rate/rollback(연속 severity 트리거) 적용
+  - Drift→SLO: posterior_drift.json을 SLO로 검증, fail-closed 시 배포 중단
+  - Cards/Stream explain: bucket별 가중/사유코드/ETag(explain 포함) 반환
+deliverables:
+  - configs/optimizer/autotune_guard.json
+  - apps/ops/optimizer/guard.py
+  - jobs/autotune_promote_threshold.py (guard 적용)
+  - jobs/autotune_guard_rollback.py
+  - apps/judge/slo_schema.py (SLODrift 추가)
+  - apps/judge/slo_judge.py (drift 검증 추가)
+  - configs/slo/slo-drift.json (샘플)
+  - apps/ops/api_cards.py (highlights/stream explain=1, etag 키 확장)
+  - tests/ops/test_autotune_guard_v1.py
+  - tests/gates/gate_aj/test_slo_drift_enforce_v1.py
+  - tests/ops/test_stream_explain_bucket_v1.py
+ci:
+  pre_gate:
+    - "ab_report / calibration / canary.windows / drift 샘플 생성"
+  gate:
+    - "세 테스트 Green"
+  post_gate:
+    - "autotune → policy.autotuned.json(guard 반영)"
+    - "drift SLO judge → exit code 0/2"
+acceptance:
+  - policy.autotuned.json 값이 guard.bounds 내에 있고, base 대비 변경폭이 slew_rate 이내
+  - posterior_drift.json severity∈{info,warn,critical}; slo-drift가 forbid할 때 judge fail
+  - /ops/cards/highlights/stream?explain=1 에 explain 필드 포함, If-None-Match시 304 동작

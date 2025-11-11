@@ -85,6 +85,13 @@ class SLOQuorum(BaseModel):
     fail_closed_on_degrade: bool = True
 
 
+class SLODrift(BaseModel):
+    source: str = Field(default="var/alerts/posterior_drift.json")
+    max_abs_diff: float = 0.15
+    max_kl: float = 1.0
+    forbid_severity: List[str] = Field(default_factory=lambda: ["critical"])
+
+
 class SLOSpec(BaseModel):
     version: str = "v1"
     budget: SLOBudget = SLOBudget()
@@ -97,3 +104,4 @@ class SLOSpec(BaseModel):
     quorum: SLOQuorum = SLOQuorum()
     judge_infra: Optional[SLOJudgeInfra] = None
     canary: Optional[SLOCanary] = None
+    drift: Optional[SLODrift] = None

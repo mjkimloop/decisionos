@@ -373,11 +373,12 @@ def highlights_stream(
     since: Optional[str] = Query(None),
     limit: int = Query(5, ge=1, le=100),
     bucket: str = Query("day", pattern="^(day|hour)$"),
+    explain: int = Query(0, ge=0, le=1),
     if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
     delta_base_etag: Optional[str] = Header(default=None, alias="X-Delta-Base-ETag"),
     _=Depends(require_scope("ops:read"))
 ):
-    """하이라이트 증분 스트림 v2: bucket + ETag-Delta 통합"""
+    """하이라이트 증분 스트림 v2: bucket + ETag-Delta + explain 통합"""
     import hashlib
     def _sha(obj) -> str:
         return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()
@@ -411,10 +412,35 @@ def highlights_stream(
     out = rows[:limit]
     next_token = out[-1].get("token") if out else since
 
-    # ETag 계산 (bucket 포함)
+    # Explain 모드: 가중치 및 사유코드 추가
+    if explain:
+        cat_path = os.getenv("LABEL_CATALOG_PATH", "configs/labels/label_catalog.v2.json")
+        weights = {}
+        if os.path.exists(cat_path):
+            try:
+                catalog = json.load(open(cat_path, "r", encoding="utf-8"))
+                # 그룹 가중치 추출
+                for group_name, group_meta in catalog.get("groups", {}).items():
+                    weights[group_name] = float(group_meta.get("weight", 1.0))
+            except Exception:
+                pass
+
+        # 각 행의 items에 explain 정보 추가
+        for r in out:
+            for item in r.get("items", []):
+                group = item.get("group", "")
+                label = item.get("label", "")
+                w = weights.get(group, 1.0)
+                item["explain"] = {
+                    "weight": w,
+                    "reason_codes": [label] if label else []
+                }
+
+    # ETag 계산 (bucket + explain 포함)
     etag = _sha({
         "path": "highlights/stream",
         "bucket": bucket,
+        "explain": explain,
         "since": since,
         "upto": next_token,
         "len": len(out)

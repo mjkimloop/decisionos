@@ -1,0 +1,22 @@
+{
+  "bounds": {
+    "delta_threshold_min": 0.01,
+    "delta_threshold_max": 0.15,
+    "p_win_threshold_min": 0.55,
+    "p_win_threshold_max": 0.80,
+    "min_windows_min": 3,
+    "min_windows_max": 15
+  },
+  "slew_rate": {
+    "delta_threshold": 0.02,
+    "p_win_threshold": 0.05,
+    "min_windows": 3
+  },
+  "rollback": {
+    "trigger": {
+      "severity": ["critical"],
+      "consecutive": 2
+    },
+    "last_good_path": "configs/canary/policy.last_good.json"
+  }
+}

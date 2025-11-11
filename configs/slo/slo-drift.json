@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "drift": {
+    "source": "var/alerts/posterior_drift.json",
+    "max_abs_diff": 0.12,
+    "max_kl": 1.2,
+    "forbid_severity": ["critical"]
+  }
+}
