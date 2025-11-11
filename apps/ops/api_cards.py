@@ -8,8 +8,8 @@ import os, json
 router = APIRouter()
 
 # ETag 스냅샷 저장소 (프로세스 단일톤)
-from .cache.etag_store import InMemoryETagStore
-_ETAG_STORE = InMemoryETagStore()
+from .cache.etag_store import build_etag_store
+_ETAG_STORE = build_etag_store()
 
 # Mock RBAC for now - will integrate with existing RBAC system
 def require_scope(scope: str):

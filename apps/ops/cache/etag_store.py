@@ -1,25 +1,43 @@
 from __future__ import annotations
-import threading, time
-from typing import Any, Optional, Dict
+
+import json
+import os
+import threading
+import time
+from typing import Any, Dict, Optional, Tuple
+
+__all__ = [
+    "ETagStore",
+    "InMemoryETagStore",
+    "RedisETagStore",
+    "build_etag_store",
+]
+
+try:
+    import redis  # type: ignore
+    _HAS_REDIS = True
+except Exception:
+    _HAS_REDIS = False
+
 
 class ETagStore:
-    """ETag 스냅샷 저장소 인터페이스"""
-    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
-        """ETag와 페이로드를 TTL과 함께 저장"""
+    """ETag → payload(snapshot) 저장/조회 추상 인터페이스."""
+    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:  # 1 day
         raise NotImplementedError
 
     def get(self, etag: str) -> Optional[Dict[str, Any]]:
-        """ETag로 저장된 페이로드 조회 (만료 시 None)"""
         raise NotImplementedError
 
+
 class InMemoryETagStore(ETagStore):
-    """메모리 기반 ETag 스냅샷 저장소 (프로세스 단일톤)"""
+    """의존성 없는 인메모리 구현. 프로세스 생명주기 동안만 유효."""
     def __init__(self):
         self._lock = threading.RLock()
-        self._data: Dict[str, tuple[float, Dict[str, Any]]] = {}
+        # etag -> (expire_epoch, payload)
+        self._data: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
     def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
-        exp = time.time() + ttl_sec
+        exp = time.time() + float(ttl_sec)
         with self._lock:
             self._data[etag] = (exp, payload)
 
@@ -30,6 +48,7 @@ class InMemoryETagStore(ETagStore):
                 return None
             exp, payload = item
             if exp < time.time():
+                # TTL 만료 → 제거
                 self._data.pop(etag, None)
                 return None
             return payload
@@ -44,3 +63,59 @@ class InMemoryETagStore(ETagStore):
                 self._data.pop(k, None)
                 removed += 1
         return removed
+
+
+class RedisETagStore(ETagStore):
+    """Redis 기반 구현. TTL/eviction은 Redis에 위임."""
+    def __init__(self, url: str, prefix: str = "dos:cards:etag", decode_responses: bool = True):
+        if not _HAS_REDIS:
+            raise RuntimeError("redis 라이브러리가 설치되지 않았습니다. (pip install redis)")
+        # 연결
+        self._r = redis.Redis.from_url(url, decode_responses=decode_responses)
+        self._prefix = prefix
+
+    def _key(self, etag: str) -> str:
+        return f"{self._prefix}:{etag}"
+
+    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
+        # 정렬·압축된 JSON으로 저장(안정적 비교/디버깅)
+        doc = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        # SET with EX(초) → TTL
+        self._r.set(self._key(etag), doc, ex=int(ttl_sec))
+
+    def get(self, etag: str) -> Optional[Dict[str, Any]]:
+        raw = self._r.get(self._key(etag))
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            # 손상 데이터 방어: 키 삭제 후 None
+            try:
+                self._r.delete(self._key(etag))
+            finally:
+                return None
+
+
+def build_etag_store() -> ETagStore:
+    """
+    환경 변수로 백엔드 선택:
+      - DECISIONOS_ETAG_BACKEND = "redis" | "memory"(default)
+      - DECISIONOS_REDIS_URL (default: redis://localhost:6379/0)
+      - DECISIONOS_ETAG_REDIS_PREFIX (default: dos:cards:etag)
+    Redis 사용 불가(미설치/접속오류) 시 자동 fallback → InMemory
+    """
+    backend = (os.getenv("DECISIONOS_ETAG_BACKEND") or "memory").lower().strip()
+    if backend == "redis":
+        url = os.getenv("DECISIONOS_REDIS_URL", "redis://localhost:6379/0")
+        prefix = os.getenv("DECISIONOS_ETAG_REDIS_PREFIX", "dos:cards:etag")
+        if _HAS_REDIS:
+            try:
+                store = RedisETagStore(url=url, prefix=prefix)
+                # 간단 ping으로 연결 확인(실패 시 메모리로 폴백)
+                store._r.ping()
+                return store
+            except Exception:
+                pass  # 아래 메모리 폴백
+        # 폴백 로그는 상위 로거에서 처리 가능. 여기선 조용히 메모리 사용.
+    return InMemoryETagStore()
