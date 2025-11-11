@@ -1,0 +1,29 @@
+meta:
+  version: v0.5.11t-2
+  date: 2025-11-11
+  summary: "예측-실측 교정(자동 보정치) + p_win 베이지안 검증 + 하이라이트 증분 ETL"
+scope:
+  - Calibration: ab_report(예측) ↔ canary(실측) Δ로 gain 보정치 산출/적용
+  - Bayesian: p_win 사전→사후 업데이트(윈도 승률 관측), CI90 계산
+  - Incremental ETL: Top-K 하이라이트 증분 스트림(continuity token) 생성
+deliverables:
+  - apps/ops/optimizer/calibration.py
+  - apps/ops/optimizer/bayesian.py
+  - jobs/reconcile_calibrate_update.py
+  - jobs/etl_highlights_incremental.py
+  - apps/ops/api_cards.py (/ops/cards/highlights/stream 추가)
+  - tests/ops/test_calibration_bias_v1.py
+  - tests/ops/test_bayesian_update_v1.py
+  - tests/ops/test_highlights_incremental_etl_v1.py
+ci:
+  pre_gate:
+    - "AB simulate → ab_report.json"
+    - "canary windows 샘플 준비 → windows.json"
+  gate:
+    - "신규 3 테스트 Green"
+  post_gate:
+    - "reconcile_calibrate_update 실행 → calibration.json, posterior.json, ab_report_calibrated.json 업로드"
+acceptance:
+  - calibration.json: {"gain","method","samples"} 포함, |gain-obs/pred| 상대오차 < 20% (샘플 데이터)
+  - posterior.json: {"prior","observed","posterior":{"alpha","beta","mean","ci90_low","ci90_high"}}
+  - /ops/cards/highlights/stream: since 토큰 이후 레코드만, continuity_token 반환

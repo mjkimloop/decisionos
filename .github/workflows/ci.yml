@@ -152,14 +152,23 @@ jobs:
             var/rollout/**
             var/optimizer/*.json
             var/sandbox/*.json
-      - name: Reconcile canary vs offline - t1-round
+            var/cards/highlights/**
+      - name: Reconcile + Calibrate + Bayesian - t2-round
         run: |
           mkdir -p var/canary
-          echo '{"delta":{"score_delta":0.5}}' > var/canary/compare.json
-          python -m jobs.reconcile_canary_vs_offline \
+          echo '{"windows":[{"score_delta":0.4},{"score_delta":0.8},{"score_delta":-0.1}]}' > var/canary/windows.json
+          python -m jobs.reconcile_calibrate_update \
             --ab-report var/optimizer/ab_report.json \
-            --canary var/canary/compare.json \
-            --out var/optimizer/reconcile_report.json || true
+            --canary-windows var/canary/windows.json \
+            --out-dir var/optimizer || true
+      - name: Incremental highlights ETL - t2-round
+        run: |
+          python -m jobs.etl_highlights_incremental \
+            --index var/evidence/index/summary.json \
+            --catalog configs/labels/label_catalog.v2.json \
+            --out-dir var/cards/highlights \
+            --k 5 \
+            --weighted || true
       - name: Label Sync (dry-run) - o-round v2
         if: ${{ github.event_name == 'pull_request' }}
         run: |

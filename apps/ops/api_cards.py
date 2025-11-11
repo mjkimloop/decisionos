@@ -366,3 +366,47 @@ def label_heatmap(
         "highlights": highlights,
         "etag": etag
     }
+
+@router.get("/cards/highlights/stream")
+def highlights_stream(
+    response: Response,
+    since: Optional[str] = Query(None),
+    limit: int = Query(5, ge=1, le=100),
+    _=Depends(require_scope("ops:read"))
+):
+    """하이라이트 증분 스트림"""
+    import hashlib
+    def _sha(obj) -> str:
+        return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()
+
+    base = os.getenv("DECISIONOS_HIGHLIGHTS_DIR", "var/cards/highlights")
+    stream_path = os.path.join(base, "stream.jsonl")
+    if not os.path.exists(stream_path):
+        raise HTTPException(status_code=503, detail="stream not ready")
+
+    rows = []
+    with open(stream_path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                obj = json.loads(line)
+                rows.append(obj)
+            except Exception:
+                continue
+
+    # since 토큰 이후만
+    if since:
+        try:
+            idx = next(i for i, r in enumerate(rows) if r.get("token") == since)
+            rows = rows[idx + 1:]
+        except StopIteration:
+            # 못 찾은 토큰이면 전체 반환(클라이언트가 초기화)
+            pass
+
+    out = rows[:limit]
+    next_token = out[-1].get("token") if out else since
+    etag = _sha({"path": "highlights/stream", "since": since, "upto": next_token, "len": len(out)})
+
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, max-age=30"
+
+    return {"items": out, "next": next_token, "etag": etag}
