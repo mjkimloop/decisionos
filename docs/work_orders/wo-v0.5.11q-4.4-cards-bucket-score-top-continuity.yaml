@@ -1,0 +1,31 @@
+meta:
+  version: v0.5.11q-4.4
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API: 버킷별 가중 점수, 상위 N 버킷 탐지, X-Bucket-Continuity-Token 지원"
+
+scope:
+  api:
+    - GET /ops/cards/reason-trends/summary?start&end&top=5&bucket=day|hour&bucket_limit=24&top_buckets=3
+    - 응답에 buckets[].score(가중 점수) 추가, top_buckets 배열(상위 N) 포함
+    - 연속 토큰: 요청 헤더 X-Bucket-Continuity-Token → 페이지오프셋, 응답 헤더 X-Bucket-Continuity-Token 갱신
+    - has_more 플래그 포함
+  weights:
+    - 그룹 가중치: ENV REASON_GROUP_WEIGHTS='{"infra":3,"perf":2,"canary":2.5,"quota":1.5,"budget":1.8,"anomaly":1.7}'
+    - 라벨→그룹 규칙: "reason:{group}-*" → {group}; "reason:budget-exceeded" → "budget"; 미일치=1.0
+  rbac:
+    - ops:read 스코프(기존 규약 유지)
+
+policy:
+  delta_window:
+    - CARDS_DELTA_REQUIRE_SAME_WINDOW=1 유지(부분 겹침일 때만 delta 계산)
+  continuity:
+    - 토큰 형식(base64url JSON): {"bucket_size":"hour|day","last_end":"<iso8601Z>"}
+    - 요청 윈도(start,end) 안에서 bucket.end > last_end 인 버킷부터 반환
+
+acceptance:
+  - 동일 데이터에서 가중점수 계산식: sum(count(label_i) * weight(group(label_i)))
+  - top_buckets 길이=top_buckets 쿼리 파라미터, score 내림차순
+  - 연속 토큰으로 bucket_limit=1 페이지네이션 시 중복 무(前 페이지 마지막 버킷과 겹치지 않음)
+  - 응답/요청 헤더 X-Bucket-Continuity-Token 정상 작동
+  - 기존 ETag/304, delta 정책, RBAC 영향 無
