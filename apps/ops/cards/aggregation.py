@@ -1,7 +1,7 @@
 from __future__ import annotations
-import json, os, hashlib
+import json, os, hashlib, base64
 from collections import Counter, defaultdict
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 
 CAT_PATH = os.environ.get("LABEL_CATALOG_PATH", "configs/ops/label_catalog.json")
 GROUP_PATH = os.environ.get("REASON_GROUPS_PATH", "configs/ops/reason_groups.json")
@@ -65,3 +65,41 @@ def rollup_counts(reasons: List[str]) -> Dict[str, Any]:
         "weighted": agg["weighted"],
         "top": [(k, v) for k, v in agg["weighted"].items()]
     }
+
+# ---- Delta Token/ETag ----
+def _b64u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+def _b64u_dec(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + pad)
+
+def make_snapshot_payload(window: Dict[str,str], raw_counts: Dict[str,int], catalog_sha: str) -> Dict[str,Any]:
+    return {"v":"1","catalog_sha": catalog_sha, "window": window, "raw": raw_counts}
+
+def snapshot_etag(payload: Dict[str,Any]) -> str:
+    h = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    return f'W/"sha256:{h}"'
+
+def snapshot_token(payload: Dict[str,Any]) -> str:
+    blob = json.dumps(payload, sort_keys=True).encode()
+    return "v1." + _b64u(blob)
+
+def try_decode_token(token: str) -> Optional[Dict[str,Any]]:
+    try:
+        if not token.startswith("v1."): return None
+        data = _b64u_dec(token.split("v1.",1)[1])
+        obj = json.loads(data.decode())
+        return obj if obj.get("v") == "1" else None
+    except Exception:
+        return None
+
+def diff_counts(prev: Dict[str,int], curr: Dict[str,int]) -> Dict[str,Any]:
+    added, removed, changed = {}, {}, {}
+    keys = set(prev) | set(curr)
+    for k in keys:
+        a, b = prev.get(k,0), curr.get(k,0)
+        if a == 0 and b > 0: added[k] = b
+        elif b == 0 and a > 0: removed[k] = a
+        elif a != b: changed[k] = {"from": a, "to": b, "delta": b-a}
+    return {"added": added, "removed": removed, "changed": changed}

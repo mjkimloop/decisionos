@@ -1,0 +1,24 @@
+meta:
+  version: v0.5.11q-4.2
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API에 기간 필터와 증분 집계(ETag-Delta) 추가"
+
+scope:
+  api:
+    - GET /ops/cards/reason-trends/summary?start=<ISO8601>&end=<ISO8601>&top=N
+    - 서버는 JSONL 이벤트 소스(REASON_EVENTS_PATH, 기본 var/evidence/reasons.jsonl)를 읽어 윈도우 내 reason 집계
+    - 응답 헤더: ETag(W/\"sha256:<...>\"), Cache-Control: no-cache
+    - If-None-Match 일치 시 304 반환
+    - X-If-Delta-Token 제공 시 증분(delta) 계산 및 delta_token 반환
+  token:
+    - delta_token 포맷: "v1." + base64url(JSON{catalog_sha, window, raw_counts} 정렬)
+    - ETag는 동일 페이로드 sha256 기반(opaque), 304 판단 전용
+  rbac:
+    - ops:read 스코프 강제(기존 규약 유지)
+
+acceptance:
+  - 윈도우 필터링으로 집계 결과가 기간에 따라 달라짐
+  - 동일 입력에 If-None-Match로 304 동작
+  - X-If-Delta-Token 기반 증분(delta.added/removed/changed) 계산
+  - 단위테스트(gate_ops) 2개+304 케이스 통과
