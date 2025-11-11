@@ -1,0 +1,51 @@
+{
+  "version": "v2",
+  "budget": {
+    "allow_levels": [
+      "ok"
+    ],
+    "max_spent": 0.5
+  },
+  "quota": {
+    "forbid_actions": {
+      "tokens": [
+        "deny",
+        "throttle"
+      ]
+    }
+  },
+  "anomaly": {
+    "allow_spike": false
+  },
+  "latency": {
+    "max_p95_ms": 780,
+    "max_p99_ms": 1440,
+    "baseline_p95_ms": 650,
+    "baseline_p99_ms": 1200
+  },
+  "error": {
+    "max_error_rate": 0.006,
+    "baseline_error_rate": 0.005
+  },
+  "witness": {
+    "require_csv_sha256": true,
+    "require_signature": true,
+    "min_rows": 1,
+    "min_samples": 500,
+    "window_sec": 3600
+  },
+  "integrity": {
+    "require_signature": true
+  },
+  "quorum": {
+    "k": 2,
+    "n": 3,
+    "fail_closed_on_degrade": true
+  },
+  "meta": {
+    "generated_from": "baseline_slo.py",
+    "safety_margin": 1.2,
+    "baseline_total_requests": 50000,
+    "baseline_error_count": 250
+  }
+}
