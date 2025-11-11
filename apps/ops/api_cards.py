@@ -205,6 +205,10 @@ def get_summary(
             if top_buckets and top_buckets > 0:
                 top_list = pick_top_buckets(buckets_scored, top_buckets)
 
+    # 상한선 추가 (v0.5.11r-9)
+    from .cards.thresholds import load_slo_thresholds
+    thresholds = load_slo_thresholds()
+
     # 전체 요약 body 구성
     full_summary = {
         "catalog_sha": payload["catalog_sha"],
@@ -221,6 +225,7 @@ def get_summary(
             "has_more": has_more,
             "limit": bucket_limit,
         } if bucket else None,
+        "thresholds": thresholds if thresholds else None,
     }
 
     # ETag 스냅샷 저장
