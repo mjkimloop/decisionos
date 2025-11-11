@@ -5,6 +5,7 @@ import os
 import threading
 import time
 from typing import Any, Dict, Optional, Tuple
+from .metrics import get_metrics
 
 __all__ = [
     "ETagStore",
@@ -40,17 +41,21 @@ class InMemoryETagStore(ETagStore):
         exp = time.time() + float(ttl_sec)
         with self._lock:
             self._data[etag] = (exp, payload)
+        get_metrics().record_put()
 
     def get(self, etag: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             item = self._data.get(etag)
             if not item:
+                get_metrics().record_miss()
                 return None
             exp, payload = item
             if exp < time.time():
                 # TTL 만료 → 제거
                 self._data.pop(etag, None)
+                get_metrics().record_miss()
                 return None
+            get_metrics().record_hit()
             return payload
 
     def clear_expired(self) -> int:
@@ -78,23 +83,36 @@ class RedisETagStore(ETagStore):
         return f"{self._prefix}:{etag}"
 
     def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
-        # 정렬·압축된 JSON으로 저장(안정적 비교/디버깅)
-        doc = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        # SET with EX(초) → TTL
-        self._r.set(self._key(etag), doc, ex=int(ttl_sec))
+        try:
+            # 정렬·압축된 JSON으로 저장(안정적 비교/디버깅)
+            doc = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            # SET with EX(초) → TTL
+            self._r.set(self._key(etag), doc, ex=int(ttl_sec))
+            get_metrics().record_put()
+        except Exception:
+            get_metrics().record_error()
+            raise
 
     def get(self, etag: str) -> Optional[Dict[str, Any]]:
-        raw = self._r.get(self._key(etag))
-        if raw is None:
-            return None
         try:
-            return json.loads(raw)
-        except Exception:
-            # 손상 데이터 방어: 키 삭제 후 None
-            try:
-                self._r.delete(self._key(etag))
-            finally:
+            raw = self._r.get(self._key(etag))
+            if raw is None:
+                get_metrics().record_miss()
                 return None
+            try:
+                result = json.loads(raw)
+                get_metrics().record_hit()
+                return result
+            except Exception:
+                # 손상 데이터 방어: 키 삭제 후 None
+                try:
+                    self._r.delete(self._key(etag))
+                finally:
+                    get_metrics().record_miss()
+                    return None
+        except Exception:
+            get_metrics().record_error()
+            raise
 
 
 def build_etag_store() -> ETagStore:
