@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-11
 status: locked
-summary: PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동
+summary: 라벨 가시성(색상·설명 자동 생성) 및 PR 코멘트 diff-permalink 자동 첨부
 -->
 
 # DecisionOS Implementation Plan
@@ -845,3 +845,39 @@ Day 3: 라벨/가중치 설정 튜닝 및 운영 문서 반영
 - 라벨은 prefix(기본: reason:)로 부여되며 과도한 라벨 부착을 방지하기 위해 최대 N개로 제한된다.
 - Top-Impact는 weights(기본: infra>canary>perf>quota>budget>anomaly>misc) 기반 상위 K만 표시.
 <!-- AUTOGEN:END:Runbooks — PR Gate UX -->
+
+## Milestones — v0.5.11q-3
+Day 1: ensure_labels 스텝 추가, 카탈로그/매핑 분리
+Day 2: 코멘트 diff-permalink 자동 주입, 템플릿 키 {{DIFF_LINK}}
+Day 3: 운영 문서 보강(라벨 팔레트, 설명 규칙)
+
+
+<!-- AUTOGEN:BEGIN:Workflow — release_gate additions -->
+- name: Ensure reason labels (color/description)
+  if: ${{ github.event_name == 'pull_request' }}
+  env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+  run: |
+    python scripts/ci/ensure_labels.py \
+      --catalog configs/ops/label_catalog.json \
+      --repo "${{ github.repository }}"
+- name: Annotate PR with diff permalink (upsert)
+  if: ${{ github.event_name == 'pull_request' }}
+  env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+  run: |
+    python scripts/ci/annotate_release_gate.py \
+      --template .github/pr_comment_template.md \
+      --status-json var/reports/gate_summary.json \
+      --reasons-json var/reports/reasons.json \
+      --manifest var/reports/artifacts-manifest.json \
+      --top-impact var/reports/top_impact.json \
+      --diff-link "https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+      --out var/reports/pr_comment.md \
+      --repo "${{ github.repository }}" \
+      --pr "${{ github.event.pull_request.number }}"
+<!-- AUTOGEN:END:Workflow — release_gate additions -->
+
+
+<!-- AUTOGEN:BEGIN:Runbooks — Labels & Diff -->
+- 팔레트 규칙: infra(ee0701), perf(1f77b4), canary(f39c12), quota(8e44ad), budget(27ae60), anomaly(16a085), misc(95a5a6).
+- 라벨 설명은 '자동 생성(Reason Codes 기반)' 문구 포함. 수정해도 CI가 카탈로그를 우선 적용.
+<!-- AUTOGEN:END:Runbooks — Labels & Diff -->

@@ -3,6 +3,7 @@
 
 **Infra Gate:** `{{INFRA_STATUS}}` &nbsp;|&nbsp; **Canary Gate:** `{{CANARY_STATUS}}`
 **Run:** {{RUN_URL}}
+**Diff:** {{DIFF_LINK}}
 
 #### Top Reasons (code → message)
 | code | message | count |

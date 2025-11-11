@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+version: v0.5.11q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
 date: 2025-11-11
 status: locked
-summary: PR 코멘트 마커 업서트/중복 억제, 실패 사유 자동 라벨링, 모듈 가중 Top-Impact 산출 및 CI 연동
+summary: 라벨 가시성(색상·설명 자동 생성) 및 PR 코멘트 diff-permalink 자동 첨부
 -->
 
 
@@ -2860,3 +2860,9 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - 모듈 가중치(impact_weights.json) 기반으로 Top-Impact 모듈을 산출하여 pr 코멘트에 섹션으로 추가한다.
 - 모듈 추정 규칙: reason.code의 첫 토큰(예: infra.latency → infra). 명시적 module 필드가 있으면 우선.
 <!-- AUTOGEN:END:CI — PR Comment Upsert, Reason Labeling, Top-Impact -->
+
+
+<!-- AUTOGEN:BEGIN:CI — Reason Labels Visibility & Diff Permalink -->
+- reason 라벨 메타(색상·설명)는 label_catalog.json로 선언하고, CI에서 존재하지 않으면 생성, 다르면 PATCH로 동기화.
+- 코멘트 본문은 PR의 base..head 비교 permalink를 포함(강제). GH 이벤트가 PR이 아니면 최근 base SHA로 폴백.
+<!-- AUTOGEN:END:CI — Reason Labels Visibility & Diff Permalink -->

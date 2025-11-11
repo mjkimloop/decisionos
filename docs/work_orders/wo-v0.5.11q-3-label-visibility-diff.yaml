@@ -1,0 +1,55 @@
+meta:
+  version: v0.5.11q-3
+  date: 2025-11-11
+  status: locked
+  summary: "라벨 가시성(색상·설명 자동 생성) 및 PR 코멘트 diff-permalink 자동 첨부"
+
+patches:
+  techspec:
+    - section: "CI — Reason Labels Visibility & Diff Permalink"
+      mode: upsert
+      content: |
+        - reason 라벨 메타(색상·설명)는 label_catalog.json로 선언하고, CI에서 존재하지 않으면 생성, 다르면 PATCH로 동기화.
+        - 코멘트 본문은 PR의 base..head 비교 permalink를 포함(강제). GH 이벤트가 PR이 아니면 최근 base SHA로 폴백.
+  plan:
+    - section: "Milestones — v0.5.11q-3"
+      mode: upsert
+      content: |
+        Day 1: ensure_labels 스텝 추가, 카탈로그/매핑 분리
+        Day 2: 코멘트 diff-permalink 자동 주입, 템플릿 키 {{DIFF_LINK}}
+        Day 3: 운영 문서 보강(라벨 팔레트, 설명 규칙)
+  ci:
+    - section: "Workflow — release_gate additions"
+      mode: upsert
+      content: |
+        - name: Ensure reason labels (color/description)
+          if: ${{ github.event_name == 'pull_request' }}
+          env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+          run: |
+            python scripts/ci/ensure_labels.py \
+              --catalog configs/ops/label_catalog.json \
+              --repo "${{ github.repository }}"
+        - name: Annotate PR with diff permalink (upsert)
+          if: ${{ github.event_name == 'pull_request' }}
+          env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+          run: |
+            python scripts/ci/annotate_release_gate.py \
+              --template .github/pr_comment_template.md \
+              --status-json var/reports/gate_summary.json \
+              --reasons-json var/reports/reasons.json \
+              --manifest var/reports/artifacts-manifest.json \
+              --top-impact var/reports/top_impact.json \
+              --diff-link "https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+              --out var/reports/pr_comment.md \
+              --repo "${{ github.repository }}" \
+              --pr "${{ github.event.pull_request.number }}"
+  ops_docs:
+    - section: "Runbooks — Labels & Diff"
+      mode: upsert
+      content: |
+        - 팔레트 규칙: infra(ee0701), perf(1f77b4), canary(f39c12), quota(8e44ad), budget(27ae60), anomaly(16a085), misc(95a5a6).
+        - 라벨 설명은 '자동 생성(Reason Codes 기반)' 문구 포함. 수정해도 CI가 카탈로그를 우선 적용.
+notes:
+  apply:
+    - "새 파일: scripts/ci/ensure_labels.py, configs/ops/label_catalog.json"
+    - "기존 scripts/ci/annotate_release_gate.py v4로 교체(--diff-link 지원)"

@@ -1,0 +1,13 @@
+{
+  "labels": [
+    { "name": "reason:infra-latency", "color": "ee0701", "description": "Infra latency SLO breach (p95/p99)" },
+    { "name": "reason:infra-error",   "color": "b60205", "description": "Infra error-rate SLO breach" },
+    { "name": "reason:perf",          "color": "1f77b4", "description": "App performance regression (witness perf)" },
+    { "name": "reason:canary",        "color": "f39c12", "description": "Canary policy violation or drift" },
+    { "name": "reason:quota",         "color": "8e44ad", "description": "Quota hard/soft limit violation" },
+    { "name": "reason:budget-exceeded", "color": "27ae60", "description": "Budget exceeded (cost-guard)" },
+    { "name": "reason:anomaly",       "color": "16a085", "description": "EWMA spike detected" }
+  ],
+  "default_color": "95a5a6",
+  "default_description": "DecisionOS auto-label"
+}
