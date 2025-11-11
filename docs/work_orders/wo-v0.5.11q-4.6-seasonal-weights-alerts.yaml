@@ -1,0 +1,54 @@
+meta:
+  version: v0.5.11q-4.6
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API 시즌성 임계(시간대/요일) + 라벨→그룹 가중치 옵티마이저 + 실시간 알림 게이트(Webhook/Slack)"
+
+scope:
+  thresholds:
+    seasonal:
+      learn: jobs/cards_learn_thresholds_seasonal.py
+      file: var/cards/thresholds_seasonal.json
+      shape:
+        bucket: "hour|day"
+        by_hour: { "00": {group:{mean,std}}, "01": {...}, ... }
+        by_dow:  { "0": {group:{mean,std}}, "1": {...}, ... }  # 0=Mon
+    api:
+      - GET /ops/cards/reason-trends/summary?seasonality=off|auto|hour|dow
+      - anomaly 계산 시 seasonal 우선(버킷=hour→hour, 버킷=day→dow), 없으면 글로벌/온더플라이 fallback
+  weights:
+    optimizer:
+      job: jobs/weights_optimize.py
+      out: var/cards/group_weights.json
+      algo: "bayes|heuristic" (ENV로 전환, bayes 미존재 시 heuristic)
+      rbac: ops:learn
+  alerts:
+    gate:
+      lib: apps/ops/alerts/gate.py
+      slack: apps/ops/alerts/slack.py  # Webhook 지원
+      cli: apps/cli/dosctl/alert_gate.py
+      policy: configs/alerts/policy.json
+      rbac: ops:alert
+      trigger: anomaly.triggered && score/flags 임계 초과 시 POST
+  security:
+    rbac:
+      - ops:learn  # 학습/옵티마이저/임계 생성
+      - ops:alert  # 알림 발송
+      - ops:read   # Cards API 조회(기존)
+
+env:
+  - REASON_LEARN_WINDOW_BUCKETS=24
+  - REASON_ANOMALY_ZK=3.0
+  - REASON_ANOMALY_EWMA_ALPHA=0.3
+  - CARDS_THRESHOLDS_SEASONAL_PATH=var/cards/thresholds_seasonal.json
+  - GROUP_WEIGHTS_PATH=var/cards/group_weights.json
+  - ALERTS_SLACK_WEBHOOK=""
+  - ALERTS_GATE_MIN_FLAGS=1
+  - ALERTS_GATE_MIN_SCORE=5.0
+
+acceptance:
+  - 시즌성 파일 존재 시 해당 차원(hour/dow) 임계 사용, 미존재→글로벌→온더플라이
+  - 옵티마이저 출력 JSON 키=group, 값∈[0.1..5.0]
+  - 알림 게이트는 RBAC 미보유 시 403/exit 3, 성공 시 200/exit 0
+  - ETag 키에 seasonality 파라미터 포함
+  - 테스트 3종 green: seasonal learn, weights optimize, alert gate webhook
