@@ -1,0 +1,29 @@
+meta:
+  version: v0.5.11t
+  date: 2025-11-11
+  summary: "가중치 옵티마이저 검증 루프(A/B 시뮬·샌드박스) + Cards Heatmap 임계/가중스코어 오버레이"
+scope:
+  - Offline A/B Simulator: baseline vs candidate weights → 기대점수/리스크 Δ 산출
+  - Sandbox Catalog: 제안 가중치 적용 사본 생성(본 카탈로그 불변)
+  - Cards API: label-heatmap에 threshold/weighted overlay 및 ETag v2 확장
+  - RBAC: ops:read(API), ops:analyze(배치) 강제 (default-deny)
+  - ETag v2: overlay + thresholds_hash + catalog_hash 포함
+deliverables:
+  - apps/ops/optimizer/simulator.py
+  - apps/ops/optimizer/sandbox.py
+  - jobs/simulate_weights_ab.py
+  - configs/labels/thresholds.json
+  - apps/ops/api_cards.py (label-heatmap overlay 확장)
+  - tests/ops/test_optimizer_ab_simulation_v1.py
+  - tests/ops/test_cards_heatmap_overlay_v1.py
+ci:
+  pre_gate:
+    - "AB 시뮬(dry-run) → artifact 업로드"
+  gate:
+    - 기존 게이트 유지
+  post_gate:
+    - "PR 코멘트에 AB Δ 요약(상위 그룹/라벨) + 히트맵 오버레이 미니요약"
+acceptance:
+  - simulate_weights_ab.py가 Δ(score, incidents, risk) 산출 및 JSON 저장
+  - /ops/cards/label-heatmap?overlay=(threshold|weighted|both) 200/304 + RBAC 동작
+  - ETag v2가 overlay/thresholds_hash 반영, If-None-Match 대응

@@ -1,0 +1,7 @@
+{
+  "default": { "warn": 5, "crit": 10 },
+  "labels": {
+    "reason:infra-latency": { "warn": 3, "crit": 7 },
+    "reason:infra-error": { "warn": 2, "crit": 5 }
+  }
+}

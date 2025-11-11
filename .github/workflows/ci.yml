@@ -81,6 +81,15 @@ jobs:
             --catalog configs/labels/label_catalog.v2.json \
             --index-stats var/evidence/index/group_stats.json \
             --out var/optimizer/weights_suggestion.json || true
+      - name: AB simulate (dry-run) - t-round
+        run: |
+          mkdir -p var/optimizer var/sandbox
+          python -m jobs.simulate_weights_ab \
+            --catalog configs/labels/label_catalog.v2.json \
+            --index-stats var/evidence/index/group_stats.json \
+            --candidate var/optimizer/weights_suggestion.json \
+            --out var/optimizer/ab_report.json \
+            --commit-sandbox || true
       - name: Evidence Integrity Check (v0.5.11r-6)
         run: |
           python scripts/ops/evidence_lockdown.py --verify --root var/evidence
@@ -137,6 +146,7 @@ jobs:
             reports/**/*.xml
             var/rollout/**
             var/optimizer/*.json
+            var/sandbox/*.json
       - name: Label Sync (dry-run) - o-round v2
         if: ${{ github.event_name == 'pull_request' }}
         run: |

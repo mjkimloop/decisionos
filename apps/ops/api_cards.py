@@ -256,56 +256,93 @@ def get_summary(
 
 @router.get("/cards/label-heatmap")
 def label_heatmap(
+    response: Response,
     period: str,
     bucket: str = "day",
-    group_axis: str = "group",
-    label_axis: str = "label",
+    overlay: str = "none",
     if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
     _=Depends(require_scope("ops:read"))
 ):
-    """라벨 히트맵 카드: period/bucket별 그룹·라벨 빈도 매트릭스"""
+    """라벨 히트맵 카드: period/bucket별 그룹·라벨 빈도 매트릭스 + overlay"""
     import hashlib
-    # 예: var/evidence/index/summary.json ← 인덱서 산출물
-    path = os.getenv("DECISIONOS_EVIDENCE_INDEX", "var/evidence/index/summary.json")
-    catalog_path = os.getenv("LABEL_CATALOG_PATH", "configs/labels/label_catalog.v2.json")
+
+    # overlay 검증
+    if overlay not in ("none", "threshold", "weighted", "both"):
+        raise HTTPException(status_code=400, detail="overlay must be none|threshold|weighted|both")
+
+    # 파일 로드
+    idx_path = os.getenv("DECISIONOS_EVIDENCE_INDEX", "var/evidence/index/summary.json")
+    cat_path = os.getenv("LABEL_CATALOG_PATH", "configs/labels/label_catalog.v2.json")
+    thr_path = os.getenv("THRESHOLDS_PATH", "configs/labels/thresholds.json")
 
     try:
-        index = json.load(open(path, "r", encoding="utf-8"))
-        cat = json.load(open(catalog_path, "r", encoding="utf-8"))
+        index = json.load(open(idx_path, "r", encoding="utf-8"))
+        catalog = json.load(open(cat_path, "r", encoding="utf-8"))
+        thresholds = json.load(open(thr_path, "r", encoding="utf-8")) if os.path.exists(thr_path) else {"default": {"warn": 5, "crit": 10}, "labels": {}}
     except FileNotFoundError:
-        raise HTTPException(status_code=503, detail="index not ready")
+        raise HTTPException(status_code=503, detail="index/catalog not ready")
 
-    # 간단 합성: period/bucket 필터링은 기존 인덱서 출력 형식에 맞춰 subset
-    # 여기서는 mock: groups/labels 빈도 합산
-    groups = {g: 0 for g in cat.get("groups", {}).keys()}
-    labels = [l["name"] for l in cat.get("labels", [])]
+    # 매트릭스 구성
+    groups = list(catalog.get("groups", {}).keys())
+    labels = [l["name"] for l in catalog.get("labels", [])]
     matrix = {g: {l: 0 for l in labels} for g in groups}
 
-    # index 예: {"rows":[{"label":"reason:infra-latency","count":3,"group":"infra"}, ...]}
     for r in index.get("rows", []):
-        g = r.get("group")
-        l = r.get("label")
-        c = int(r.get("count", 0))
+        g, l, c = r.get("group"), r.get("label"), int(r.get("count", 0))
         if g in matrix and l in matrix[g]:
             matrix[g][l] += c
 
-    etag = hashlib.sha256(json.dumps({
+    # Overlay 계산
+    overlays = {}
+    if overlay in ("threshold", "both"):
+        thr_default = thresholds.get("default", {"warn": 5, "crit": 10})
+        thr_map = thresholds.get("labels", {})
+        over = {g: {} for g in groups}
+        for g in groups:
+            for l in labels:
+                t = thr_map.get(l, thr_default)
+                val = matrix[g][l]
+                over[g][l] = "ok"
+                if val >= t.get("warn", 5):
+                    over[g][l] = "warn"
+                if val >= t.get("crit", 10):
+                    over[g][l] = "crit"
+        overlays["threshold"] = over
+
+    if overlay in ("weighted", "both"):
+        gw = {g: float(meta.get("weight", 1.0)) for g, meta in catalog.get("groups", {}).items()}
+        weighted = {g: {l: matrix[g][l] * gw.get(g, 1.0) for l in labels} for g in groups}
+        overlays["weighted"] = weighted
+
+    # ETag v2
+    def _sha(obj):
+        return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()
+
+    etag = _sha({
         "k": "label-heatmap",
         "period": period,
         "bucket": bucket,
-        "catalog_hash": hashlib.sha256(json.dumps(cat, sort_keys=True).encode()).hexdigest(),
+        "overlay": overlay,
+        "catalog_hash": _sha(catalog),
+        "thresholds_hash": _sha(thresholds),
         "index_rev": index.get("rev", "0")
-    }, sort_keys=True).encode()).hexdigest()
+    })
 
+    # 304 처리
     if if_none_match and if_none_match == etag:
-        from fastapi.responses import Response as FastAPIResponse
-        return FastAPIResponse(status_code=304)
+        response.status_code = 304
+        return None
+
+    # 헤더 설정
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, max-age=60"
 
     return {
         "period": period,
         "bucket": bucket,
-        "groups": list(groups.keys()),
         "labels": labels,
+        "groups": groups,
         "matrix": matrix,
+        "overlays": overlays if overlays else None,
         "etag": etag
     }
