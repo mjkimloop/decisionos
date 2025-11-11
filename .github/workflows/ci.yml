@@ -81,15 +81,20 @@ jobs:
             --catalog configs/labels/label_catalog.v2.json \
             --index-stats var/evidence/index/group_stats.json \
             --out var/optimizer/weights_suggestion.json || true
-      - name: AB simulate (dry-run) - t-round
+      - name: Prepare history for bootstrap - t1-round
+        run: |
+          mkdir -p var/evidence/index
+          echo '{"infra":{"incidents":[2,3,4,3,2],"cost":[1.0,1.1,0.9]},"perf":{"incidents":[1,1,2,1],"cost":[0.2,0.3,0.25]},"quota":{"incidents":[0,0,1],"cost":[0.1,0.15,0.1]}}' > var/evidence/index/history.json
+      - name: AB simulate with CI - t1-round
         run: |
           mkdir -p var/optimizer var/sandbox
           python -m jobs.simulate_weights_ab \
             --catalog configs/labels/label_catalog.v2.json \
-            --index-stats var/evidence/index/group_stats.json \
+            --history var/evidence/index/history.json \
             --candidate var/optimizer/weights_suggestion.json \
             --out var/optimizer/ab_report.json \
-            --commit-sandbox || true
+            --commit-sandbox \
+            --iters 200 || true
       - name: Evidence Integrity Check (v0.5.11r-6)
         run: |
           python scripts/ops/evidence_lockdown.py --verify --root var/evidence
@@ -147,6 +152,14 @@ jobs:
             var/rollout/**
             var/optimizer/*.json
             var/sandbox/*.json
+      - name: Reconcile canary vs offline - t1-round
+        run: |
+          mkdir -p var/canary
+          echo '{"delta":{"score_delta":0.5}}' > var/canary/compare.json
+          python -m jobs.reconcile_canary_vs_offline \
+            --ab-report var/optimizer/ab_report.json \
+            --canary var/canary/compare.json \
+            --out var/optimizer/reconcile_report.json || true
       - name: Label Sync (dry-run) - o-round v2
         if: ${{ github.event_name == 'pull_request' }}
         run: |

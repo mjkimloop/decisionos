@@ -1,0 +1,27 @@
+meta:
+  version: v0.5.11t-1
+  date: 2025-11-11
+  summary: "시뮬레이터 분산/신뢰구간 + Heatmap 상위 가중 하이라이트 + 카나리 실측 Δ ↔ 오프라인 예측 Δ 정합성 리포트"
+scope:
+  - Optimizer: 부트스트랩 기반 분산/95% CI, p_win 계산
+  - Cards API: 가중 점수 상위 N 하이라이트(highlight=N, mode=weighted)
+  - Reconcile: canary_compare 결과와 AB 예측의 Δ 정합성 리포트
+deliverables:
+  - apps/ops/optimizer/simulator.py (bootstrap CI 추가)
+  - jobs/simulate_weights_ab.py (history 입력/CI 출력 지원)
+  - apps/ops/api_cards.py (label-heatmap highlight 파라미터/ETag 확장)
+  - jobs/reconcile_canary_vs_offline.py (정합성 리포트)
+  - tests/ops/test_optimizer_ab_bootstrap_ci_v1.py
+  - tests/ops/test_cards_heatmap_highlight_v1.py
+  - tests/integration/test_reconcile_canary_vs_offline_v1.py
+ci:
+  pre_gate:
+    - "AB simulate w/ CI → ab_report.json 업로드"
+  gate:
+    - "신규 3 테스트 그린"
+  post_gate:
+    - "reconcile 리포트 생성/업로드 + PR 코멘트 요약 주입"
+acceptance:
+  - ab_report.json에 baseline/candidate/delta의 mean,var,ci95,p_win 포함
+  - /ops/cards/label-heatmap?highlight=K&mode=weighted → highlights[].rank=1..K
+  - reconcile_report.json에 sign_agreement, mae, mape, calibration_ratio 포함

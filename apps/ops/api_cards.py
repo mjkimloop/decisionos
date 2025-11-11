@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Response, Request, Query
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
@@ -260,10 +260,12 @@ def label_heatmap(
     period: str,
     bucket: str = "day",
     overlay: str = "none",
+    highlight: int = Query(default=0, ge=0, le=100),
+    mode: str = Query(default="weighted", pattern="^(weighted|raw)$"),
     if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
     _=Depends(require_scope("ops:read"))
 ):
-    """라벨 히트맵 카드: period/bucket별 그룹·라벨 빈도 매트릭스 + overlay"""
+    """라벨 히트맵 카드: period/bucket별 그룹·라벨 빈도 매트릭스 + overlay + highlight"""
     import hashlib
 
     # overlay 검증
@@ -294,6 +296,8 @@ def label_heatmap(
 
     # Overlay 계산
     overlays = {}
+    gw = {g: float(meta.get("weight", 1.0)) for g, meta in catalog.get("groups", {}).items()}
+
     if overlay in ("threshold", "both"):
         thr_default = thresholds.get("default", {"warn": 5, "crit": 10})
         thr_map = thresholds.get("labels", {})
@@ -309,10 +313,23 @@ def label_heatmap(
                     over[g][l] = "crit"
         overlays["threshold"] = over
 
+    weighted = {g: {l: matrix[g][l] * gw.get(g, 1.0) for l in labels} for g in groups}
     if overlay in ("weighted", "both"):
-        gw = {g: float(meta.get("weight", 1.0)) for g, meta in catalog.get("groups", {}).items()}
-        weighted = {g: {l: matrix[g][l] * gw.get(g, 1.0) for l in labels} for g in groups}
         overlays["weighted"] = weighted
+
+    # 상위 N 하이라이트
+    highlights = None
+    if highlight > 0:
+        cells = []
+        for g in groups:
+            for l in labels:
+                val = weighted[g][l] if mode == "weighted" else matrix[g][l]
+                if val > 0:
+                    cells.append({"group": g, "label": l, "value": float(val)})
+        cells.sort(key=lambda x: x["value"], reverse=True)
+        for i, c in enumerate(cells[:highlight], 1):
+            c["rank"] = i
+        highlights = cells[:highlight]
 
     # ETag v2
     def _sha(obj):
@@ -323,6 +340,8 @@ def label_heatmap(
         "period": period,
         "bucket": bucket,
         "overlay": overlay,
+        "highlight": highlight,
+        "mode": mode,
         "catalog_hash": _sha(catalog),
         "thresholds_hash": _sha(thresholds),
         "index_rev": index.get("rev", "0")
@@ -344,5 +363,6 @@ def label_heatmap(
         "groups": groups,
         "matrix": matrix,
         "overlays": overlays if overlays else None,
+        "highlights": highlights,
         "etag": etag
     }
