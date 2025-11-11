@@ -4,6 +4,7 @@
 **Infra Gate:** `{{INFRA_STATUS}}` &nbsp;|&nbsp; **Canary Gate:** `{{CANARY_STATUS}}`
 **Run:** {{RUN_URL}}
 **Diff:** {{DIFF_LINK}}
+**Label Catalog SHA:** `{{LABEL_CATALOG_SHA}}`
 
 #### Top Reasons (code → message)
 | code | message | count |

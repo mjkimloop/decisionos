@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-import argparse, json, os, subprocess, sys
+import argparse, json, os, subprocess, sys, hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
 MARKER = "<!--DECISIONOS:PR:RELEASE_GATE-->"
 
 def load_json(p): return json.load(open(p,"r",encoding="utf-8"))
+
+def sha256_json(path: str) -> str:
+    try:
+        obj = load_json(path)
+        return hashlib.sha256(json.dumps(obj, sort_keys=True).encode()).hexdigest()
+    except Exception:
+        return "n/a"
 
 def render_template(tpl: str, ctx: dict) -> str:
     out = tpl
@@ -49,6 +56,7 @@ def main():
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--top-impact", default="")
     ap.add_argument("--diff-link", default="")
+    ap.add_argument("--label-cat", default="configs/ops/label_catalog.json")
     ap.add_argument("--out", required=True)
     ap.add_argument("--repo", default="")
     ap.add_argument("--pr", default="")
@@ -74,6 +82,7 @@ def main():
       "OPS_TRENDS_URL": manifest.get("OPS_TRENDS_URL",""),
       "OPS_IMPACT_URL": manifest.get("OPS_IMPACT_URL",""),
       "DIFF_LINK": args.diff_link or "(n/a)",
+      "LABEL_CATALOG_SHA": sha256_json(args.label_cat),
       "INSPECTOR": os.environ.get("GITHUB_ACTOR","ci"),
       "GENERATED_AT": datetime.now(timezone.utc).isoformat()
     }

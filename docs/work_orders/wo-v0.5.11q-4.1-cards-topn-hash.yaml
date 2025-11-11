@@ -1,0 +1,18 @@
+meta:
+  version: v0.5.11q-4.1
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API에 그룹 가중치/Top-N(라벨·그룹) 동시 반환, PR 코멘트에 라벨 카탈로그 SHA 표시"
+
+scope:
+  api:
+    - /ops/cards/reason-trends: POST 본문 {reasons[], top?} → palette, groups, weighted, top_labels, top_groups 동시 반환
+    - /ops/cards/reason-trends/palette: ETag seed = label_catalog.json SHA 유지
+  ci:
+    - PR 코멘트 템플릿에 {{LABEL_CATALOG_SHA}} 치환
+    - annotate_release_gate.py에 --label-cat 옵션 추가
+
+acceptance:
+  - Cards API 응답에 fields: palette, groups, weighted, top_labels[<=N], top_groups[<=N]
+  - 라벨 카탈로그 SHA가 PR 코멘트에 노출됨
+  - 단위테스트 2개(gate_ops, gate_ci) 그린
