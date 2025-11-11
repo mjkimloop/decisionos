@@ -62,6 +62,28 @@ def apply_bounds_slew(
 
     return out
 
+
+def apply_bounds_slew_adaptive(
+    proposed: Dict[str, float],
+    base: Dict[str, float],
+    bounds: Dict[str, float],
+    adaptive_caps: Dict[str, float]
+) -> Dict[str, float]:
+    """
+    제안된 값에 bounds와 adaptive slew_rate 적용
+
+    Args:
+        proposed: 제안된 임계값 {delta_threshold, p_win_threshold, min_windows}
+        base: 현재/기준 값
+        bounds: 절대 범위 제한
+        adaptive_caps: 적응형 동적 cap (adaptive.py의 compute_adaptive_caps 결과)
+    Returns:
+        안전장치 적용된 값
+    """
+    # adaptive_caps를 slew로 사용하여 기존 로직 재활용
+    return apply_bounds_slew(proposed, base, bounds, adaptive_caps)
+
+
 def should_rollback(
     drift_json: dict,
     trigger: dict,

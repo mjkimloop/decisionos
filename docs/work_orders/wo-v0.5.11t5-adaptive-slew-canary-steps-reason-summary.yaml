@@ -1,0 +1,271 @@
+---
+meta:
+  version: v0.5.11t-5
+  summary: "적응형 속도 리미터(분산·혼잡도) + drift→자동 canary step 조정 + explain 규칙 요약"
+  created_at: 2025-11-11
+  status: in_progress
+
+scope:
+  - Adaptive Slew Limiter: 분산·혼잡도 메트릭 기반 동적 cap 조정
+  - Drift-Driven Canary Steps: drift severity에 따른 자동 step 조정(critical→abort, warn→감속, info→정상)
+  - Rule-Based Reason Summary: Top-N 라벨/그룹 + 압축 사유코드 API
+
+deliverables:
+  configs:
+    - configs/optimizer/adaptive.json:
+        description: "적응형 cap 설정(caps, variance_scale, congestion_scale, floors, ceilings)"
+        schema:
+          caps:
+            delta_threshold_cap: 0.02
+            p_win_threshold_cap: 0.05
+            min_windows_cap: 3
+          variance_scale: 2.0
+          congestion_scale: 1.5
+          floors:
+            delta_threshold: 0.005
+            p_win_threshold: 0.01
+            min_windows: 1
+          ceilings:
+            delta_threshold: 0.05
+            p_win_threshold: 0.10
+            min_windows: 8
+
+  apps:
+    - apps/ops/optimizer/adaptive.py:
+        description: "적응형 cap 계산 로직"
+        functions:
+          - load_adaptive(path): "adaptive.json 로드"
+          - load_bucket_stats(path): "bucket_stats.json 로드(variance, congestion)"
+          - resolve_congestion(stats): "혼잡도 점수 계산"
+          - compute_adaptive_caps(base_caps, stats, adaptive_cfg): "동적 cap 계산"
+        logic: |
+          compute_adaptive_caps(base_caps, stats, adaptive_cfg):
+            variance = stats.get("variance", 0.0)
+            congestion = resolve_congestion(stats)
+
+            adaptive_caps = {}
+            for key, base_cap in base_caps.items():
+              variance_factor = 1.0 + (variance * adaptive_cfg["variance_scale"])
+              congestion_factor = 1.0 + (congestion * adaptive_cfg["congestion_scale"])
+
+              cap = base_cap * variance_factor * congestion_factor
+
+              floor = adaptive_cfg["floors"].get(key, 0.0)
+              ceiling = adaptive_cfg["ceilings"].get(key, float("inf"))
+
+              adaptive_caps[key] = max(floor, min(cap, ceiling))
+
+            return adaptive_caps
+
+    - apps/ops/optimizer/guard.py:
+        changes:
+          - add: "apply_bounds_slew_adaptive(proposed, base, bounds, adaptive_caps)"
+          - description: "기존 apply_bounds_slew의 slew 파라미터 대신 adaptive_caps 사용"
+
+  jobs:
+    - jobs/autotune_promote_threshold.py:
+        changes:
+          - add: "--adaptive-config: configs/optimizer/adaptive.json"
+          - add: "--bucket-stats: var/metrics/bucket_stats.json"
+          - logic: |
+              if args.adaptive_config and os.path.exists(args.adaptive_config):
+                adaptive_cfg = load_adaptive(args.adaptive_config)
+                bucket_stats = load_bucket_stats(args.bucket_stats)
+                base_caps = guard.get("slew_rate", {})
+                adaptive_caps = compute_adaptive_caps(base_caps, bucket_stats, adaptive_cfg)
+                guarded = apply_bounds_slew_adaptive(proposed, base, guard["bounds"], adaptive_caps)
+              else:
+                guarded = apply_bounds_slew(proposed, base, guard["bounds"], guard["slew_rate"])
+
+    - jobs/canary_step_adjust.py:
+        description: "drift severity에 따른 canary step 자동 조정"
+        params:
+          - "--drift-path: var/alerts/posterior_drift.json"
+          - "--canary-config: configs/canary/policy.autotuned.json"
+          - "--out: configs/canary/policy.autotuned.json"
+        logic: |
+          drift = json.load(open(drift_path))
+          canary = json.load(open(canary_config))
+
+          severity = drift.get("severity", "info")
+
+          if severity == "critical":
+            # 즉시 중단
+            canary["canary"]["enabled"] = False
+            print("[CRITICAL] Canary disabled")
+          elif severity == "warn":
+            # 증분·상한 감속
+            canary["canary"]["step_pct"] = max(5, canary["canary"]["step_pct"] * 0.5)
+            canary["canary"]["max_pct"] = max(30, canary["canary"]["max_pct"] * 0.7)
+            print("[WARN] Canary reduced: step={}, max={}".format(...))
+          else:
+            # 정상 진행
+            canary["canary"]["step_pct"] = 10
+            canary["canary"]["max_pct"] = 50
+            print("[INFO] Canary normal")
+
+          json.dump(canary, open(out, "w"), indent=2)
+
+    - pipeline/release/auto_canary_step.sh:
+        description: "자동 canary step 조정 스크립트"
+        logic: |
+          #!/bin/bash
+          set -e
+
+          DRIFT_PATH="var/alerts/posterior_drift.json"
+          CANARY_CONFIG="configs/canary/policy.autotuned.json"
+
+          if [ ! -f "$DRIFT_PATH" ]; then
+            echo "[INFO] No drift data, skip canary adjust"
+            exit 0
+          fi
+
+          python jobs/canary_step_adjust.py \
+            --drift-path "$DRIFT_PATH" \
+            --canary-config "$CANARY_CONFIG" \
+            --out "$CANARY_CONFIG"
+
+          echo "[OK] Canary step adjusted"
+
+    - apps/ops/explain/summary.py:
+        description: "규칙 기반 reason 요약(Top-N + 압축)"
+        functions:
+          - summarize_reasons(items, top_n=5, compress_threshold=3):
+              logic: |
+                # 1. 라벨별 집계
+                label_counts = Counter()
+                group_counts = Counter()
+                for item in items:
+                  label = item.get("label", "")
+                  group = item.get("group", "")
+                  value = item.get("value", 1)
+                  label_counts[label] += value
+                  group_counts[group] += value
+
+                # 2. Top-N 추출
+                top_labels = [{"label": l, "count": c} for l, c in label_counts.most_common(top_n)]
+                top_groups = [{"group": g, "count": c} for g, c in group_counts.most_common(top_n)]
+
+                # 3. 나머지 압축
+                other_labels_count = sum(c for l, c in label_counts.items() if l not in [t["label"] for t in top_labels])
+                other_groups_count = sum(c for g, c in group_counts.items() if g not in [t["group"] for t in top_groups])
+
+                if other_labels_count >= compress_threshold:
+                  top_labels.append({"label": "[+others]", "count": other_labels_count})
+
+                if other_groups_count >= compress_threshold:
+                  top_groups.append({"group": "[+others]", "count": other_groups_count})
+
+                return {
+                  "top_labels": top_labels,
+                  "top_groups": top_groups,
+                  "total_items": len(items),
+                  "unique_labels": len(label_counts),
+                  "unique_groups": len(group_counts)
+                }
+
+    - apps/ops/api.py:
+        changes:
+          - add: "GET /ops/cards/reason-summary?bucket={bucket}&top_n={n}&compress_threshold={t}"
+          - description: "규칙 기반 reason 요약 API"
+          - logic: |
+              @router.get("/ops/cards/reason-summary")
+              def reason_summary(
+                  bucket: str = Query("day", regex="^(day|week|month)$"),
+                  top_n: int = Query(5, ge=1, le=20),
+                  compress_threshold: int = Query(3, ge=1)
+              ):
+                  hl_dir = os.getenv("DECISIONOS_HIGHLIGHTS_DIR", "var/highlights")
+                  stream_path = os.path.join(hl_dir, "stream.jsonl")
+
+                  # 스트림 로드
+                  items = []
+                  with open(stream_path, "r", encoding="utf-8") as f:
+                      for line in f:
+                          record = json.loads(line)
+                          items.extend(record.get("items", []))
+
+                  # 요약
+                  from apps.ops.explain.summary import summarize_reasons
+                  summary = summarize_reasons(items, top_n, compress_threshold)
+
+                  return summary
+
+tests:
+  - tests/ops/test_adaptive_slew_v1.py:
+      description: "적응형 cap 계산 테스트"
+      tests:
+        - test_compute_adaptive_caps_variance_high: "분산 높을 때 cap 증가"
+        - test_compute_adaptive_caps_congestion_high: "혼잡도 높을 때 cap 증가"
+        - test_adaptive_caps_floor_ceiling: "floor/ceiling 제약 준수"
+        - test_autotune_with_adaptive: "autotune_promote_threshold.py 통합 테스트"
+
+  - tests/gates/gate_ah/test_canary_step_adjust_v1.py:
+      description: "canary step 조정 테스트"
+      tests:
+        - test_critical_disables_canary: "critical severity시 canary 비활성화"
+        - test_warn_reduces_step: "warn severity시 step/max 감속"
+        - test_info_normal_step: "info severity시 정상 진행"
+
+  - tests/ops/test_reason_summary_rules_v1.py:
+      description: "reason 요약 규칙 테스트"
+      tests:
+        - test_top_n_labels: "Top-N 라벨 추출"
+        - test_compress_others: "나머지 압축([+others])"
+        - test_summary_api: "API 엔드포인트 응답 검증"
+
+ci_integration:
+  - ".github/workflows/test-ops.yml":
+      add: |
+        - name: Test Adaptive Slew
+          run: pytest tests/ops/test_adaptive_slew_v1.py -v
+
+        - name: Test Canary Step Adjust
+          run: pytest tests/gates/gate_ah/test_canary_step_adjust_v1.py -v
+
+        - name: Test Reason Summary
+          run: pytest tests/ops/test_reason_summary_rules_v1.py -v
+
+  - "pipeline/release/promote.sh":
+      add_after_autotune: |
+        # Canary step 자동 조정
+        if [ -f "pipeline/release/auto_canary_step.sh" ]; then
+          bash pipeline/release/auto_canary_step.sh
+        fi
+
+acceptance:
+  - adaptive_slew:
+      - "분산 0.2, 혼잡도 0.3일 때 cap이 기본 대비 1.4x ~ 1.45x 증가"
+      - "floor/ceiling 제약 준수"
+      - "autotune_promote_threshold.py --adaptive-config 통합 성공"
+
+  - canary_step:
+      - "drift severity=critical → canary.enabled=false"
+      - "drift severity=warn → step_pct*0.5, max_pct*0.7"
+      - "drift severity=info → step_pct=10, max_pct=50"
+
+  - reason_summary:
+      - "Top-5 라벨/그룹 정확 추출"
+      - "[+others] 압축 정상(compress_threshold=3)"
+      - "GET /ops/cards/reason-summary 200 OK"
+
+rollout:
+  - stage: "v0.5.11t-5"
+    steps:
+      - "configs/optimizer/adaptive.json 추가"
+      - "apps/ops/optimizer/adaptive.py 구현"
+      - "apps/ops/optimizer/guard.py에 apply_bounds_slew_adaptive 추가"
+      - "jobs/autotune_promote_threshold.py에 --adaptive-config/--bucket-stats 통합"
+      - "jobs/canary_step_adjust.py 생성"
+      - "pipeline/release/auto_canary_step.sh 생성"
+      - "apps/ops/explain/summary.py 구현"
+      - "apps/ops/api.py에 reason-summary 엔드포인트 추가"
+      - "테스트 3개 파일 작성"
+      - "전체 테스트 실행 및 검증"
+      - "커밋: feat(ops): 적응형 slew + 자동 canary step + reason 요약 (v0.5.11t-5)"
+
+notes:
+  - "적응형 cap은 기본 slew_rate를 기준으로 동적 조정"
+  - "canary step 조정은 drift severity에 따라 즉각 반응"
+  - "reason 요약은 Top-N + 압축으로 가시성 개선"
+  - "전체 로직은 기존 autotune guard와 호환"

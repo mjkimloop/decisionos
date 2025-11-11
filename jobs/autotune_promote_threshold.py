@@ -9,7 +9,8 @@ Autotune Promote Threshold Job
 """
 import os, json, argparse, shutil
 from apps.ops.optimizer.autotune import suggest_thresholds
-from apps.ops.optimizer.guard import apply_bounds_slew, should_rollback
+from apps.ops.optimizer.guard import apply_bounds_slew, apply_bounds_slew_adaptive, should_rollback
+from apps.ops.optimizer.adaptive import load_adaptive, load_bucket_stats, compute_adaptive_caps
 
 def main():
     ap = argparse.ArgumentParser()
@@ -17,6 +18,8 @@ def main():
     ap.add_argument("--calibration", default="var/ab_reports/calibration.json")
     ap.add_argument("--base-policy", default="configs/canary/policy.json")
     ap.add_argument("--guard-config", default="configs/optimizer/autotune_guard.json")
+    ap.add_argument("--adaptive-config", default="")
+    ap.add_argument("--bucket-stats", default="var/metrics/bucket_stats.json")
     ap.add_argument("--out", default="var/policy/policy.autotuned.json")
     ap.add_argument("--safety-factor", type=float, default=2.0)
     args = ap.parse_args()
@@ -49,8 +52,18 @@ def main():
     if os.path.exists(args.guard_config):
         guard = json.load(open(args.guard_config, "r", encoding="utf-8"))
 
-    # Apply bounds and slew-rate
-    guarded = apply_bounds_slew(proposed, base, guard.get("bounds", {}), guard.get("slew_rate", {}))
+    # Apply bounds and slew-rate (adaptive or static)
+    if args.adaptive_config and os.path.exists(args.adaptive_config):
+        # Adaptive mode
+        adaptive_cfg = load_adaptive(args.adaptive_config)
+        bucket_stats = load_bucket_stats(args.bucket_stats)
+        base_caps = guard.get("slew_rate", {})
+        adaptive_caps = compute_adaptive_caps(base_caps, bucket_stats, adaptive_cfg)
+        guarded = apply_bounds_slew_adaptive(proposed, base, guard.get("bounds", {}), adaptive_caps)
+        print(f"[ADAPTIVE] caps={adaptive_caps}")
+    else:
+        # Static mode
+        guarded = apply_bounds_slew(proposed, base, guard.get("bounds", {}), guard.get("slew_rate", {}))
 
     # 롤백 판단
     drift_path = "var/alerts/posterior_drift.json"

@@ -484,3 +484,36 @@ def highlights_stream(
         response.headers["X-Delta-Applied"] = "true" if delta_applied else "false"
 
     return body
+
+
+@router.get("/cards/reason-summary")
+def reason_summary(
+    bucket: str = Query("day", regex="^(day|week|month)$"),
+    top_n: int = Query(5, ge=1, le=20),
+    compress_threshold: int = Query(3, ge=1),
+    _=Depends(require_scope("ops:read"))
+):
+    """
+    규칙 기반 reason 요약 API
+    Top-N 라벨/그룹 + 나머지 압축([+others])
+    """
+    hl_dir = os.getenv("DECISIONOS_HIGHLIGHTS_DIR", "var/highlights")
+    stream_path = os.path.join(hl_dir, "stream.jsonl")
+
+    # 스트림 로드
+    items = []
+    if os.path.exists(stream_path):
+        with open(stream_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        record = json.loads(line)
+                        items.extend(record.get("items", []))
+                    except json.JSONDecodeError:
+                        continue
+
+    # 요약
+    from apps.ops.explain.summary import summarize_reasons
+    summary = summarize_reasons(items, top_n, compress_threshold)
+
+    return summary
