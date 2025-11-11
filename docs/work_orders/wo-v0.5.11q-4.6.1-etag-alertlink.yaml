@@ -1,0 +1,31 @@
+meta:
+  version: v0.5.11q-4.6.1
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API ETag v2(키 확장) + PR 코멘트에 Alerts URL 자동 삽입"
+
+scope:
+  etag_v2:
+    include_params:
+      - period.start
+      - period.end
+      - bucket
+      - seasonality
+      - delta.enabled
+      - delta.require_same_window
+      - continuity_token
+    include_hashes:
+      - label_catalog_hash
+      - group_weights_sha256
+      - seasonal_thresholds_sha256
+      - data_revision_token
+  pr_comment:
+    add_vars:
+      - ALERTS_LINK
+    sources:
+      - --alerts-url CLI 인자 우선
+      - 없으면 DECISIONOS_OPS_BASEURL + 쿼리 조합
+acceptance:
+  - seasonality/bucket/delta/continuity가 다르면 ETag 달라진다
+  - 파일 변경(가중치/시즌성/카탈로그)이면 ETag가 즉시 갱신된다
+  - PR 코멘트에 Alerts 링크가 표시되고, 미설정 시 해당 줄이 숨겨진다

@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--top-impact", default="")
     ap.add_argument("--diff-link", default="")
+    ap.add_argument("--alerts-url", default="")
     ap.add_argument("--label-cat", default="configs/ops/label_catalog.json")
     ap.add_argument("--out", required=True)
     ap.add_argument("--repo", default="")
@@ -70,6 +71,12 @@ def main():
     reasons = load_json(args.reasons_json)
     manifest= load_json(args.manifest)
 
+    alerts_link = args.alerts_url or ""
+    if not alerts_link:
+        base = os.environ.get("DECISIONOS_OPS_BASEURL","")
+        if base:
+            alerts_link = f"{base}/alerts?bucket=hour&seasonality=auto"
+
     ctx = {
       "STATUS": status.get("status","UNKNOWN").upper(),
       "STATUS_EMOJI": "✅" if status.get("status")=="pass" else "❌",
@@ -82,6 +89,7 @@ def main():
       "OPS_TRENDS_URL": manifest.get("OPS_TRENDS_URL",""),
       "OPS_IMPACT_URL": manifest.get("OPS_IMPACT_URL",""),
       "DIFF_LINK": args.diff_link or "(n/a)",
+      "ALERTS_LINK": alerts_link or "(n/a)",
       "LABEL_CATALOG_SHA": sha256_json(args.label_cat),
       "INSPECTOR": os.environ.get("GITHUB_ACTOR","ci"),
       "GENERATED_AT": datetime.now(timezone.utc).isoformat()

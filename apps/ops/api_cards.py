@@ -61,10 +61,12 @@ def get_summary(
     end: str,
     top: int = 5,
     bucket: Optional[str] = None,
+    seasonality: str = "off",
     bucket_limit: int = 24,
     top_buckets: int = 3,
     if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
     if_delta_token: Optional[str] = Header(default=None, alias="X-If-Delta-Token"),
+    delta_require_same_window: bool = False,
     cont_token: Optional[str] = Header(default=None, alias="X-Bucket-Continuity-Token"),
     _=Depends(require_scope("ops:read")),
 ):
@@ -73,6 +75,7 @@ def get_summary(
         make_snapshot_payload, snapshot_etag, snapshot_token, try_decode_token, diff_counts
     )
     from .cards.events import load_reason_events
+    from .cards.etag_v2 import build_cards_etag_key, compute_cards_etag
 
     if top < 1 or top > 50:
         raise HTTPException(status_code=400, detail="top must be 1..50")
@@ -87,8 +90,26 @@ def get_summary(
     reasons = load_reason_events(dt_start, dt_end, ev_path)
     agg = aggregate_reasons(reasons, top=top)
     window = {"start": dt_start.isoformat(), "end": dt_end.isoformat()}
-    payload = make_snapshot_payload(window, agg["raw"], label_catalog_hash())
-    etag = snapshot_etag(payload)
+
+    # ETag v2: comprehensive cache key
+    label_cat_path = os.environ.get("LABEL_CATALOG_PATH", "configs/ops/label_catalog.json")
+    group_weights_path = os.environ.get("GROUP_WEIGHTS_PATH", "configs/ops/group_weights.json")
+    seasonal_path = os.environ.get("SEASONAL_THRESHOLDS_PATH", "configs/ops/seasonal_thresholds.json")
+    data_rev = os.environ.get("CARDS_DATA_REV", "")
+
+    etag_key = build_cards_etag_key(
+        start, end,
+        bucket=bucket or "none",
+        seasonality=seasonality,
+        delta_enabled=bool(if_delta_token),
+        delta_require_same_window=delta_require_same_window,
+        continuity_token=cont_token,
+        label_catalog_path=label_cat_path,
+        group_weights_path=group_weights_path,
+        seasonal_thresholds_path=seasonal_path,
+        data_revision_token=data_rev
+    )
+    etag = compute_cards_etag(etag_key)
     response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "no-cache"
 
@@ -96,6 +117,9 @@ def get_summary(
     if if_none_match and if_none_match == etag:
         response.status_code = 304
         return None
+
+    # Legacy payload for delta token (backwards compat)
+    payload = make_snapshot_payload(window, agg["raw"], label_catalog_hash())
 
     # Delta 처리
     delta = None
