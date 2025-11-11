@@ -73,6 +73,14 @@ jobs:
       - name: Evidence GC (dry-run)
         run: |
           python -m jobs.evidence_gc --root var/evidence --dry-run
+      - name: Optimize label weights (dry-run) - s-round
+        run: |
+          mkdir -p var/evidence/index var/optimizer
+          echo '{"infra":{"incidents":2,"cost":1.0},"perf":{"incidents":1,"cost":0.5},"quota":{"incidents":0,"cost":0.1}}' > var/evidence/index/group_stats.json
+          python -m jobs.optimize_label_weights \
+            --catalog configs/labels/label_catalog.v2.json \
+            --index-stats var/evidence/index/group_stats.json \
+            --out var/optimizer/weights_suggestion.json || true
       - name: Evidence Integrity Check (v0.5.11r-6)
         run: |
           python scripts/ops/evidence_lockdown.py --verify --root var/evidence
@@ -128,6 +136,7 @@ jobs:
             var/reports/**/*.json
             reports/**/*.xml
             var/rollout/**
+            var/optimizer/*.json
       - name: Label Sync (dry-run) - o-round v2
         if: ${{ github.event_name == 'pull_request' }}
         run: |

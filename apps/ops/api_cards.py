@@ -253,3 +253,59 @@ def get_summary(
     response.headers["X-Delta-Applied"] = "true" if delta_applied else "false"
 
     return body
+
+@router.get("/cards/label-heatmap")
+def label_heatmap(
+    period: str,
+    bucket: str = "day",
+    group_axis: str = "group",
+    label_axis: str = "label",
+    if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
+    _=Depends(require_scope("ops:read"))
+):
+    """라벨 히트맵 카드: period/bucket별 그룹·라벨 빈도 매트릭스"""
+    import hashlib
+    # 예: var/evidence/index/summary.json ← 인덱서 산출물
+    path = os.getenv("DECISIONOS_EVIDENCE_INDEX", "var/evidence/index/summary.json")
+    catalog_path = os.getenv("LABEL_CATALOG_PATH", "configs/labels/label_catalog.v2.json")
+
+    try:
+        index = json.load(open(path, "r", encoding="utf-8"))
+        cat = json.load(open(catalog_path, "r", encoding="utf-8"))
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="index not ready")
+
+    # 간단 합성: period/bucket 필터링은 기존 인덱서 출력 형식에 맞춰 subset
+    # 여기서는 mock: groups/labels 빈도 합산
+    groups = {g: 0 for g in cat.get("groups", {}).keys()}
+    labels = [l["name"] for l in cat.get("labels", [])]
+    matrix = {g: {l: 0 for l in labels} for g in groups}
+
+    # index 예: {"rows":[{"label":"reason:infra-latency","count":3,"group":"infra"}, ...]}
+    for r in index.get("rows", []):
+        g = r.get("group")
+        l = r.get("label")
+        c = int(r.get("count", 0))
+        if g in matrix and l in matrix[g]:
+            matrix[g][l] += c
+
+    etag = hashlib.sha256(json.dumps({
+        "k": "label-heatmap",
+        "period": period,
+        "bucket": bucket,
+        "catalog_hash": hashlib.sha256(json.dumps(cat, sort_keys=True).encode()).hexdigest(),
+        "index_rev": index.get("rev", "0")
+    }, sort_keys=True).encode()).hexdigest()
+
+    if if_none_match and if_none_match == etag:
+        from fastapi.responses import Response as FastAPIResponse
+        return FastAPIResponse(status_code=304)
+
+    return {
+        "period": period,
+        "bucket": bucket,
+        "groups": list(groups.keys()),
+        "labels": labels,
+        "matrix": matrix,
+        "etag": etag
+    }

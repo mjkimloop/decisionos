@@ -1,0 +1,28 @@
+meta:
+  version: v0.5.11s
+  date: 2025-11-11
+  summary: "라벨/그룹 팔레트 확장 + 베이지안 가중치 옵티마이저 + 라벨 히트맵 Cards API"
+scope:
+  - Label Catalog v2 확장: group/weight/color/priority/aliases 보강
+  - Offline Optimizer: 베이지안 탐색(옵션: scikit-optimize) + Pure-Python fallback
+  - Cards API: /ops/cards/label-heatmap (기간/버킷/그룹·라벨 축)
+  - ETag v2 연동: catalog_hash 포함, period/bucket 파라미터 반영
+  - RBAC: ops:read 보호
+deliverables:
+  - configs/labels/label_catalog.v2.json (팔레트/그룹 확장)
+  - apps/ops/optimizer/bayes.py (WeightOptimizer)
+  - jobs/optimize_label_weights.py (dry-run/commit 모드)
+  - apps/ops/api.py (/ops/cards/label-heatmap 추가)
+  - tests/ops/test_bayes_optimizer_smoke_v1.py
+  - tests/ops/test_cards_label_heatmap_v1.py
+ci:
+  pre_gate:
+    - "Optimize label weights (dry-run) ➜ artifact 업로드"
+  gate:
+    - 기존 게이트 유지
+  post_gate:
+    - "PR 코멘트에 weight 제안 요약(Δ) + heatmap 미니 요약 포함"
+acceptance:
+  - Dry-run 결과 JSON(추천 가중치, 신뢰도, 목표지표 개선 추정)이 artifact로 남는다
+  - Cards API가 200/304(ETag) 정상 동작, RBAC(ops:read) 통과 시에만 응답
+  - 테스트 2개 green (optimizer smoke, heatmap 기본)
