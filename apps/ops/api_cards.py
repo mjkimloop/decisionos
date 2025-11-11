@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, Response
+from fastapi import APIRouter, Depends, HTTPException, Header, Response, Request
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
@@ -6,6 +6,10 @@ from base64 import urlsafe_b64encode, urlsafe_b64decode
 import os, json
 
 router = APIRouter()
+
+# ETag 스냅샷 저장소 (프로세스 단일톤)
+from .cache.etag_store import InMemoryETagStore
+_ETAG_STORE = InMemoryETagStore()
 
 # Mock RBAC for now - will integrate with existing RBAC system
 def require_scope(scope: str):
@@ -56,17 +60,20 @@ def _decode_cont_token(token: str) -> dict | None:
 
 @router.get("/cards/reason-trends/summary")
 def get_summary(
+    request: Request,
     response: Response,
     start: str,
     end: str,
     top: int = 5,
     bucket: Optional[str] = None,
     seasonality: str = "off",
+    delta: str = "off",
     bucket_limit: int = 24,
     top_buckets: int = 3,
     if_none_match: Optional[str] = Header(default=None, alias="If-None-Match"),
     if_delta_token: Optional[str] = Header(default=None, alias="X-If-Delta-Token"),
     delta_require_same_window: bool = False,
+    delta_base_etag: Optional[str] = Header(default=None, alias="X-Delta-Base-ETag"),
     cont_token: Optional[str] = Header(default=None, alias="X-Bucket-Continuity-Token"),
     _=Depends(require_scope("ops:read")),
 ):
@@ -76,6 +83,7 @@ def get_summary(
     )
     from .cards.events import load_reason_events
     from .cards.etag_v2 import build_cards_etag_key, compute_cards_etag
+    from .cards.delta import compute_delta_summary, same_window
 
     if top < 1 or top > 50:
         raise HTTPException(status_code=400, detail="top must be 1..50")
@@ -101,7 +109,7 @@ def get_summary(
         start, end,
         bucket=bucket or "none",
         seasonality=seasonality,
-        delta_enabled=bool(if_delta_token),
+        delta_enabled=(delta == "on" or bool(if_delta_token)),
         delta_require_same_window=delta_require_same_window,
         continuity_token=cont_token,
         label_catalog_path=label_cat_path,
@@ -109,12 +117,10 @@ def get_summary(
         seasonal_thresholds_path=seasonal_path,
         data_revision_token=data_rev
     )
-    etag = compute_cards_etag(etag_key)
-    response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "no-cache"
+    current_etag = compute_cards_etag(etag_key)
 
-    # 304 처리
-    if if_none_match and if_none_match == etag:
+    # 304 처리 (If-None-Match 우선: delta 무시)
+    if if_none_match and if_none_match == current_etag:
         response.status_code = 304
         return None
 
@@ -199,7 +205,8 @@ def get_summary(
             if top_buckets and top_buckets > 0:
                 top_list = pick_top_buckets(buckets_scored, top_buckets)
 
-    body = {
+    # 전체 요약 body 구성
+    full_summary = {
         "catalog_sha": payload["catalog_sha"],
         "window": window,
         "palette": palette_with_desc(),
@@ -215,4 +222,29 @@ def get_summary(
             "limit": bucket_limit,
         } if bucket else None,
     }
+
+    # ETag 스냅샷 저장
+    _ETAG_STORE.put(current_etag, full_summary, ttl_sec=86400)
+
+    # Delta 모드 처리
+    delta_applied = False
+    body = full_summary
+
+    if delta == "on" and delta_base_etag:
+        prev_snapshot = _ETAG_STORE.get(delta_base_etag)
+        if prev_snapshot is not None:
+            # 윈도 일치성 체크 (옵션)
+            if not delta_require_same_window or same_window(prev_snapshot, full_summary):
+                body = compute_delta_summary(prev_snapshot, full_summary)
+                delta_applied = True
+
+    # 응답 헤더 설정
+    response.headers["ETag"] = current_etag
+    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["X-ETag-Keys"] = "period,bucket,seasonality,delta,continuity,hashes"
+    if delta_base_etag:
+        response.headers["X-Delta-Base-ETag"] = delta_base_etag
+    response.headers["X-Delta-New-ETag"] = current_etag
+    response.headers["X-Delta-Applied"] = "true" if delta_applied else "false"
+
     return body

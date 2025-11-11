@@ -1,0 +1,26 @@
+meta:
+  version: v0.5.11q-4.6.2
+  date: 2025-11-11
+  status: locked
+  summary: "Cards API — X-Delta-Base-ETag 연동 및 증분 응답 헤더 표준화"
+
+scope:
+  api:
+    headers_in:
+      - If-None-Match
+      - X-Delta-Base-ETag   # 클라이언트가 기준 ETag 전달(증분모드)
+    headers_out:
+      - ETag
+      - Cache-Control
+      - X-ETag-Keys
+      - X-Delta-Base-ETag   # 서버가 기준 ETag 에코
+      - X-Delta-New-ETag    # 서버가 새 ETag 제공
+      - X-Delta-Applied     # "true"|"false"
+  store:
+    - ETag→summary 스냅샷 캐시(기본: 메모리, 옵션: Redis)
+  delta:
+    - shallow dict diff + buckets(ts|bucket 키) 기준 변경분 계산
+acceptance:
+  - If-None-Match == current → 304 (delta 무시)
+  - delta=on && X-Delta-Base-ETag가 유효하면 변경분만 반환, 헤더 세트
+  - 베이스 미존재 시 full 응답 + X-Delta-Applied: "false"
