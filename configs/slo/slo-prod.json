@@ -1,0 +1,65 @@
+{
+  "version": "v1",
+  "env": "production",
+  "strict": true,
+  "slo": {
+    "latency": {
+      "p50_ms": 50,
+      "p95_ms": 150,
+      "p99_ms": 300
+    },
+    "error_rate": {
+      "threshold": 0.001,
+      "window_sec": 300,
+      "alert_on_breach": true
+    },
+    "availability": {
+      "target": 0.9995,
+      "window_sec": 3600
+    },
+    "budget": {
+      "error_budget_percent": 0.05,
+      "burn_rate_threshold": 2.0,
+      "lookback_window_sec": 3600
+    },
+    "quota": {
+      "max_rps": 10000,
+      "burst": 0,
+      "degraded_mode_rps": 5000
+    },
+    "canary": {
+      "traffic_percent_threshold": 5,
+      "min_requests": 1000,
+      "error_rate_delta_threshold": 0.0005,
+      "latency_p95_delta_ms": 20
+    }
+  },
+  "gates": {
+    "infra": {
+      "enabled": true,
+      "fail_mode": "closed",
+      "checks": [
+        "latency_p95",
+        "error_rate",
+        "availability"
+      ]
+    },
+    "canary": {
+      "enabled": true,
+      "fail_mode": "closed",
+      "checks": [
+        "traffic_percent",
+        "error_rate_delta",
+        "latency_delta"
+      ]
+    }
+  },
+  "alerts": {
+    "slack_webhook_env": "SLACK_WEBHOOK_URL",
+    "severity": {
+      "critical": ["error_rate", "availability"],
+      "warning": ["latency_p95", "budget_burn_rate"],
+      "info": ["canary_traffic"]
+    }
+  }
+}

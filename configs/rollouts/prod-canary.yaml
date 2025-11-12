@@ -1,0 +1,96 @@
+version: v1
+env: production
+strategy: canary
+
+# Canary deployment configuration for production cluster
+canary:
+  # Initial canary stage
+  initial_traffic_percent: 1
+
+  # Canary steps with progressive traffic increase
+  steps:
+    - name: canary-1
+      traffic_percent: 1
+      duration_min: 10
+      slo_checks:
+        - latency_p95
+        - error_rate
+      min_requests: 100
+
+    - name: canary-5
+      traffic_percent: 5
+      duration_min: 15
+      slo_checks:
+        - latency_p95
+        - error_rate
+        - availability
+      min_requests: 500
+
+    - name: canary-10
+      traffic_percent: 10
+      duration_min: 20
+      slo_checks:
+        - latency_p95
+        - error_rate
+        - availability
+        - budget_burn_rate
+      min_requests: 1000
+
+    - name: canary-25
+      traffic_percent: 25
+      duration_min: 30
+      slo_checks:
+        - latency_p95
+        - error_rate
+        - availability
+        - budget_burn_rate
+      min_requests: 2500
+
+    - name: canary-50
+      traffic_percent: 50
+      duration_min: 30
+      slo_checks:
+        - latency_p95
+        - error_rate
+        - availability
+        - budget_burn_rate
+      min_requests: 5000
+
+  # Promotion to full traffic
+  promote:
+    conditions:
+      - all_steps_passed
+      - consecutive_passes: 3
+      - drift_below_threshold: true
+      - burst_rate_zero: true
+    traffic_percent: 100
+
+  # Abort conditions
+  abort:
+    conditions:
+      - p95_above_threshold
+      - error_rate_above_threshold
+      - judge_infra_fail
+      - manual_abort
+    rollback_to: stable
+    immediate: true
+
+# Auto-adjustment settings
+auto_adjust:
+  enabled: true
+  slew_rate_percent_per_min: 2
+  adaptive_step_duration: true
+  reason_summary_top_n: 3
+
+# Risk controls
+risk:
+  max_concurrent_canaries: 1
+  min_stable_duration_min: 60
+  kill_switch_env: "DECISIONOS_CANARY_KILL_SWITCH"
+
+# Observability
+observability:
+  metrics_interval_sec: 10
+  evidence_harvest_interval_sec: 60
+  drift_monitor_enabled: true
+  posterior_threshold: 0.95

@@ -1,24 +1,105 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: judge-gateway
-  namespace: decisionos
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/canary: "true"
-    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary-Key"
-    nginx.ingress.kubernetes.io/canary-weight: "25"
-    nginx.ingress.kubernetes.io/upstream-vhost: judge-api.decisionos.svc.cluster.local
-    nginx.ingress.kubernetes.io/mirror-target: judge-api-canary
-spec:
-  rules:
-    - host: judge.decisionos.example
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: judge-api
-                port:
-                  number: 80
+version: v1
+env: production
+mode: shadow
+
+# Shadow traffic mirroring configuration
+shadow:
+  # Traffic source
+  source:
+    service: decision-api-prod
+    namespace: production
+    port: 8080
+
+  # Shadow destination
+  destination:
+    service: decision-api-canary
+    namespace: canary
+    port: 8080
+
+  # Sampling configuration
+  sampling:
+    enabled: true
+    rate: 0.01  # 1% of traffic
+    strategy: uniform
+    config_ref: "configs/shadow/sampler.json"
+
+  # Request transformation
+  transform:
+    # Remove sensitive headers
+    remove_headers:
+      - Authorization
+      - X-API-Key
+      - Cookie
+      - X-Forwarded-For-Real
+
+    # Add shadow markers
+    add_headers:
+      X-Shadow-Traffic: "true"
+      X-Shadow-Source: "prod-mirror"
+      X-Shadow-Timestamp: "{{now_iso}}"
+
+  # Response handling
+  response:
+    # Don't block on shadow responses
+    async: true
+    timeout_ms: 5000
+    ignore_errors: true
+    # Log responses for analysis
+    log_enabled: true
+    log_path: "var/shadow/responses.jsonl"
+
+  # Traffic shaping
+  traffic_shaping:
+    # Rate limiting for shadow traffic
+    max_rps: 100
+    burst: 10
+    # Queue for smoothing
+    queue_size: 1000
+    drop_on_full: true
+
+# PII protection
+pii:
+  # Redact PII before mirroring
+  redact_enabled: true
+  redact_config: "configs/redaction/fields.yaml"
+  # Fields to redact
+  fields:
+    - email
+    - phone
+    - name
+    - nid
+
+# Observability
+observability:
+  # Metrics
+  metrics:
+    enabled: true
+    interval_sec: 60
+    labels:
+      env: production
+      mode: shadow
+
+  # Evidence harvest
+  evidence:
+    enabled: true
+    interval_sec: 60
+    path: "var/evidence/shadow"
+
+  # Drift monitoring
+  drift:
+    enabled: true
+    comparison_fields:
+      - decision
+      - score
+      - reasons
+    threshold: 0.05  # 5% drift triggers alert
+
+# Safety controls
+safety:
+  # Kill switch
+  kill_switch_env: "DECISIONOS_SHADOW_KILL_SWITCH"
+  # Max mirror duration
+  max_duration_min: 1440  # 24 hours
+  # Auto-disable on errors
+  error_threshold: 0.1
+  error_window_sec: 300

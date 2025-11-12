@@ -1,139 +1,277 @@
+"""
+ETag Store
+Redis 기반 ETag 캐시 + InMemory fallback
+"""
 from __future__ import annotations
-
+import hashlib
 import json
 import os
-import threading
 import time
 from typing import Any, Dict, Optional, Tuple
-from .metrics import get_metrics
-
-__all__ = [
-    "ETagStore",
-    "InMemoryETagStore",
-    "RedisETagStore",
-    "build_etag_store",
-]
-
-try:
-    import redis  # type: ignore
-    _HAS_REDIS = True
-except Exception:
-    _HAS_REDIS = False
 
 
-class ETagStore:
-    """ETag → payload(snapshot) 저장/조회 추상 인터페이스."""
-    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:  # 1 day
-        raise NotImplementedError
+class InMemoryETagStore:
+    """
+    In-memory ETag snapshot store with TTL eviction
 
-    def get(self, etag: str) -> Optional[Dict[str, Any]]:
-        raise NotImplementedError
+    Stores full snapshots (not just ETag strings) for Delta support
+    """
 
+    def __init__(self, default_ttl: int = 300):
+        """Initialize in-memory store"""
+        self.default_ttl = default_ttl
+        self._snapshots: Dict[str, Tuple[Any, float]] = {}  # {etag: (snapshot, expire_ts)}
 
-class InMemoryETagStore(ETagStore):
-    """의존성 없는 인메모리 구현. 프로세스 생명주기 동안만 유효."""
-    def __init__(self):
-        self._lock = threading.RLock()
-        # etag -> (expire_epoch, payload)
-        self._data: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+    def put(self, etag: str, snapshot: Any, ttl_sec: Optional[int] = None) -> None:
+        """Store snapshot with TTL"""
+        ttl = ttl_sec if ttl_sec is not None else self.default_ttl
+        expire_ts = time.time() + ttl
+        self._snapshots[etag] = (snapshot, expire_ts)
 
-    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
-        exp = time.time() + float(ttl_sec)
-        with self._lock:
-            self._data[etag] = (exp, payload)
-        get_metrics().record_put()
+    def get(self, etag: str) -> Optional[Any]:
+        """Get snapshot by ETag"""
+        if etag in self._snapshots:
+            snapshot, expire_ts = self._snapshots[etag]
+            if time.time() < expire_ts:
+                return snapshot
+            else:
+                # Expired, remove
+                del self._snapshots[etag]
+        return None
 
-    def get(self, etag: str) -> Optional[Dict[str, Any]]:
-        with self._lock:
-            item = self._data.get(etag)
-            if not item:
-                get_metrics().record_miss()
-                return None
-            exp, payload = item
-            if exp < time.time():
-                # TTL 만료 → 제거
-                self._data.pop(etag, None)
-                get_metrics().record_miss()
-                return None
-            get_metrics().record_hit()
-            return payload
+    def invalidate(self, pattern: str) -> int:
+        """Invalidate snapshots matching pattern (simple prefix match)"""
+        count = 0
+        to_delete = []
+        for key in self._snapshots:
+            if key.startswith(pattern):
+                to_delete.append(key)
+        for key in to_delete:
+            del self._snapshots[key]
+            count += 1
+        return count
 
-    def clear_expired(self) -> int:
-        """만료된 항목 정리 (백그라운드 태스크용)"""
+    def stats(self) -> Dict[str, Any]:
+        """Get store statistics"""
+        # Evict expired first
         now = time.time()
-        removed = 0
-        with self._lock:
-            expired = [k for k, (exp, _) in self._data.items() if exp < now]
-            for k in expired:
-                self._data.pop(k, None)
-                removed += 1
-        return removed
+        expired = [k for k, (_, exp) in self._snapshots.items() if exp <= now]
+        for k in expired:
+            del self._snapshots[k]
+
+        return {
+            "backend": "memory",
+            "total_keys": len(self._snapshots),
+        }
 
 
-class RedisETagStore(ETagStore):
-    """Redis 기반 구현. TTL/eviction은 Redis에 위임."""
-    def __init__(self, url: str, prefix: str = "dos:cards:etag", decode_responses: bool = True):
-        if not _HAS_REDIS:
-            raise RuntimeError("redis 라이브러리가 설치되지 않았습니다. (pip install redis)")
-        # 연결
-        self._r = redis.Redis.from_url(url, decode_responses=decode_responses)
-        self._prefix = prefix
-
-    def _key(self, etag: str) -> str:
-        return f"{self._prefix}:{etag}"
-
-    def put(self, etag: str, payload: Dict[str, Any], ttl_sec: int = 86400) -> None:
-        try:
-            # 정렬·압축된 JSON으로 저장(안정적 비교/디버깅)
-            doc = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            # SET with EX(초) → TTL
-            self._r.set(self._key(etag), doc, ex=int(ttl_sec))
-            get_metrics().record_put()
-        except Exception:
-            get_metrics().record_error()
-            raise
-
-    def get(self, etag: str) -> Optional[Dict[str, Any]]:
-        try:
-            raw = self._r.get(self._key(etag))
-            if raw is None:
-                get_metrics().record_miss()
-                return None
-            try:
-                result = json.loads(raw)
-                get_metrics().record_hit()
-                return result
-            except Exception:
-                # 손상 데이터 방어: 키 삭제 후 None
-                try:
-                    self._r.delete(self._key(etag))
-                finally:
-                    get_metrics().record_miss()
-                    return None
-        except Exception:
-            get_metrics().record_error()
-            raise
-
-
-def build_etag_store() -> ETagStore:
+class RedisETagStore:
     """
-    환경 변수로 백엔드 선택:
-      - DECISIONOS_ETAG_BACKEND = "redis" | "memory"(default)
-      - DECISIONOS_REDIS_URL (default: redis://localhost:6379/0)
-      - DECISIONOS_ETAG_REDIS_PREFIX (default: dos:cards:etag)
-    Redis 사용 불가(미설치/접속오류) 시 자동 fallback → InMemory
+    Redis-backed ETag snapshot store with TTL
+
+    Stores full snapshots as JSON for Delta support
     """
-    backend = (os.getenv("DECISIONOS_ETAG_BACKEND") or "memory").lower().strip()
+
+    def __init__(self, redis_url: str, default_ttl: int = 300):
+        """Initialize Redis store"""
+        self.default_ttl = default_ttl
+        try:
+            import redis
+            self._redis = redis.from_url(redis_url, decode_responses=True)
+            # Test connection
+            self._redis.ping()
+        except Exception as e:
+            raise RuntimeError(f"Redis connection failed: {e}")
+
+    def put(self, etag: str, snapshot: Any, ttl_sec: Optional[int] = None) -> None:
+        """Store snapshot with TTL"""
+        ttl = ttl_sec if ttl_sec is not None else self.default_ttl
+        key = f"etag:snapshot:{etag}"
+        value = json.dumps(snapshot, separators=(",", ":"))
+        self._redis.setex(key, ttl, value)
+
+    def get(self, etag: str) -> Optional[Any]:
+        """Get snapshot by ETag"""
+        try:
+            key = f"etag:snapshot:{etag}"
+            value = self._redis.get(key)
+            if value:
+                return json.loads(value)
+        except Exception as e:
+            print(f"[ERROR] Redis get failed: {e}")
+        return None
+
+    def invalidate(self, pattern: str) -> int:
+        """Invalidate snapshots matching pattern"""
+        try:
+            # Redis SCAN + DELETE pattern
+            cursor = 0
+            count = 0
+            while True:
+                cursor, keys = self._redis.scan(cursor, match=f"etag:snapshot:{pattern}*", count=100)
+                if keys:
+                    count += self._redis.delete(*keys)
+                if cursor == 0:
+                    break
+            return count
+        except Exception as e:
+            print(f"[ERROR] Redis invalidate failed: {e}")
+            return 0
+
+    def stats(self) -> Dict[str, Any]:
+        """Get store statistics"""
+        try:
+            info = self._redis.info("stats")
+            return {
+                "backend": "redis",
+                "keyspace_hits": info.get("keyspace_hits", 0),
+                "keyspace_misses": info.get("keyspace_misses", 0),
+            }
+        except Exception:
+            return {"backend": "redis", "error": True}
+
+
+def build_etag_store() -> InMemoryETagStore | RedisETagStore:
+    """
+    Build ETag store based on environment configuration
+
+    Environment variables:
+    - DECISIONOS_ETAG_BACKEND: "memory" (default) or "redis"
+    - DECISIONOS_REDIS_URL: Redis connection URL (for redis backend)
+    - DECISIONOS_ETAG_TTL: Default TTL in seconds (default: 300)
+
+    Returns:
+        ETag store instance (Redis or InMemory fallback)
+    """
+    backend = os.environ.get("DECISIONOS_ETAG_BACKEND", "memory").lower()
+    default_ttl = int(os.environ.get("DECISIONOS_ETAG_TTL", "300"))
+
     if backend == "redis":
-        url = os.getenv("DECISIONOS_REDIS_URL", "redis://localhost:6379/0")
-        prefix = os.getenv("DECISIONOS_ETAG_REDIS_PREFIX", "dos:cards:etag")
-        if _HAS_REDIS:
+        redis_url = os.environ.get("DECISIONOS_REDIS_URL")
+        if not redis_url:
+            print("[WARN] DECISIONOS_REDIS_URL not set, falling back to InMemory")
+            return InMemoryETagStore(default_ttl)
+
+        try:
+            return RedisETagStore(redis_url, default_ttl)
+        except Exception as e:
+            print(f"[WARN] Redis backend failed: {e}, falling back to InMemory")
+            return InMemoryETagStore(default_ttl)
+
+    # Default: InMemory
+    return InMemoryETagStore(default_ttl)
+
+
+# Legacy compatibility
+class ETagStore:
+    """
+    Legacy ETag storage (stores ETag strings only, not snapshots)
+
+    Deprecated: Use build_etag_store() for snapshot support
+    """
+
+    def __init__(self, redis_url: Optional[str] = None, default_ttl: int = 300):
+        self.default_ttl = default_ttl
+        self._redis = None
+        self._memory: Dict[str, Tuple[str, float]] = {}
+
+        if redis_url:
             try:
-                store = RedisETagStore(url=url, prefix=prefix)
-                # 간단 ping으로 연결 확인(실패 시 메모리로 폴백)
-                store._r.ping()
-                return store
+                import redis
+                self._redis = redis.from_url(redis_url, decode_responses=True)
+                self._redis.ping()
+            except ImportError:
+                print("[WARN] redis-py not installed, using InMemory fallback")
+            except Exception as e:
+                print(f"[WARN] Redis connection failed: {e}, using InMemory fallback")
+                self._redis = None
+
+    def _generate_etag(self, content: str) -> str:
+        """Generate ETag from content"""
+        hash_obj = hashlib.sha256(content.encode("utf-8"))
+        return f'"{hash_obj.hexdigest()[:16]}"'
+
+    def get(self, key: str) -> Optional[str]:
+        """Get ETag for key"""
+        if self._redis:
+            try:
+                return self._redis.get(f"etag:{key}")
+            except Exception as e:
+                print(f"[ERROR] Redis get failed: {e}")
+                return None
+        else:
+            if key in self._memory:
+                etag, expire_ts = self._memory[key]
+                if time.time() < expire_ts:
+                    return etag
+                else:
+                    del self._memory[key]
+            return None
+
+    def set(self, key: str, content: str, ttl: Optional[int] = None) -> str:
+        """Set ETag for key with content"""
+        etag = self._generate_etag(content)
+        ttl = ttl or self.default_ttl
+
+        if self._redis:
+            try:
+                self._redis.setex(f"etag:{key}", ttl, etag)
+            except Exception as e:
+                print(f"[ERROR] Redis set failed: {e}")
+        else:
+            expire_ts = time.time() + ttl
+            self._memory[key] = (etag, expire_ts)
+
+        return etag
+
+    def invalidate(self, key: str) -> bool:
+        """Invalidate (delete) ETag for key"""
+        if self._redis:
+            try:
+                return self._redis.delete(f"etag:{key}") > 0
+            except Exception as e:
+                print(f"[ERROR] Redis delete failed: {e}")
+                return False
+        else:
+            if key in self._memory:
+                del self._memory[key]
+                return True
+            return False
+
+    def exists(self, key: str) -> bool:
+        """Check if ETag exists for key"""
+        return self.get(key) is not None
+
+    def stats(self) -> Dict[str, any]:
+        """Get store statistics"""
+        if self._redis:
+            try:
+                info = self._redis.info("stats")
+                return {
+                    "backend": "redis",
+                    "keyspace_hits": info.get("keyspace_hits", 0),
+                    "keyspace_misses": info.get("keyspace_misses", 0),
+                }
             except Exception:
-                pass  # 아래 메모리 폴백
-        # 폴백 로그는 상위 로거에서 처리 가능. 여기선 조용히 메모리 사용.
-    return InMemoryETagStore()
+                return {"backend": "redis", "error": True}
+        else:
+            return {
+                "backend": "memory",
+                "total_keys": len(self._memory),
+            }
+
+
+# Global instance (legacy)
+_store: Optional[ETagStore] = None
+
+
+def get_etag_store(redis_url: Optional[str] = None, default_ttl: int = 300) -> ETagStore:
+    """
+    Get or create global ETag store instance (legacy)
+
+    Deprecated: Use build_etag_store() instead
+    """
+    global _store
+    if _store is None:
+        _store = ETagStore(redis_url, default_ttl)
+    return _store
