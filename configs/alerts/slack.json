@@ -1,0 +1,10 @@
+{
+  "webhook": "",
+  "channel": "",
+  "mention": "@here",
+  "severity_map": {
+    "fail": ":rotating_light:",
+    "warn": ":warning:",
+    "pass": ":white_check_mark:"
+  }
+}

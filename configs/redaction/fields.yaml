@@ -1,0 +1,6 @@
+version: v1
+fields:
+  email: { strategy: mask }     # a****@example.com
+  phone: { strategy: mask }
+  name:  { strategy: remove }
+  nid:   { strategy: hash, salt_ref: "ENV:DECISIONOS_HASH_SALT" }

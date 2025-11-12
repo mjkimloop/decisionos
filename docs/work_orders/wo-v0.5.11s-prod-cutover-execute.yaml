@@ -1,0 +1,111 @@
+meta:
+  version: v0.5.11s
+  date: 2025-11-12
+  status: open
+  owner: "DecisionOS Core"
+  summary: "실트래픽 Cutover 실행 + 비밀관리 로테이션 + PII/증빙 컴플라이언스 + Ops API 캐시 일관성 + 알림 연동"
+objectives:
+  - Shadow→Canary→Promote 실트래픽 단계 전환을 안전하게 자동화
+  - KMS/SSM 기반 멀티키 로테이션의 주기적 리프레시·감쇠(그레이스) 적용
+  - Evidence/로그의 PII 관리(마스킹/익명화)와 불변성 인덱싱 일치
+  - Ops Cards API의 ETag/Redis 캐시 일관성 훅 완성(증분 Delta 포함)
+  - PR 코멘트/라벨/알림(Slack/Webhook) 연동 최종 배선
+scope:
+  code:
+    add:
+      - apps/obs/evidence/redact.py            # PII 필드 마스킹/익명화 파이프라인
+      - configs/redaction/fields.yaml          # PII 규칙 카탈로그(email, phone, name 등)
+      - apps/judge/keyloader_refresh.py        # KMS/SSM 키 주기적 리프레시(그레이스 윈도 포함)
+      - apps/ops/cache/etag_store.py           # Redis ETagStore(TTL, eviction) + InMemory fallback
+      - scripts/notify/slack_notify.py         # 게이트 결과/톱임팩트/증빙 링크 알림
+      - pipeline/release/drill.sh              # 롤백 드릴(가짜 스파이크→자동 abort 확인)
+    modify:
+      - apps/ops/api.py                        # ETag v2 & Delta, Redis 백엔드 연결, invalidation 훅
+      - apps/obs/evidence/indexer.py           # redact 후 sha/tampered 재계산, tier 유지
+      - jobs/evidence_indexer.py               # 인덱싱 시 PII-redact 파이프라인 옵션
+      - jobs/evidence_harvest_reqlog.py        # 수확시 redact→merge→index 순서 보장
+      - apps/judge/keyloader_kms.py            # 다중 소스(ENV/SSM) 병합·우선순위·그레이스 노출
+      - .github/workflows/ci.yml               # 프리게이트→게이트→포스트게이트에 신단계 삽입
+      - apps/cli/dosctl/judge_quorum.py        # 실패사유 요약+Artifacts URL+알림 훅 호출
+      - apps/experiment/controller.py          # stage 변환 시 Evidence invalidation webhook 호출
+  configs:
+    add:
+      - configs/alerts/slack.json              # 채널, Webhook, 심각도→이모지/멘션 매핑
+      - configs/slo/slo-prod.json              # 프로덕션 SLO(엄격) 세트(latency/error/budget/quota/canary)
+      - configs/rollouts/prod-canary.yaml      # 실제 클러스터 카나리 단계·트래픽 비율·스텝
+      - configs/ingress/shadow-mirror.yaml     # 실트래픽 미러링 샘플(운영값 치환)
+  docs:
+    patch:
+      techspec:
+        - section: "Security — Key Rotation & Grace Refresh"
+          mode: upsert
+          content: |
+            - Keys: ENV, SSM 병합. refresh_interval_sec, grace_window_sec.
+            - Degraded on: SSM timeout > threshold, keyset empty, overlap violation.
+        - section: "Compliance — PII Redaction Pipeline"
+          mode: upsert
+          content: |
+            - fields.yaml: field→strategy(mask/hash/remove), hash_salt_ref.
+            - Evidence flow: harvest→redact→merge→index→lock.
+        - section: "Ops API — Cache Consistency & Delta"
+          mode: upsert
+          content: |
+            - Redis ETagStore(key, val, ttl). X-Delta-Base-ETag 지원.
+            - Invalidations: evidence.index, label.catalog.hash, canary.step.
+      plan:
+        - section: "Milestones — v0.5.11s"
+          mode: upsert
+          content: |
+            Day 1-2: PII redact 파이프라인 + 인덱서 통합
+            Day 3: Key refresh 데몬 + readiness/metrics 연동
+            Day 4: Ops API 캐시 일관성 훅 + Redis backend
+            Day 5: Slack/Webhook 알림 + PR 코멘트 최종화
+            Day 6: Canary live dry-run + drill.sh(자동 롤백) 검증
+            Day 7: Prod cutover 창구 운영/런북 리허설
+      runbooks:
+        - section: "RUNBOOK — Prod Cutover & Rollback"
+          mode: upsert
+          content: |
+            - Promote 조건: infra+canary SLO pass 3연속, burst=0, drift<θ
+            - Abort 조건: p95>θ, error_rate>θ, judge infra fail-closed
+            - 증빙: evidence/latest.json + index.json 업로드 및 링크 공유
+acceptance_criteria:
+  - 모든 Evidence 파일이 redact 규칙을 통과하고 indexer.tampered=false
+  - Ops API: If-None-Match + X-Delta-Base-ETag로 304/Delta 응답 모두 검증
+  - Key refresh: 키 회전 시 1분 이내 judge /readyz green 유지(그레이스)
+  - Slack/Webhook: 실패 PR에 라벨/요약/Artifacts URL/알림 동시 반영
+  - drill.sh 실행 시 60s 내 abort되고 stage=stable로 복구
+ci_changes:
+  pre_gate:
+    - jobs/clock_guard.py
+    - jobs/evidence_indexer.py --redact configs/redaction/fields.yaml
+    - scripts/labels/ensure_labels.py --catalog configs/labels/label_catalog_v2.json
+  gate:
+    - dosctl witness_perf → evidence merge
+    - dosctl judge quorum --slo configs/slo/slo-prod.json (infra+canary 두 번)
+  post_gate:
+    - scripts/ci/annotate_release_gate.py --artifacts --diff-link --summary-reasons
+    - scripts/notify/slack_notify.py --summary --artifacts-url "$ARTIFACTS_URL"
+tests:
+  unit:
+    - tests/gates/gate_t/test_redact_pipeline_v1.py
+    - tests/gates/gate_aj/test_key_refresh_grace_v1.py
+    - tests/gates/gate_q/test_ops_api_etag_redis_delta_v1.py
+  integration:
+    - tests/integration/test_evidence_harvest_redact_index_v1.py
+    - tests/integration/test_quorum_after_key_rotate_v1.py
+  e2e:
+    - tests/e2e/test_release_drill_abort_v1.py          # bash 의존, Linux CI only
+    - tests/e2e/test_pr_comment_labels_slack_v1.py      # 토큰 없으면 skip
+commands:
+  - python scripts/wo_apply.py docs/work_orders/wo-v0.5.11s-prod-cutover-execute.yaml
+  - python scripts/doc_guard.py
+  - pytest -q -m "gate_t or gate_q or gate_aj" -k "redact or etag or refresh"
+risk_controls:
+  - fail-closed: redact 실패→인덱스 제외, judge readiness degrade→배포 게이트 차단
+  - kill-switch: stage=abort 강제, controller가 즉시 stable 복원
+  - audit: 모든 알림/라벨/주석에 evidence.signature_sha256 첨부
+backout_plan:
+  - Redis 장애 시 ETagStore=InMemory로 즉시 폴백(성능 저하 허용)
+  - KMS 실패 시 최신 유효 키셋 고정 + grace_window 연장
+  - 알림 실패 시 CI 로그로 대체, 이후 재주입 스크립트 제공
