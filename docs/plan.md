@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
-date: 2025-11-11
-status: locked
-summary: 라벨-카드 자동 전파, 이유군 롤업, 포크-세이프 코멘터, 라벨 드리프트 리포트 + CI 통합
+version: v0.5.11s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+date: 2025-11-12
+status: open
+summary: 운영값(슬랙 Webhook/채널, SSM 파라미터, Redis DSN, 카나리 스텝 스케줄) 반영 핫픽스
 -->
 
 # DecisionOS Implementation Plan

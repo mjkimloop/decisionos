@@ -1,6 +1,6 @@
 {
-  "required_pass_windows": 5,
-  "max_burst": 1,
-  "min_observation_minutes": 30,
-  "notes": "5연속 통과 & 버스트 ≤1 & 최소 30분 관찰 시 promote (v0.5.11r-4 튜닝)"
+  "auto_promote": true,
+  "require_same_window": true,
+  "max_step_burst": 0,
+  "labels_weight_catalog": "configs/labels/label_catalog_v2.json"
 }

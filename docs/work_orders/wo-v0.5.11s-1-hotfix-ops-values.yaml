@@ -1,0 +1,121 @@
+meta:
+  version: v0.5.11s-1
+  date: 2025-11-12
+  owner: "DecisionOS Core"
+  status: open
+  summary: "운영값(슬랙 Webhook/채널, SSM 파라미터, Redis DSN, 카나리 스텝 스케줄) 반영 핫픽스"
+
+scope:
+  configs:
+    upsert:
+      - path: configs/alerts/slack.json
+        content: |
+          {
+            "webhook": "${DECISIONOS_SLACK_WEBHOOK}",
+            "channel": "#decisionos-deploy",
+            "mention": "@here",
+            "severity_map": {
+              "fail": ":rotating_light:",
+              "warn": ":warning:",
+              "pass": ":white_check_mark:"
+            }
+          }
+      - path: configs/judge/providers.yaml
+        content: |
+          version: v2
+          http_providers:
+            - name: judge-1
+              base_url: "https://judge-1.prod.internal"
+              key_id: "k1"
+            - name: judge-2
+              base_url: "https://judge-2.prod.internal"
+              key_id: "k1"
+          hmac:
+            ssm_param_keys: "${DECISIONOS_SSM_PARAM_JUDGE_KEYS}"   # 예: /decisionos/judge/keys
+            region: "${DECISIONOS_AWS_REGION}"
+            refresh_interval_sec: 60
+            grace_window_sec: 120
+      - path: configs/cache/etag_store.yaml
+        content: |
+          backend: "redis"
+          redis_url: "${DECISIONOS_REDIS_URL}"   # 예: rediss://user:pass@redis.prod:6380/0
+          ttl_sec: 900
+          prefix: "dos:etag:"
+          fallback_inmemory: true
+      - path: configs/rollouts/prod-canary.yaml
+        content: |
+          apiVersion: decisionos/v1
+          kind: CanarySchedule
+          spec:
+            steps:
+              - traffic_percent: 5
+                hold_sec: 300
+              - traffic_percent: 20
+                hold_sec: 600
+              - traffic_percent: 50
+                hold_sec: 900
+            success_requirements:
+              consecutive_pass: 3
+              burst_allowed: 0
+              drift_threshold: 0.15
+            abort_on:
+              - "infra.latency_p95_over"
+              - "infra.error_rate_over"
+              - "canary.drift_over"
+      - path: configs/canary/policy.json
+        content: |
+          {
+            "auto_promote": true,
+            "require_same_window": true,
+            "max_step_burst": 0,
+            "labels_weight_catalog": "configs/labels/label_catalog_v2.json"
+          }
+
+  env_examples:
+    upsert:
+      - path: .env.example
+        content: |
+          # --- v0.5.11s-1 ops values ---
+          DECISIONOS_SLACK_WEBHOOK=
+          DECISIONOS_REDIS_URL=
+          DECISIONOS_AWS_REGION=ap-northeast-2
+          DECISIONOS_SSM_PARAM_JUDGE_KEYS=/decisionos/judge/keys
+          DECISIONOS_ALLOW_SCOPES=ops:read,judge:run,deploy:promote,deploy:abort
+
+  ci:
+    patch:
+      - path: .github/workflows/ci.yml
+        find: "env:"
+        append_after: |
+          env:
+            DECISIONOS_SLACK_WEBHOOK: ${{ secrets.DECISIONOS_SLACK_WEBHOOK }}
+            DECISIONOS_REDIS_URL: ${{ secrets.DECISIONOS_REDIS_URL }}
+            DECISIONOS_AWS_REGION: ${{ secrets.AWS_REGION }}
+            DECISIONOS_SSM_PARAM_JUDGE_KEYS: ${{ secrets.DECISIONOS_SSM_PARAM_JUDGE_KEYS }}
+        notes: "프리게이트/게이트/포스트게이트 모든 job에 env 주입"
+
+  docs:
+    patch:
+      - file: docs/ops/CLI-DEPLOY.md
+        mode: append
+        content: |
+          ## Ops Values (v0.5.11s-1)
+          - Slack: `DECISIONOS_SLACK_WEBHOOK` + `configs/alerts/slack.json`
+          - Redis ETag: `DECISIONOS_REDIS_URL` + `configs/cache/etag_store.yaml`
+          - SSM Keys: `DECISIONOS_SSM_PARAM_JUDGE_KEYS` + `DECISIONOS_AWS_REGION`
+          - Canary: `configs/rollouts/prod-canary.yaml`, `configs/canary/policy.json`
+
+acceptance_criteria:
+  - Slack 알림: 게이트 실패 시 #decisionos-deploy로 메시지 전송(Artifacts URL 포함)
+  - Ops API: Redis ETagStore 사용 시 304/Delta 동작 유지, 장애 시 InMemory 폴백
+  - Judge 키: SSM 로더가 60초 주기로 리프레시, 회전 시 120초 그레이스 내 /readyz green
+  - Canary: prod-canary 스케줄에 따라 단계적 증분, 3연속 통과 시 자동 promote, 위반 시 즉시 abort
+
+tests:
+  - "pytest -q tests/gates/gate_q/test_ops_api_etag_redis_delta_v1.py -k redis --disable-warnings"
+  - "pytest -q tests/integration/test_quorum_after_key_rotate_v1.py"
+  - "pytest -q tests/e2e/test_release_abort_on_latency_spike_v1.py -k canary --maxfail=1"  # Linux CI
+
+commands:
+  - "python scripts/wo_apply.py docs/work_orders/wo-v0.5.11s-1-hotfix-ops-values.yaml"
+  - "python scripts/doc_guard.py"

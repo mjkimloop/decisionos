@@ -1,6 +1,6 @@
 {
-  "webhook": "",
-  "channel": "",
+  "webhook": "${DECISIONOS_SLACK_WEBHOOK}",
+  "channel": "#decisionos-deploy",
   "mention": "@here",
   "severity_map": {
     "fail": ":rotating_light:",

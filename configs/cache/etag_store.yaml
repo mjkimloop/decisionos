@@ -1,0 +1,5 @@
+backend: "redis"
+redis_url: "${DECISIONOS_REDIS_URL}"   # 예: rediss://user:pass@redis.prod:6380/0
+ttl_sec: 900
+prefix: "dos:etag:"
+fallback_inmemory: true

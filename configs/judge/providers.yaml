@@ -1,22 +1,13 @@
-version: v1
-providers:
-  - name: local-0
-    type: local
-    weight: 1.0
-
-  - name: judge-http-a
-    type: http
-    url: "http://127.0.0.1:8080/judge"
-    timeout_ms: 1500
-    retry:
-      attempts: 2
-      backoff_ms: 200
-      jitter_ms: 50
-    circuit_breaker:
-      threshold: 5        # 연속 실패 허용치
-      cooldown_sec: 30
-    hmac:
-      key_id: "k1"        # DECISIONOS_JUDGE_KEYS 내 key_id와 일치
-      header_signature: "X-DecisionOS-Signature"
-      header_nonce: "X-DecisionOS-Nonce"
-      header_ts: "X-DecisionOS-Timestamp"
+version: v2
+http_providers:
+  - name: judge-1
+    base_url: "https://judge-1.prod.internal"
+    key_id: "k1"
+  - name: judge-2
+    base_url: "https://judge-2.prod.internal"
+    key_id: "k1"
+hmac:
+  ssm_param_keys: "${DECISIONOS_SSM_PARAM_JUDGE_KEYS}"   # 예: /decisionos/judge/keys
+  region: "${DECISIONOS_AWS_REGION}"
+  refresh_interval_sec: 60
+  grace_window_sec: 120
