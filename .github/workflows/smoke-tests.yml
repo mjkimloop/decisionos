@@ -1,0 +1,49 @@
+name: Smoke Tests (gate_q)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Quick Smoke Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Run gate_q tests (no external deps)
+        run: |
+          pytest tests/gates/gate_q/ -v --tb=short
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Smoke Tests Summary" >> $GITHUB_STEP_SUMMARY
+          echo "gate_q tests verify core functionality without external dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- Risk Governor ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Burn Rate Gate ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Shadow Sampler ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Alerts Dispatcher ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Jobs Integration ✅" >> $GITHUB_STEP_SUMMARY

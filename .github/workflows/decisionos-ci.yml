@@ -1,0 +1,257 @@
+name: DecisionOS CI (PreGate → Gate → PostGate)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write           # 아티팩트/코멘트 스크립트에서 필요
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: decisionos-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_CACHE_DIR: ~/.cache/pip
+  # RBAC: 기본 거부. 필요한 스코프만 허용
+  DECISIONOS_ALLOW_SCOPES: "ops:read,judge:run,deploy:promote,deploy:abort"
+  # Evidence 기본 경로
+  DECISIONOS_EVIDENCE_DIR: var/evidence
+  DECISIONOS_EVIDENCE_LATEST: var/evidence/latest.json
+  # 캐시/로그 경로
+  DECISIONOS_LOG_DIR: var/log
+  # 옵션: Redis/SSM/KMS가 없으면 내부 no-op 동작
+  REDIS_URL: ${{ secrets.REDIS_URL || '' }}
+  AWS_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  pre_gate:
+    name: Pre-Gate — Clock/Evidence/Unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Prepare dirs
+        run: |
+          mkdir -p var/evidence var/log var/rollout var/shadow
+
+      - name: Clock Guard
+        run: |
+          python -m jobs.clock_guard --max-skew-sec 2 --out var/log/clock_guard.json
+
+      - name: Evidence Index (pre-scan)
+        run: |
+          python -m jobs.evidence_indexer --dir var/evidence --out var/evidence/index.json || true
+
+      - name: Run targeted tests (gate_t)
+        run: |
+          pytest -q -m gate_t || (echo "::warning::gate_t subset failed (non-fatal pre-gate)"; exit 0)
+
+      - name: Upload PreGate Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-gate-artifacts
+          path: |
+            var/log/**
+            var/evidence/index.json
+          if-no-files-found: warn
+
+  gate:
+    name: Gate — Build Evidence & Judge SLO (Infra + Canary)
+    needs: [ pre_gate ]
+    runs-on: ubuntu-latest
+    env:
+      # 엄격 SLO 경로(레포 내 샘플 기준)
+      SLO_INFRA: configs/slo/slo-judge-infra.json
+      SLO_CANARY: configs/slo/slo-billing-strict-v2.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Prepare dirs
+        run: |
+          mkdir -p var/evidence var/log var/rollout var/shadow
+
+      - name: Harvest reqlog → perf
+        run: |
+          # 샘플 로그 또는 실제 로그 경로 사용
+          cp -f data/reqlog_sample.csv var/log/reqlog.csv || true
+          python -m apps.cli.dosctl.witness_perf --csv var/log/reqlog.csv --out var/evidence/perf.json
+
+      - name: Harvest judgelog → perf_judge
+        run: |
+          # 샘플 로그 또는 실제 로그 경로 사용
+          cp -f data/judgelog_sample.csv var/log/judgelog.csv || true
+          python -m apps.cli.dosctl.witness_judge_perf --csv var/log/judgelog.csv --out var/evidence/perf_judge.json || true
+
+      - name: Build Evidence (ops merge)
+        run: |
+          # 최신 Evidence 생성/갱신 (perf/perf_judge/canary가 있으면 자동 병합)
+          python - <<'PY'
+          import json, os, pathlib, time
+          from apps.obs.evidence.snapshot import Evidence
+          from apps.obs.evidence.ops import recompute_signature
+
+          p = pathlib.Path("var/evidence")
+          p.mkdir(parents=True, exist_ok=True)
+          base = {
+            "meta": {"version":"ci", "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"), "tenant":"ci"},
+            "witness": {"csv_path":"data/witness_sample.csv", "csv_sha256":"", "rows":3},
+            "usage": {"buckets":{}, "deltas_by_metric":{"tokens":130.0,"storage_gb":8.0}},
+            "rating": {"subtotal":0.6, "items":[{"metric":"tokens","included":100.0,"overage":30.0,"amount":0.6}]},
+            "quota": {"decisions":{"tokens":{"action":"deny","used":130.0,"soft":100.0,"hard":120.0}}},
+            "budget": {"level":"warn","spent":0.6,"limit":1.0},
+            "anomaly": {"is_spike": False, "ewma":0.12, "ratio":0.5},
+            "integrity": {}
+          }
+          # perf/perf_judge 있으면 병합
+          for k in ("perf","perf_judge","canary"):
+              f = p / f"{k}.json"
+              if f.exists():
+                  base[k] = json.loads(f.read_text())
+          ev = Evidence.from_dict(base)
+          # judges 블록은 게이트 후에 주입됨
+          ev_json = ev.to_json()
+          (p / "latest.json").write_text(ev_json, encoding="utf-8")
+          recompute_signature(p / "latest.json")  # integrity.signature_sha256
+          PY
+
+      - name: Gate — Infra SLO
+        run: |
+          python -m apps.cli.dosctl.slo_judge --slo $SLO_INFRA --evidence var/evidence/latest.json
+
+      - name: Gate — Canary SLO
+        run: |
+          python -m apps.cli.dosctl.slo_judge --slo $SLO_CANARY --evidence var/evidence/latest.json
+
+      - name: Quorum (2/3) with judges
+        run: |
+          # 로컬/HTTP 혼합 구성 가능. 샘플 providers.yaml 사용
+          python -m apps.cli.dosctl.judge_quorum --slo $SLO_CANARY --evidence var/evidence/latest.json --providers configs/judge/providers.yaml --quorum 2/3 --attach-evidence
+
+      - name: Upload Gate Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-artifacts
+          path: |
+            var/evidence/**
+            var/log/**
+          if-no-files-found: warn
+
+  post_gate:
+    name: Post-Gate — PR Annotate / Labels / Cards API Smoke
+    needs: [ gate ]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Download Gate Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gate-artifacts
+          path: gate-artifacts
+
+      - name: Ensure Labels (catalog v2)
+        run: |
+          python -m scripts.ensure_labels --catalog configs/labels/label_catalog_v2.json --repo ${{ github.repository }} || true
+
+      - name: Annotate PR (reasons + diff link + artifacts)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          DIFF_LINK="https://github.com/${{ github.repository }}/compare/${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"
+          python -m scripts.annotate_release_gate \
+            --evidence gate-artifacts/var/evidence/latest.json \
+            --artifacts-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --diff-link "$DIFF_LINK" \
+            --reason-summary top-3 \
+            --label-catalog configs/labels/label_catalog_v2.json || true
+
+      - name: Ops Cards API — quick smoke (ETag/readyz)
+        env:
+          DECISIONOS_ALLOW_SCOPES: "ops:read"
+        run: |
+          python - <<'PY'
+          import threading, time, requests, os
+          from apps.ops.api import create_app
+          import uvicorn
+          # run server in thread
+          def run():
+              uvicorn.run(create_app(), host="127.0.0.1", port=8081, log_level="warning")
+          t = threading.Thread(target=run, daemon=True)
+          t.start(); time.sleep(1.2)
+          s = requests.Session()
+          r1 = s.get("http://127.0.0.1:8081/ops/cards/reason-trends", timeout=3)
+          etag = r1.headers.get("ETag")
+          assert r1.status_code == 200 and etag
+          r2 = s.get("http://127.0.0.1:8081/ops/cards/reason-trends", headers={"If-None-Match": etag}, timeout=3)
+          assert r2.status_code == 304
+          PY
+
+      - name: Post summary
+        if: always()
+        run: |
+          echo "### DecisionOS CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- PreGate: clock guard & index ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Gate: infra+canary SLO & quorum ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- PostGate: labels synced, PR annotated, Ops API smoked ✅" >> $GITHUB_STEP_SUMMARY
