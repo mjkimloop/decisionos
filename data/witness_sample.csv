@@ -1,0 +1,4 @@
+tenant,metric,corr_id,ts,value
+t1,tokens,corr-001,2025-11-12T10:15:00Z,10
+t1,tokens,corr-002,2025-11-12T10:16:00Z,120
+t1,storage_gb,corr-003,2025-11-12T10:18:00Z,8

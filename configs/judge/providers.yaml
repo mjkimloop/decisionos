@@ -1,15 +1,22 @@
+version: v1
 providers:
-  - id: local-a
+  - name: local-0
     type: local
-  - id: http-b
+    weight: 1.0
+
+  - name: judge-http-a
     type: http
-    url: "https://judge-b.internal/judge"
-    timeout_ms: 2000
-    require_sig: true
-    key_id: "k1"
-  - id: http-c
-    type: http
-    url: "https://judge-c.internal/judge"
-    timeout_ms: 2000
-    require_sig: true
-    key_id: "k1"
+    url: "http://127.0.0.1:8080/judge"
+    timeout_ms: 1500
+    retry:
+      attempts: 2
+      backoff_ms: 200
+      jitter_ms: 50
+    circuit_breaker:
+      threshold: 5        # 연속 실패 허용치
+      cooldown_sec: 30
+    hmac:
+      key_id: "k1"        # DECISIONOS_JUDGE_KEYS 내 key_id와 일치
+      header_signature: "X-DecisionOS-Signature"
+      header_nonce: "X-DecisionOS-Nonce"
+      header_ts: "X-DecisionOS-Timestamp"
