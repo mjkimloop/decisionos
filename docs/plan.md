@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+version: v0.5.11s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
 date: 2025-11-12
 status: open
-summary: 운영값(슬랙 Webhook/채널, SSM 파라미터, Redis DSN, 카나리 스텝 스케줄) 반영 핫픽스
+summary: 운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선
 -->
 
 # DecisionOS Implementation Plan

@@ -1,0 +1,247 @@
+meta:
+  version: v0.5.11s-2
+  date: 2025-11-12
+  owner: "DecisionOS Core"
+  status: open
+  summary: "운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선"
+
+scope:
+  # 1) 알림 라우팅/레이트리밋 설정
+  configs:
+    upsert:
+      - path: configs/alerts/slack.json
+        content: |
+          {
+            "webhook": "${DECISIONOS_SLACK_WEBHOOK}",
+            "default_channel": "#decisionos-deploy",
+            "env_channels": {
+              "prod": "#decisionos-deploy",
+              "staging": "#decisionos-staging",
+              "dev": "#decisionos-dev"
+            },
+            "routing": {
+              "rules": [
+                { "match": { "reason_prefix": "infra." },   "channel": "#decisionos-infra" },
+                { "match": { "reason_prefix": "canary." },  "channel": "#decisionos-canary" },
+                { "match": { "reason_prefix": "quota." },   "channel": "#decisionos-billing" },
+                { "match": { "reason_prefix": "budget." },  "channel": "#decisionos-billing" }
+              ],
+              "fallback": "default_channel"
+            },
+            "mention": {
+              "fail": "@here",
+              "warn": "",
+              "pass": ""
+            },
+            "rate_limit": {
+              "window_sec": 300,
+              "max_events": 20,
+              "key": "env+reason"
+            }
+          }
+      - path: .env.example
+        content: |
+          # --- v0.5.11s-2 ---
+          DECISIONOS_ENV=prod
+          DECISIONOS_SLACK_WEBHOOK=
+          # (선택) ENV 채널 오버라이드
+          DECISIONOS_SLACK_CHANNEL_OVERRIDE=
+  # 2) 라벨 팔레트 v2 확장
+  labels:
+    patch:
+      - path: configs/labels/label_catalog_v2.json
+        mode: merge
+        content: |
+          {
+            "groups": {
+              "infra": { "weight": 1.0, "color": "ee0701" },
+              "perf":  { "weight": 0.8, "color": "1f77b4" },
+              "canary":{ "weight": 0.9, "color": "f39c12" },
+              "quota": { "weight": 0.7, "color": "8e44ad" },
+              "budget":{ "weight": 0.6, "color": "27ae60" },
+              "anomaly":{"weight": 0.75,"color": "16a085" }
+            },
+            "labels": {
+              "reason:infra:latency-p95":   { "group": "infra",  "color": "d73a49", "desc": "P95 latency over SLO" },
+              "reason:infra:latency-p99":   { "group": "infra",  "color": "b60205", "desc": "P99 latency over SLO" },
+              "reason:infra:error-rate":    { "group": "infra",  "color": "b60205", "desc": "Error rate over SLO" },
+              "reason:perf:p99":            { "group": "perf",   "color": "0052cc", "desc": "Perf P99 regression" },
+              "reason:canary:drift-high":   { "group": "canary", "color": "f39c12", "desc": "Canary drift beyond threshold" },
+              "reason:quota:throttle":      { "group": "quota",  "color": "8e44ad", "desc": "Quota soft limit throttling" },
+              "reason:quota:deny":          { "group": "quota",  "color": "6c3483", "desc": "Quota hard deny" },
+              "reason:budget:exceeded":     { "group": "budget", "color": "27ae60", "desc": "Budget exceeded" },
+              "reason:anomaly:spike":       { "group": "anomaly","color": "16a085", "desc": "EWMA or Z-score spike" }
+            }
+          }
+
+  # 3) 알림 라우터/레이트리미터 코드 스켈레톤
+  code:
+    new:
+      - path: apps/alerts/ratelimit.py
+        lang: python
+        content: |
+          from collections import deque
+          from time import time
+          from typing import Deque, Dict
+
+          class SlidingWindowRateLimiter:
+              def __init__(self, window_sec: int, max_events: int):
+                  self.window = window_sec
+                  self.max_events = max_events
+                  self._buckets: Dict[str, Deque[float]] = {}
+
+              def allow(self, key: str) -> bool:
+                  now = time()
+                  dq = self._buckets.setdefault(key, deque())
+                  # drop old
+                  cutoff = now - self.window
+                  while dq and dq[0] < cutoff:
+                      dq.popleft()
+                  if len(dq) >= self.max_events:
+                      return False
+                  dq.append(now)
+                  return True
+      - path: apps/alerts/router.py
+        lang: python
+        content: |
+          from typing import Dict
+
+          def resolve_channel(env: str, reason: str, cfg: Dict) -> str:
+              # env override
+              env_ch = cfg.get("env_channels", {}).get(env)
+              # reason routing
+              for rule in cfg.get("routing", {}).get("rules", []):
+                  pref = rule.get("match", {}).get("reason_prefix")
+                  if pref and reason.startswith(pref):
+                      return rule.get("channel") or env_ch or cfg.get("default_channel")
+              # fallback
+              return env_ch or cfg.get("default_channel")
+
+          def rate_key(env: str, reason: str, cfg: Dict) -> str:
+              key_fmt = (cfg.get("rate_limit") or {}).get("key", "env+reason")
+              if key_fmt == "env":
+                  return env
+              if key_fmt == "reason":
+                  return reason
+              return f"{env}:{reason}"
+      - path: apps/alerts/slack_notifier.py
+        lang: python
+        content: |
+          import json, os, urllib.request
+          from typing import Dict
+          from .ratelimit import SlidingWindowRateLimiter
+          from .router import resolve_channel, rate_key
+
+          _limiter = None
+
+          def _limiter_for(cfg: Dict) -> SlidingWindowRateLimiter:
+              global _limiter
+              if _limiter is None:
+                  rl = cfg.get("rate_limit") or {}
+                  _limiter = SlidingWindowRateLimiter(rl.get("window_sec", 300), rl.get("max_events", 20))
+              return _limiter
+
+          def post_slack(cfg: Dict, env: str, reason: str, title: str, body: Dict, dry_run: bool = True) -> Dict:
+              ch = os.getenv("DECISIONOS_SLACK_CHANNEL_OVERRIDE") or resolve_channel(env, reason, cfg)
+              key = rate_key(env, reason, cfg)
+              allowed = _limiter_for(cfg).allow(key)
+              payload = {
+                  "channel": ch,
+                  "text": f"[{env}] {title}",
+                  "attachments": [{"color":"#E74C3C" if "fail" in reason else "#2ECC71",
+                                   "text": "```" + json.dumps(body, ensure_ascii=False, indent=2) + "```"}]
+              }
+              if not allowed:
+                  return {"sent": False, "reason": "rate_limited", "channel": ch}
+              if dry_run:
+                  return {"sent": True, "channel": ch, "dry_run": True, "payload": payload}
+              req = urllib.request.Request(cfg["webhook"], data=json.dumps(payload).encode("utf-8"),
+                                           headers={"Content-Type": "application/json"})
+              with urllib.request.urlopen(req, timeout=5) as r:
+                  return {"sent": True, "channel": ch, "status": r.status}
+
+  # 4) 테스트 스켈레톤
+  tests:
+    new:
+      - path: tests/gates/gate_ops/test_alert_ratelimit_v1.py
+        lang: python
+        content: |
+          from apps.alerts.ratelimit import SlidingWindowRateLimiter
+          import time
+          def test_rate_limit_allows_then_blocks():
+              rl = SlidingWindowRateLimiter(window_sec=1, max_events=2)
+              assert rl.allow("k")
+              assert rl.allow("k")
+              assert rl.allow("k") is False
+              time.sleep(1.05)
+              assert rl.allow("k")
+      - path: tests/gates/gate_ops/test_alert_routing_env_v1.py
+        lang: python
+        content: |
+          from apps.alerts.router import resolve_channel
+          CFG = {
+              "default_channel": "#decisionos-deploy",
+              "env_channels": {"staging":"#decisionos-staging"},
+              "routing": {"rules":[{"match":{"reason_prefix":"infra."},"channel":"#decisionos-infra"}]}
+          }
+          def test_route_by_reason_over_env():
+              ch = resolve_channel("staging", "infra.latency_p95_over", CFG)
+              assert ch == "#decisionos-infra"
+          def test_route_by_env_fallback():
+              ch = resolve_channel("staging", "misc.something", CFG)
+              assert ch == "#decisionos-staging"
+      - path: tests/gates/gate_q/test_label_palette_consistency_v1.py
+        lang: python
+        content: |
+          import json, re
+          def _hex_ok(c): return bool(re.fullmatch(r"[0-9a-fA-F]{6}", c))
+          def test_palette_colors_are_hex():
+              catalog = json.load(open("configs/labels/label_catalog_v2.json","r",encoding="utf-8"))
+              for _, meta in catalog.get("groups", {}).items():
+                  assert _hex_ok(meta["color"])
+              for _, meta in catalog.get("labels", {}).items():
+                  assert _hex_ok(meta["color"])
+
+  # 5) CI 배선
+  ci:
+    patch:
+      - path: .github/workflows/ci.yml
+        find: "# === PRE-GATE START ==="
+        append_after: |
+          # s-2: ops alerts tests
+          - name: Gate Ops — Alert routing/ratelimit
+            run: |
+              python -m pytest -q tests/gates/gate_ops/ --disable-warnings
+      - path: .github/workflows/ci.yml
+        find: "# === GATE START ==="
+        append_after: |
+          - name: Gate Q — Label palette consistency
+            run: |
+              python -m pytest -q tests/gates/gate_q/test_label_palette_consistency_v1.py --disable-warnings
+
+  # 6) 문서 패치
+  docs:
+    append:
+      - file: docs/ops/ALERTS.md
+        content: |
+          # Alerts v2 (env routing + rate-limit)
+          - `configs/alerts/slack.json`에서 환경/사유별 라우팅과 레이트 리밋(window_sec,max_events,key)을 관리.
+          - 우선순위: reason_prefix 규칙 → env channel → default_channel.
+          - 레이트 리밋 키: env / reason / env+reason (기본).
+          - `DECISIONOS_SLACK_CHANNEL_OVERRIDE`로 강제 채널 지정 가능(운영 핫픽스 용도).
+
+acceptance_criteria:
+  - 사유코드가 infra.*면 환경과 무관하게 #decisionos-infra로 라우팅.
+  - env=staging, 사유 미매칭 시 #decisionos-staging으로 라우팅.
+  - 동일 env+reason 키로 300초에 20회 초과 시 추가 전송 억제(드롭 로그/사유 반환).
+  - 라벨 카탈로그 v2의 color 필드가 모두 6자리 HEX이며 JSON 파싱/머지 성공.
+  - CI에서 ops/gate_q 테스트 단계가 그린.
+
+commands:
+  - "python scripts/wo_apply.py docs/work_orders/wo-v0.5.11s-2-ops-alerts-ratelimit-labels.yaml"
+  - "python scripts/doc_guard.py"
+  - "pytest -q tests/gates/gate_ops/ tests/gates/gate_q/test_label_palette_consistency_v1.py"
+
+rollback:
+  - "git revert -n HEAD && git commit -m 'revert: v0.5.11s-2 ops alerts/labels'"
+  - "git checkout configs/alerts/slack.json~1 configs/labels/label_catalog_v2.json~1 --"

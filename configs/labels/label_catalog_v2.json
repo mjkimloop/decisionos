@@ -1,24 +1,33 @@
 {
   "version": "v2",
   "groups": {
-    "infra":   { "weight": 1.00, "description": "플랫폼/인프라 이상" },
-    "perf":    { "weight": 0.90, "description": "성능 지표(p95/p99 등)" },
-    "canary":  { "weight": 0.85, "description": "카나리 정책/비교 위반" },
-    "quota":   { "weight": 0.70, "description": "할당량/레이트 제한" },
-    "budget":  { "weight": 0.60, "description": "비용/예산 초과" },
-    "anomaly": { "weight": 0.65, "description": "이상치/스파이크" },
-    "security":{ "weight": 1.00, "description": "보안/서명/리플레이" }
+    "infra":   { "weight": 1.00, "color": "ee0701", "description": "플랫폼/인프라 이상" },
+    "perf":    { "weight": 0.80, "color": "1f77b4", "description": "성능 지표(p95/p99 등)" },
+    "canary":  { "weight": 0.90, "color": "f39c12", "description": "카나리 정책/비교 위반" },
+    "quota":   { "weight": 0.70, "color": "8e44ad", "description": "할당량/레이트 제한" },
+    "budget":  { "weight": 0.60, "color": "27ae60", "description": "비용/예산 초과" },
+    "anomaly": { "weight": 0.75, "color": "16a085", "description": "이상치/스파이크" },
+    "security":{ "weight": 1.00, "color": "c0392b", "description": "보안/서명/리플레이" }
   },
   "labels": {
-    "reason:infra-latency":      { "group": "infra",   "color": "ee0701", "description": "인프라 지연(p95/p99) 초과" },
-    "reason:infra-error":        { "group": "infra",   "color": "b60205", "description": "인프라 오류율 초과" },
-    "reason:perf":               { "group": "perf",    "color": "1f77b4", "description": "성능 지표 위반" },
-    "reason:canary":             { "group": "canary",  "color": "f39c12", "description": "카나리 비교/정책 위반" },
-    "reason:quota":              { "group": "quota",   "color": "8e44ad", "description": "쿼ота/스로틀/거부" },
-    "reason:budget-exceeded":    { "group": "budget",  "color": "27ae60", "description": "예산 한도 초과" },
-    "reason:anomaly":            { "group": "anomaly", "color": "16a085", "description": "급증/이상 탐지" },
-    "reason:signature-invalid":  { "group": "security","color": "c0392b", "description": "HMAC 서명 불일치" },
-    "reason:replay-detected":    { "group": "security","color": "d35400", "description": "리플레이 탐지" },
-    "reason:rbac-deny":          { "group": "security","color": "2c3e50", "description": "RBAC 거부" }
+    "reason:infra:latency-p95":   { "group": "infra",   "color": "d73a49", "description": "P95 latency over SLO" },
+    "reason:infra:latency-p99":   { "group": "infra",   "color": "b60205", "description": "P99 latency over SLO" },
+    "reason:infra:error-rate":    { "group": "infra",   "color": "b60205", "description": "Error rate over SLO" },
+    "reason:infra-latency":       { "group": "infra",   "color": "ee0701", "description": "인프라 지연(p95/p99) 초과" },
+    "reason:infra-error":         { "group": "infra",   "color": "b60205", "description": "인프라 오류율 초과" },
+    "reason:perf:p99":            { "group": "perf",    "color": "0052cc", "description": "Perf P99 regression" },
+    "reason:perf":                { "group": "perf",    "color": "1f77b4", "description": "성능 지표 위반" },
+    "reason:canary:drift-high":   { "group": "canary",  "color": "f39c12", "description": "Canary drift beyond threshold" },
+    "reason:canary":              { "group": "canary",  "color": "f39c12", "description": "카나리 비교/정책 위반" },
+    "reason:quota:throttle":      { "group": "quota",   "color": "8e44ad", "description": "Quota soft limit throttling" },
+    "reason:quota:deny":          { "group": "quota",   "color": "6c3483", "description": "Quota hard deny" },
+    "reason:quota":               { "group": "quota",   "color": "8e44ad", "description": "쿼타/스로틀/거부" },
+    "reason:budget:exceeded":     { "group": "budget",  "color": "27ae60", "description": "Budget exceeded" },
+    "reason:budget-exceeded":     { "group": "budget",  "color": "27ae60", "description": "예산 한도 초과" },
+    "reason:anomaly:spike":       { "group": "anomaly", "color": "16a085", "description": "EWMA or Z-score spike" },
+    "reason:anomaly":             { "group": "anomaly", "color": "16a085", "description": "급증/이상 탐지" },
+    "reason:signature-invalid":   { "group": "security","color": "c0392b", "description": "HMAC 서명 불일치" },
+    "reason:replay-detected":     { "group": "security","color": "d35400", "description": "리플레이 탐지" },
+    "reason:rbac-deny":           { "group": "security","color": "2c3e50", "description": "RBAC 거부" }
   }
 }

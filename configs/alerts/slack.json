@@ -1,10 +1,28 @@
 {
   "webhook": "${DECISIONOS_SLACK_WEBHOOK}",
-  "channel": "#decisionos-deploy",
-  "mention": "@here",
-  "severity_map": {
-    "fail": ":rotating_light:",
-    "warn": ":warning:",
-    "pass": ":white_check_mark:"
+  "default_channel": "#decisionos-deploy",
+  "env_channels": {
+    "prod": "#decisionos-deploy",
+    "staging": "#decisionos-staging",
+    "dev": "#decisionos-dev"
+  },
+  "routing": {
+    "rules": [
+      { "match": { "reason_prefix": "infra." },   "channel": "#decisionos-infra" },
+      { "match": { "reason_prefix": "canary." },  "channel": "#decisionos-canary" },
+      { "match": { "reason_prefix": "quota." },   "channel": "#decisionos-billing" },
+      { "match": { "reason_prefix": "budget." },  "channel": "#decisionos-billing" }
+    ],
+    "fallback": "default_channel"
+  },
+  "mention": {
+    "fail": "@here",
+    "warn": "",
+    "pass": ""
+  },
+  "rate_limit": {
+    "window_sec": 300,
+    "max_events": 20,
+    "key": "env+reason"
   }
 }
