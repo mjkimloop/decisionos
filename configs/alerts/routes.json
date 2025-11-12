@@ -1,0 +1,15 @@
+{
+  "slack": {
+    "webhook_env": "DECISIONOS_SLACK_WEBHOOK",
+    "channel": "#decisionos-alerts"
+  },
+  "webhook": [
+    {
+      "name": "ops",
+      "url_env": "DECISIONOS_OPS_WEBHOOK"
+    }
+  ],
+  "filters": {
+    "min_severity": "warn"
+  }
+}

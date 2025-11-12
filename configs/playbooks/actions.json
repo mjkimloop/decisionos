@@ -1,0 +1,18 @@
+{
+  "reason:infra-latency:p95": [
+    "Scale out API pods",
+    "Enable cache layer"
+  ],
+  "reason:infra-error": [
+    "Rollback to last stable",
+    "Inspect error spike logs"
+  ],
+  "reason:budget-burn": [
+    "Freeze rollout",
+    "Reduce canary traffic to 5%"
+  ],
+  "default": [
+    "Open incident ticket",
+    "Notify on-call"
+  ]
+}

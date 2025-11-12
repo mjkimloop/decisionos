@@ -1,0 +1,13 @@
+{
+  "min_pct": 1,
+  "max_pct": 50,
+  "hysteresis": {
+    "up_ms": 900,
+    "down_ms": 300
+  },
+  "signals": {
+    "qps": "auto",
+    "cpu": "auto",
+    "queue_depth": "auto"
+  }
+}

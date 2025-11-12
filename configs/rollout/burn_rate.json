@@ -1,0 +1,10 @@
+{
+  "objective": {
+    "target_availability": 0.995
+  },
+  "window_sec": 3600,
+  "thresholds": {
+    "warn": 1.0,
+    "critical": 2.0
+  }
+}

@@ -1,0 +1,267 @@
+---
+meta:
+  version: v0.5.11t-6
+  date: 2025-11-11
+  owner: decisionos
+  summary: >
+    Risk Governor(다중 신호 융합) + Error-Budget Burn-rate 게이트 +
+    Shadow Sampler(부하 적응형) + 경보/플레이북 코멘트 확장 +
+    프로메테우스 계측 + CI 게이트 연동
+
+scope:
+  - Rollout/Risk:
+      - 다중 신호( drift_z, anomaly_score, infra.lat_p95, err_rate, quota_denies, budget_level ) 융합
+      - risk_score→ canary step_inc/cap/freeze/abort 정책 맵핑
+  - SRE/Burn-rate:
+      - SLO error budget 소모율(burn_rate) 계산, 임계 초과 시 fail-closed
+  - Shadow Control:
+      - QPS/CPU/Queue 기반 적응형 샘플링 비율 조정(상·하한, 히스테리시스)
+  - Alerts:
+      - Slack/Webhook 라우팅, reason 트렌드/버스트/버짓 초과/버른레이트 초과 트리거
+      - PR 코멘트 자동 '플레이북 제안' 섹션(사유코드→조치 매핑)
+  - Observability:
+      - Prometheus 계측( risk_score, burn_rate, shadow_pct, alert_counts )
+  - CI:
+      - 프리게이트 신호 합성→ 게이트 유닛/통합 → 포스트게이트 알림 스모크
+
+deliverables:
+  configs:
+    - configs/rollout/risk_governor.json:
+        description: "가중치/임계/맵핑표"
+        schema:
+          weights:
+            drift_z: 0.35
+            anomaly_score: 0.20
+            infra_p95_ms: 0.15
+            error_rate: 0.15
+            quota_denies: 0.10
+            budget_level: 0.05
+          norm:
+            drift_z: {type: "zscore", cap: 5.0}
+            anomaly_score: {type: "linear", min: 0, max: 1}
+            infra_p95_ms: {type: "minmax", min: 300, max: 2000}
+            error_rate: {type: "minmax", min: 0.0, max: 0.05}
+            quota_denies: {type: "minmax", min: 0, max: 100}
+            budget_level: {type: "enum", map: {ok: 0.0, warn: 0.5, exceeded: 1.0}}
+          mapping:
+            - {range: [0.00, 0.30], action: {mode: "promote", step_inc: 10, cap: 100}}
+            - {range: [0.30, 0.55], action: {mode: "canary", step_inc: 5, cap: 50}}
+            - {range: [0.55, 0.75], action: {mode: "canary", step_inc: 2, cap: 20}}
+            - {range: [0.75, 1.00], action: {mode: "freeze", step_inc: 0, cap: 0}}
+            - {range: [1.00, 9.99], action: {mode: "abort"}}
+
+    - configs/rollout/burn_rate.json:
+        description: "SLO 목표, 윈도, 임계"
+        schema:
+          objective:
+            target_availability: 0.995
+          window_sec: 3600
+          thresholds:
+            warn: 1.0
+            critical: 2.0
+
+    - configs/shadow/sampler.json:
+        description: "샘플러 상·하한/히스테리시스"
+        schema:
+          min_pct: 1
+          max_pct: 50
+          hysteresis:
+            up_ms: 900
+            down_ms: 300
+          signals:
+            qps: "auto"
+            cpu: "auto"
+            queue_depth: "auto"
+
+    - configs/alerts/routes.json:
+        description: "Slack/Webhook 라우팅"
+        schema:
+          slack:
+            webhook_env: "DECISIONOS_SLACK_WEBHOOK"
+            channel: "#decisionos-alerts"
+          webhook:
+            - {name: "ops", url_env: "DECISIONOS_OPS_WEBHOOK"}
+          filters:
+            min_severity: "warn"
+
+    - configs/playbooks/actions.json:
+        description: "reason_code→조치 템플릿"
+        schema:
+          "reason:infra-latency:p95": ["Scale out API pods", "Enable cache layer"]
+          "reason:infra-error": ["Rollback to last stable", "Inspect error spike logs"]
+          "reason:budget-burn": ["Freeze rollout", "Reduce canary traffic to 5%"]
+          "default": ["Open incident ticket", "Notify on-call"]
+
+  apps:
+    - apps/rollout/risk/governor.py:
+        description: "risk_score 계산/정책 결정"
+        functions:
+          - load_governor_config(path): "설정 로드"
+          - normalize_signal(value, norm_spec): "신호 정규화 (zscore/linear/minmax/enum)"
+          - compute_risk_score(signals, config): "가중 합산 → risk_score"
+          - get_action(risk_score, mapping): "맵핑 테이블에서 액션 결정"
+
+    - apps/rollout/risk/mapping.py:
+        description: "score→action 맵핑 유틸"
+        functions:
+          - find_action_for_score(score, mapping): "range 탐색"
+
+    - apps/sre/burnrate.py:
+        description: "error budget/소모율"
+        functions:
+          - compute_burn_rate(errors, total, objective, window_sec): "버짓 소모율 계산"
+          - check_threshold(burn_rate, thresholds): "warn/critical 판정"
+
+    - apps/experiment/shadow_sampler.py:
+        description: "적응형 샘플러"
+        functions:
+          - load_sampler_config(path): "설정 로드"
+          - adjust_sample_pct(current_pct, signals, config): "히스테리시스 적용 조정"
+
+    - apps/alerts/dispatcher.py:
+        description: "Slack/Webhook 발행"
+        functions:
+          - load_routes(path): "라우팅 설정 로드"
+          - dispatch_alert(level, reason, message, routes): "Slack/Webhook 발송"
+
+    - apps/ops/metrics.py:
+        description: "Prometheus 계측 등록"
+        metrics:
+          - risk_score: Gauge
+          - burn_rate: Gauge
+          - shadow_pct: Gauge
+          - alerts_total: Counter(level)
+
+  jobs:
+    - jobs/risk_decide_and_stage.py:
+        description: "risk→stage 파일/메타 반영"
+        logic: |
+          signals = load_signals()
+          config = load_governor_config()
+          risk_score = compute_risk_score(signals, config)
+          action = get_action(risk_score, config["mapping"])
+
+          write_file("var/rollout/desired_stage.txt", action["mode"])
+          write_json("var/rollout/desired_meta.json", {"risk_score": risk_score, "action": action})
+
+    - jobs/burnrate_gate.py:
+        description: "burn-rate 게이트(비정상시 2로 종료)"
+        logic: |
+          config = load_burn_rate_config()
+          metrics = load_metrics()
+          burn_rate = compute_burn_rate(metrics, config)
+          level = check_threshold(burn_rate, config["thresholds"])
+
+          if level == "critical":
+            write_evidence_reason("reason:budget-burn")
+            sys.exit(2)
+
+    - jobs/shadow_autotune.py:
+        description: "주기적 샘플러 조정"
+        logic: |
+          config = load_sampler_config()
+          current_pct = load_current_shadow_pct()
+          signals = load_load_signals()
+          new_pct = adjust_sample_pct(current_pct, signals, config)
+          write_shadow_config(new_pct)
+
+  pipeline:
+    - pipeline/release/pre_gate_risk.sh:
+        description: "프리게이트 신호 합성"
+        logic: |
+          #!/bin/bash
+          set -e
+          echo "[PRE] Synthesizing signals for risk governor..."
+          python scripts/ci/synthesize_signals.py --out var/signals/current.json
+          echo "[OK] Signals ready"
+
+    - pipeline/release/gate_burn_and_risk.sh:
+        description: "게이트 실행(버른/리스크)"
+        logic: |
+          #!/bin/bash
+          set -e
+          echo "[GATE] Running burn-rate gate..."
+          python -m jobs.burnrate_gate
+
+          echo "[GATE] Running risk governor..."
+          python -m jobs.risk_decide_and_stage
+
+          echo "[OK] Gates passed"
+
+    - pipeline/release/post_alerts.sh:
+        description: "포스트 알림/PR 코멘트 강화"
+        logic: |
+          #!/bin/bash
+          set -e
+          echo "[POST] Dispatching alerts..."
+          python -m apps.alerts.dispatcher --dry-run=false
+
+          echo "[POST] Annotating PR with playbook..."
+          python scripts/ci/annotate_release_gate.py --playbook --diff-link --artifact-links
+
+          echo "[OK] Alerts dispatched"
+
+tests:
+  - tests/gates/gate_u/test_risk_governor_map_v1.py:
+      description: "다양한 신호 조합→risk_score/액션 기대치 검증"
+      tests:
+        - test_low_risk_promote: "모든 신호 정상 → risk<0.3 → promote"
+        - test_medium_risk_canary: "중간 위험 → 0.3<risk<0.75 → canary 감속"
+        - test_high_risk_freeze: "높은 위험 → 0.75<risk<1.0 → freeze"
+        - test_critical_risk_abort: "치명적 위험 → risk>1.0 → abort"
+
+  - tests/gates/gate_u/test_burn_rate_gate_v1.py:
+      description: "버짓 소모율 2.1x → 비정상 종료(2) & reason 기록"
+      tests:
+        - test_burn_rate_normal: "소모율 0.5x → 통과"
+        - test_burn_rate_warn: "소모율 1.2x → warn 로그만"
+        - test_burn_rate_critical: "소모율 2.1x → exit(2) + reason:budget-burn"
+
+  - tests/gates/gate_u/test_shadow_sampler_hysteresis_v1.py:
+      description: "급등/완화 구간에서 상·하행 다르게 반응"
+      tests:
+        - test_load_spike_down: "부하 급등 → 즉시 샘플링% 감소"
+        - test_load_relief_up: "부하 완화 → 지연 후 샘플링% 증가"
+        - test_hysteresis_timing: "up_ms > down_ms 검증"
+
+  - tests/integration/test_risk_to_stage_end_to_end_v1.py:
+      description: "합성 신호→stage 토큰/메타 일관성"
+      tests:
+        - test_end_to_end_flow: "신호 입력 → risk 계산 → stage 파일 생성 검증"
+
+  - tests/e2e/test_pr_playbook_annotation_v1.py:
+      description: "코멘트에 플레이북 라인 주입"
+      tests:
+        - test_playbook_in_comment: "PR 코멘트에 reason→action 매핑 포함"
+
+ci_integration:
+  pre_gate:
+    - "bash pipeline/release/pre_gate_risk.sh"
+  gate:
+    - "pytest -q -m gate_u tests/gates/gate_u/"
+    - "bash pipeline/release/gate_burn_and_risk.sh"
+  post_gate:
+    - "bash pipeline/release/post_alerts.sh"
+
+acceptance:
+  - "동일 입력에서 governor가 일관된 risk_score와 action(canary/promote freeze/abort)을 산출"
+  - "burn_rate가 critical 임계 초과 시 비정상 종료코드(2)와 Evidence에 reason:budget-burn 기록"
+  - "shadow sampler가 부하 급등 시 즉시↓, 완화 시 지연↑(히스테리시스) 동작"
+  - "Slack/Webhook/PR 코멘트에 '플레이북 제안' 섹션 포함(사유코드/근거/추천조치)"
+  - "Prometheus에서 4개 핵심 메트릭 노출 및 CI 아티팩트에 스냅샷 포함"
+
+doc_guard:
+  - TechSpec: "Risk Governor / Burn Rate Gate / Shadow Sampler / Alerts"
+  - Plan: "마일스톤 t-6 추가, 운영 Runbook 업데이트"
+  - Index & CHANGELOG: "자동 반영"
+
+rollout:
+  stage: "v0.5.11t-6"
+  steps:
+    - "configs 5개 파일 생성"
+    - "apps 6개 모듈 구현"
+    - "jobs 3개 생성"
+    - "pipeline 3개 스크립트 생성"
+    - "tests 5개 파일 작성"
+    - "전체 테스트 실행 및 검증"
+    - "커밋: feat(ops): Risk Governor + Burn-rate Gate + Shadow Sampler + Alerts (v0.5.11t-6)"
