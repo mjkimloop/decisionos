@@ -1,80 +1,56 @@
-#!/usr/bin/env python3
-"""
-Burn-rate Gate Job
-Error budget 소모율 게이트 (critical 시 비정상 종료)
-"""
-import os
-import json
-import sys
-import argparse
-from apps.sre.burnrate import load_burn_rate_config, compute_burn_rate, check_threshold
-from apps.ops.metrics import update_burn_rate, increment_alert
+from __future__ import annotations
+import argparse, json, os, sys
+from typing import Any, Dict
+from apps.sre.burnrate import BurnRateConfig, compute_burn_rate, evaluate_burn_rate
+from apps.ops.metrics import observe_burn_rate
 
-
-def load_metrics(path: str = "var/metrics/errors.json") -> dict:
-    """에러/요청 메트릭 로드"""
-    if not os.path.exists(path):
-        print(f"[WARN] Metrics file not found: {path}, using defaults")
-        return {"errors": 0, "total": 1000}
-
+def _load_json(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
-def write_evidence_reason(reason: str, path: str = "var/evidence/gate_reasons.jsonl"):
-    """Evidence에 reason 추가"""
-    os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
-
-    entry = {"reason": reason, "source": "burnrate_gate"}
-
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-
-def main():
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--metrics", default="var/metrics/errors.json")
-    ap.add_argument("--config", default="configs/rollout/burn_rate.json")
+    ap.add_argument("--config", default=os.environ.get("DECISIONOS_BURN_CFG", "configs/rollout/burn_rate.json"))
+    ap.add_argument("--metrics", default=os.environ.get("DECISIONOS_BURN_INPUT", "var/evidence/perf.json"))
     ap.add_argument("--evidence", default="var/evidence/gate_reasons.jsonl")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
-    # Load
-    config = load_burn_rate_config(args.config)
-    metrics = load_metrics(args.metrics)
-
-    errors = metrics.get("errors", 0)
-    total = metrics.get("total", 1000)
-
-    # Compute burn rate
-    burn_rate = compute_burn_rate(
-        errors,
-        total,
-        config["objective"],
-        config["window_sec"]
+    cfg = _load_json(args.config)
+    perf = _load_json(args.metrics) if os.path.exists(args.metrics) else {"total": 0, "errors": 0}
+    br_cfg = BurnRateConfig(
+        target_availability=cfg.get("objective",{}).get("target_availability", 0.995),
+        window_sec=int(cfg.get("window_sec", 3600)),
+        thresholds=cfg.get("thresholds", {"warn":1.0,"critical":2.0})
     )
-    print(f"[INFO] Burn rate: {burn_rate:.4f}")
+    br = compute_burn_rate(int(perf.get("total",0)), int(perf.get("errors",0)), br_cfg)
+    lvl = evaluate_burn_rate(br, br_cfg)
+    observe_burn_rate(br)
 
-    # Check threshold
-    level = check_threshold(burn_rate, config["thresholds"])
-    print(f"[INFO] Threshold level: {level}")
-
-    # Update metrics
-    update_burn_rate(burn_rate)
-
-    # Handle critical
-    if level == "critical":
-        print("[CRITICAL] Burn rate exceeded critical threshold!")
-        write_evidence_reason("reason:budget-burn", args.evidence)
-        increment_alert("critical")
-        sys.exit(2)
-    elif level == "warn":
-        print("[WARN] Burn rate exceeded warn threshold")
-        increment_alert("warn")
+    msg = f"[burn_gate] burn_rate={br:.3f} level={lvl}"
+    if lvl == "ok":
+        print(msg)
+        print("[OK] Burn rate gate passed")
+    elif lvl == "warn":
+        print(msg)
+        print("[WARN] Burn rate elevated but within acceptable range")
     else:
-        print("[OK] Burn rate within acceptable range")
+        print(msg)
+        print("[CRITICAL] Burn rate exceeded threshold - blocking deployment")
+        # Write evidence for critical burn rate
+        os.makedirs(os.path.dirname(args.evidence) if os.path.dirname(args.evidence) else ".", exist_ok=True)
+        with open(args.evidence, "a", encoding="utf-8") as f:
+            evidence = {
+                "level": "critical",
+                "reason": "reason:budget-burn",
+                "burn_rate": br,
+                "threshold": br_cfg.thresholds.get("critical", 2.0) if br_cfg.thresholds else 2.0,
+                "message": f"Error budget burn rate {br:.2f}x exceeds critical threshold"
+            }
+            f.write(json.dumps(evidence, ensure_ascii=False) + "\n")
 
-    sys.exit(0)
-
+    if lvl == "critical":
+        return 2
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

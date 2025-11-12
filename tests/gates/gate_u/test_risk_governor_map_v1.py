@@ -3,7 +3,7 @@ Test Risk Governor Mapping v1
 다양한 신호 조합 → risk_score/액션 검증
 """
 import pytest
-from apps.rollout.risk.governor import normalize_signal, compute_risk_score, get_action
+from apps.rollout.risk.governor import RiskGovernor, GovernorConfig
 
 
 @pytest.mark.gate_u
@@ -44,8 +44,8 @@ def test_low_risk_promote():
         "budget_level": "ok"  # 정상
     }
 
-    risk_score = compute_risk_score(signals, config)
-    action = get_action(risk_score, config["mapping"])
+    gov = RiskGovernor(GovernorConfig(**config))
+    risk_score, action = gov.decide(signals)
 
     assert risk_score < 0.3
     assert action["mode"] == "promote"
@@ -90,8 +90,8 @@ def test_medium_risk_canary():
         "budget_level": "ok"
     }
 
-    risk_score = compute_risk_score(signals, config)
-    action = get_action(risk_score, config["mapping"])
+    gov = RiskGovernor(GovernorConfig(**config))
+    risk_score, action = gov.decide(signals)
 
     assert 0.3 <= risk_score < 0.75
     assert action["mode"] == "canary"
@@ -136,8 +136,8 @@ def test_high_risk_freeze():
         "budget_level": "warn"  # 경고
     }
 
-    risk_score = compute_risk_score(signals, config)
-    action = get_action(risk_score, config["mapping"])
+    gov = RiskGovernor(GovernorConfig(**config))
+    risk_score, action = gov.decide(signals)
 
     assert 0.75 <= risk_score < 1.0
     assert action["mode"] == "freeze"
@@ -182,8 +182,8 @@ def test_critical_risk_abort():
         "budget_level": "exceeded"  # 초과
     }
 
-    risk_score = compute_risk_score(signals, config)
-    action = get_action(risk_score, config["mapping"])
+    gov = RiskGovernor(GovernorConfig(**config))
+    risk_score, action = gov.decide(signals)
 
     assert risk_score >= 1.0
     assert action["mode"] == "abort"
