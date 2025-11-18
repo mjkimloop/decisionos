@@ -1,28 +1,83 @@
+# Cards API Prometheus 알람 규칙
+# 캐시/재시도 이상 징후 감지
+
 groups:
-- name: decisionos-cards
-  rules:
-  - alert: CardsEtagHitRateLow
-    expr: (sum by(job) (rate(decisionos_cards_etag_total{result="hit"}[5m])) /
-           clamp_min(sum by(job) (rate(decisionos_cards_etag_total[5m])), 1e-9)) < 0.60
-    for: 10m
-    labels: {severity: warning, team: ops}
-    annotations:
-      summary: "ETag hit-rate low (<60%)"
-      description: "Investigate cache/Vary issues."
+  - name: cards_cache
+    interval: 1m
+    rules:
+      # ETag Hit Rate 저하 경고
+      - alert: CardsETagHitRateDropped
+        expr: |
+          rate(decisionos_cards_etag_total{result="hit"}[5m])
+          /
+          rate(decisionos_cards_etag_total[5m]) < 0.6
+        for: 5m
+        labels:
+          severity: warning
+          component: cards-api
+          category: cache
+        annotations:
+          summary: "Cards ETag hit rate below 60%"
+          description: "Current hit rate: {{ $value | humanizePercentage }}. Normal range: 60-80%. Check index refresh frequency and catalog SHA stability."
+          runbook_url: "https://github.com/mjkimloop/decisionos/blob/main/docs/ops/RUNBOOK-OPS-CARDS.md#etag-hit-rate-저하"
 
-  - alert: HttpRetryRateHigh
-    expr: (sum(rate(decisionos_http_retry_total[5m])) /
-           clamp_min(sum(rate(decisionos_http_requests_total[5m])), 1e-9)) > 0.05
-    for: 10m
-    labels: {severity: warning, team: ops}
-    annotations:
-      summary: "HTTP retry rate >5%"
-      description: "Downstream instability suspected."
+      # HTTP 재시도율 급증 경고
+      - alert: HTTPRetryRateSpiked
+        expr: |
+          rate(decisionos_http_retry_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: executor
+          category: http
+        annotations:
+          summary: "HTTP retry rate above 5%"
+          description: "Current retry rate: {{ $value | humanizePercentage }}. Normal: <1%. Check downstream service health and network stability."
+          runbook_url: "https://github.com/mjkimloop/decisionos/blob/main/docs/ops/RUNBOOK-OPS-CARDS.md#http-retry-rate-급증"
 
-  - alert: CardsLatencyP95High
-    expr: histogram_quantile(0.95, sum(rate(decisionos_cards_latency_ms_bucket[5m])) by (le)) > 250
-    for: 10m
-    labels: {severity: critical, team: ops}
-    annotations:
-      summary: "Cards p95 latency > 250ms"
-      description: "Investigate cache store or evidence IO."
+      # Cards P95 레이턴시 급증 위험
+      - alert: CardsP95LatencySpiked
+        expr: |
+          histogram_quantile(0.95,
+            rate(decisionos_cards_latency_ms_bucket[5m])
+          ) > 250
+        for: 3m
+        labels:
+          severity: critical
+          component: cards-api
+          category: performance
+        annotations:
+          summary: "Cards P95 latency > 250ms"
+          description: "Current P95: {{ $value }}ms. SLA: <250ms. Check index size, aggregation logic, and disk I/O."
+          runbook_url: "https://github.com/mjkimloop/decisionos/blob/main/docs/ops/RUNBOOK-OPS-CARDS.md#cards-p95-latency-급증"
+
+      # Delta 수락률 저하 (캐시 효율성 저하)
+      - alert: DeltaAcceptedRateDropped
+        expr: |
+          rate(decisionos_cards_delta_accepted_total[5m])
+          /
+          rate(decisionos_cards_200_total[5m]) < 0.2
+        for: 5m
+        labels:
+          severity: info
+          component: cards-api
+          category: cache
+        annotations:
+          summary: "Delta accepted rate below 20%"
+          description: "Current rate: {{ $value | humanizePercentage }}. Normal: 20-40%. Frequent data changes or snapshot TTL too short."
+
+      # 에러율 급증 (5xx, 4xx 제외 401/403)
+      - alert: CardsErrorRateSpiked
+        expr: |
+          rate(decisionos_cards_5xx_total[5m])
+          /
+          rate(decisionos_cards_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          component: cards-api
+          category: reliability
+        annotations:
+          summary: "Cards error rate above 1%"
+          description: "Current error rate: {{ $value | humanizePercentage }}. Check application logs and downstream dependencies."
+          runbook_url: "https://github.com/mjkimloop/decisionos/blob/main/docs/ops/RUNBOOK-OPS-CARDS.md#에러율-급증"

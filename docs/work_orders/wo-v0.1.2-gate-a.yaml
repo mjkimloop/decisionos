@@ -60,3 +60,38 @@ work:
         - packages/rules/triage/*.yaml
       acceptance:
         - 린터 경고 0, 샘플 CSV 리포트 생성
+
+  codex:
+    - id: X-01
+      title: Executor 파이프라인 v1
+      deliverables:
+        - apps/executor/{pipeline.py,hooks/checklist.py,tests/*}
+      acceptance:
+        - /decide 응답 필드 완비, p50<200ms(모델 미호출)
+    - id: X-02
+      title: Gateway 3 API v1
+      deliverables:
+        - apps/gateway/main.py, routers/*.py(옵션)
+      acceptance:
+        - /decide|/simulate|/explain, API Key + RBAC, e2e 3건 통과
+    - id: P-01
+      title: dosctl v0
+      deliverables:
+        - cli/dosctl/main.py
+      acceptance:
+        - 샘플 JSON/CSV로 정상 작동
+
+  gemini:
+    - id: G-01
+      title: Switchboard v0.1(폴백)
+      deliverables:
+        - apps/switchboard/{router.py,adapters/local.py,adapters/openai.py(mock),tests/*}
+      acceptance:
+        - 타임아웃/에러 시 로컬 폴백 단위테스트 10+
+    - id: SEC-01
+      title: 보안 최소통제 6/6
+      deliverables:
+        - apps/gateway/security/*, apps/gateway/middleware/*
+      acceptance:
+        - 체크리스트 6/6 + e2e 3건, 문서 반영
+

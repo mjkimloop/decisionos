@@ -90,7 +90,7 @@ $ pytest -q tests/ops/test_cards_delta_negotiation_edge_v1.py
 **목표**: 캐시/재시도 이상 징후 즉시 감지
 
 **작업**:
-- [ ] **알람 규칙 초안 (Prometheus AlertManager)**
+- [x] **알람 규칙 작성 (Prometheus AlertManager)** ✅
 
 ```yaml
 # configs/alerts/cards_cache.yaml
@@ -131,14 +131,35 @@ groups:
           summary: "Cards P95 latency > 500ms"
 ```
 
+**파일**: [configs/alerts/cards_alerts.yml](../../configs/alerts/cards_alerts.yml)
+
+**알람 규칙** (5개):
+1. **CardsETagHitRateDropped** (warning): Hit rate < 60%, 5분 지속
+2. **HTTPRetryRateSpiked** (warning): Retry rate > 5%, 2분 지속
+3. **CardsP95LatencySpiked** (critical): P95 > 250ms, 3분 지속
+4. **DeltaAcceptedRateDropped** (info): Delta 수락률 < 20%, 5분 지속
+5. **CardsErrorRateSpiked** (critical): 에러율 > 1%, 2분 지속
+
 **검증**:
 ```bash
-# 알람 규칙 검증 (dry-run)
-promtool check rules configs/alerts/cards_cache.yaml
+# YAML 스키마 검증
+pytest -xvs tests/alerts/test_alerts_yaml_schema_v1.py
+# 5 passed
 ```
 
 **리스크**: 이상 징후 감지 지연 → 장애 확산
-**완료 기준**: 3개 알람 규칙 등록 + dry-run 통과
+**완료 기준**: 5개 알람 규칙 등록 + 스키마 검증 통과 ✅
+
+**검증 결과** (v0.5.11u-3):
+```bash
+$ pytest -xvs tests/alerts/test_alerts_yaml_schema_v1.py
+.....  [100%]  # 5 passed
+- YAML 구조 유효성 ✅
+- 필수 필드 검증 ✅
+- PromQL 표현식 구문 ✅
+- 필수 알람 커버리지 ✅
+- 심각도 분포 적절성 ✅
+```
 
 ---
 

@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
-date: 2025-11-12
-status: open
-summary: 운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선
+version: v0.1.2s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+date: 2025-11-02
+status: locked
+summary: Gate-A 통과용 작업지시 + 문서 자동기입 도입
 -->
 ## v0.5.11u — Prod Readiness (Freeze · Burn · GameDay)
 - 전역 Freeze 플래그와 캘린더(`configs/freeze/windows.yaml`) → 카나리/프로모션 fail-closed, `deploy:override_freeze` 예외
@@ -201,28 +201,19 @@ enforcement:
 - Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
 - Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
 - Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
+- Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
+- Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
+- Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
 <!-- AUTOGEN:END:Open Issues -->
 
 <!-- AUTOGEN:BEGIN:Security Controls -->
-최소 통제 6/6 (v0.1.3 기준) — 구현 + 문서화
-1) at-rest 암호화(AES-256 키랩퍼 스텁) — audit.ndjson, export/* 마스킹
-2) in-transit 보호(TLS dev 예외, API Key 필수) — prod는 TLS 강제
-3) RBAC 3계층(admin/agent/auditor) — 라우트별 접근표 첨부
-4) OAuth2(+MFA 옵션) dev 토큰 발급 — /auth/token(mock)
-5) DLP/마스킹(주민/계좌/연락처), CSV export 제한 — 패턴/샘플 포함
-6) 동의/철회/파기 API + 감사 로그 — /api/v1/consent/*
-추가 통제(고객 PoV):
-- IP Allowlist(nginx/middleware) — tenant.yaml의 ip_allowlist 반영
-- Secrets Handling — secrets/ 볼륨 마운트(읽기전용), .env.client만 참조
-- Lineage — consent_snapshot + decision_input_hash 함께 보관
-청구 보안/컴플라이언스 추가:
-- PII 최소화: 인보이스에 개인식별정보 금지(회사명/담당 성만)
-- 보존: usage_events 90일, summary 1년(드라이런)
-- 무결성: 인보이스 해시/서명, 웹훅 HMAC(shared secret)
-- 멱등성: idempotency‑key 필수, 중복 요청 차단
-보호 조치:
-- /healthz는 내부 전용, /readyz는 IP allowlist, /livez와 /admin/*는 RBAC+HMAC 옵션
-- 카오스/드릴 엔드포인트는 로컬 인증 토큰 별도
+최소 통제 6/6 (v0.1.2 기준)
+1) at-rest 암호화(AES-256, 키 래퍼 스텁)
+2) in-transit 보호(TLS dev 예외, API Key 필수)
+3) RBAC 3계층(admin/agent/auditor)
+4) OAuth2(+MFA 옵션) dev 토큰 발급
+5) DLP/마스킹(주민/계좌/연락처), CSV export 제한
+6) 동의/철회/파기 API + 로그
 <!-- AUTOGEN:END:Security Controls -->
 
 

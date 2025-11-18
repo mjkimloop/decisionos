@@ -1,8 +1,8 @@
 <!--
-version: v0.5.11s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
-date: 2025-11-12
-status: open
-summary: 운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선
+version: v0.1.2s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+date: 2025-11-02
+status: locked
+summary: Gate-A 통과용 작업지시 + 문서 자동기입 도입
 -->
 
 # DecisionOS Implementation Plan
@@ -894,3 +894,18 @@ D+2: Drift 리포트 모니터링, 라벨 변경 시 카드 즉시 반영 확인
 - (내부 리포만) Labels→Cards Sync 호출(ops:write 필요)
 - Fork-safe comment upsert (App 토큰)
 <!-- AUTOGEN:END:CI Steps -->
+
+<!-- AUTOGEN:BEGIN:Milestones -->
+W2 Gate-A 마일스톤(현행):
+- /decide e2e 3케이스 200 OK, 평균 <300ms(모델 미호출)
+- dosctl simulate → JSON+HTML 리포트 산출
+- 보안 최소통제 6/6 체크 통과
+- 감사 NDJSON 해시 체인(prev→curr) 일관 확인
+<!-- AUTOGEN:END:Milestones -->
+
+<!-- AUTOGEN:BEGIN:Next Actions -->
+Day 0–1: 스키마/DSL/Executor 코어
+Day 2: Gateway 3 API + dosctl
+Day 3: Switchboard 폴백 + Offline Eval 리포트
+Day 4–5: 보안 6/6 + Lending 규칙 6개 튜닝
+<!-- AUTOGEN:END:Next Actions -->
