@@ -193,19 +193,24 @@ $ pytest -xvs tests/alerts/test_alerts_yaml_schema_v1.py
 
 ### 5. 릴리즈 컷
 
-**목표**: v0.5.11t+2 태그 고정 + 24시간 프리즈
+**목표**: v0.5.11t+3 태그 고정 + 24시간 프리즈
 
 **작업**:
-- [ ] **Git 태그 생성**
+- [x] **Git 태그 생성** ✅
 ```bash
-git tag -a v0.5.11t+2 -m "feat(hardening): Cards Delta-ETag + HTTP retry policy (Go 기준 통과)"
-git push origin v0.5.11t+2
+git tag -a v0.5.11t+3 -m "feat(production-ready): 48h priority tasks complete - skeleton hygiene, boundary tests, alerts, RUNBOOK"
+git push origin v0.5.11t+3 --follow-tags
 ```
 
+- [x] **CHANGELOG.md 업데이트** ✅
+  - v0.5.11u-1: 스켈레톤 위생 (NUL 제거, CI 게이트)
+  - v0.5.11u-2: 경계 테스트 (ETag 충돌 방지, Delta 협상)
+  - v0.5.11u-3: Prometheus 알람 (5개 규칙)
+  - v0.5.11u-4: 운영 RUNBOOK (캐시 정책, 트러블슈팅)
+
 - [ ] **릴리즈 프리즈 선언** (24시간)
-  - CHANGELOG.md 업데이트
   - PR 라벨: `release-freeze` (머지 차단)
-  - Slack 공지: "v0.5.11t+2 릴리즈 프리즈 24h"
+  - Slack 공지: "v0.5.11t+3 릴리즈 프리즈 24h - 메트릭 모니터링"
 
 - [ ] **실트래픽 샘플 검증**
   - Canary 환경 1% 트래픽
@@ -223,7 +228,7 @@ curl -s http://canary.decisionos.internal/metrics | grep decisionos_cards_etag_t
 ```
 
 **리스크**: 프리즈 없이 머지 → 회귀 발생
-**완료 기준**: 태그 생성 + 24h 프리즈 + Canary Green
+**완료 기준**: 태그 생성 + CHANGELOG 업데이트 + 24h 프리즈 + Canary Green ✅ (태그/CHANGELOG 완료)
 
 ---
 
