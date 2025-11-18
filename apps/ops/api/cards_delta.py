@@ -4,6 +4,7 @@ import email.utils
 import hashlib
 import json
 import os
+import random
 import time
 from typing import Any, Dict
 
@@ -23,6 +24,7 @@ TENANT = os.getenv("DECISIONOS_TENANT", "").strip()
 CATALOG_SHA = os.getenv("DECISIONOS_LABEL_CATALOG_SHA", "").strip()
 _TTL = int(os.getenv("DECISIONOS_CARDS_TTL", "60"))
 _SNAP = SnapshotStore()
+_FORCE_FULL_PROBE_PCT = int(os.getenv("DECISIONOS_DELTA_FORCE_FULL_PROBE_PCT", "0") or "0")
 
 router = APIRouter(
     prefix="/ops/cards",
@@ -38,13 +40,46 @@ def _cache_key(q: Dict[str, Any]) -> str:
     return ":".join(parts)
 
 
-def _etag(body: dict, q: Dict[str, Any]) -> str:
-    raw = json.dumps({"t": TENANT, "c": CATALOG_SHA, "body": body.get("generated_at"), "q": q}, sort_keys=True, separators=(",", ":")).encode()
-    return '"' + hashlib.sha256(raw).hexdigest() + '"'
+def _small_body_fingerprint(obj: dict, topn: int = 10) -> str:
+    """Lightweight fingerprint to catch sparse content changes."""
+    top = obj.get("top_reasons", [])[:topn]
+    core = json.dumps(top, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(core).hexdigest()
+
+
+def _compute_etag_seed(index_path: str, tenant: str, catalog_sha: str, query_hash: str) -> str:
+    """외부 테스트(property)용: 인덱스 파일 내용을 읽어 ETag 시드를 생성."""
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    buckets = data.get("buckets") or []
+    reason_scores: Dict[str, float] = {}
+    for b in buckets:
+        reasons = b.get("reasons") or {}
+        for lbl, cnt in reasons.items():
+            reason_scores[lbl] = reason_scores.get(lbl, 0.0) + float(cnt or 0)
+    top = sorted(reason_scores.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    fp = hashlib.sha256(json.dumps(top, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    mtime = 0.0
+    try:
+        mtime = os.path.getmtime(index_path)
+    except Exception:
+        pass
+    seed = {"tenant": tenant, "catalog": catalog_sha, "q": query_hash, "mtime": mtime, "fp": fp}
+    return json.dumps(seed, sort_keys=True, separators=(",", ":"))
+
+
+def _etag(seed: str) -> str:
+    return '"' + hashlib.sha256(seed.encode()).hexdigest() + '"'
 
 
 def _httpdate(ts: float) -> str:
     return email.utils.formatdate(ts, usegmt=True)
+
+
+_COUNTERS = {"cards_200": 0, "cards_304": 0, "cards_delta": 0}
 
 
 @router.get("/reason-trends")
@@ -52,14 +87,22 @@ async def reason_trends(request: Request, period: str = "7d", bucket: str = "day
     q = {"period": period, "bucket": bucket}
     body_obj = compute_reason_trends(period=period, bucket=bucket)
     body_json = json.dumps(body_obj, ensure_ascii=False)
-    etag = _etag(body_obj, q)
+    qhash = hashlib.sha1(json.dumps(q, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    index_path = (body_obj.get("_meta") or {}).get("index_path") or os.getenv("DECISIONOS_EVIDENCE_INDEX", "")
+    seed = _compute_etag_seed(index_path, TENANT, CATALOG_SHA, qhash)
+    etag = _etag(seed)
 
     if request.headers.get("If-None-Match") == etag:
-        resp = Response(status_code=304)
-        resp.headers["ETag"] = etag
-        resp.headers["Cache-Control"] = f"private, max-age={_TTL}"
-        resp.headers["Vary"] = "Authorization, X-Scopes, X-Tenant, Accept, If-None-Match, If-Modified-Since"
-        resp.headers["Content-Length"] = "0"
+        headers = {
+            "ETag": etag,
+            "Cache-Control": f"private, max-age={_TTL}",
+            "Vary": "Authorization, X-Scopes, X-Tenant, Accept, If-None-Match, If-Modified-Since",
+            "Content-Length": "0",
+        }
+        resp = Response(content=b"", status_code=304, headers=headers)
+        _COUNTERS["cards_304"] += 1
+        if METRICS:
+            await METRICS.inc("decisionos_cards_etag_total", {"result": "hit"})
         return resp
 
     snap_key = _cache_key(q)
@@ -81,13 +124,30 @@ async def reason_trends(request: Request, period: str = "7d", bucket: str = "day
         except Exception:
             delta = None
 
+    base = request.headers.get("X-Delta-Base-ETag")
+    forced_full = 0 < _FORCE_FULL_PROBE_PCT and random.randint(0, 99) < _FORCE_FULL_PROBE_PCT
+    delta_accepted = "1" if delta is not None else "0"
+    if forced_full:
+        delta = None
+        delta_accepted = "0"
+    elif base and base != etag:
+        delta = None
+        delta_accepted = "0"
+
     payload = {"data": body_obj, "delta": delta, "_meta": {"tenant": TENANT, "catalog_sha": CATALOG_SHA}}
     resp = Response(content=json.dumps(payload, ensure_ascii=False), media_type="application/json")
     resp.headers["ETag"] = etag
     resp.headers["Last-Modified"] = _httpdate(time.time())
     resp.headers["Cache-Control"] = f"private, max-age={_TTL}"
     resp.headers["Vary"] = "Authorization, X-Scopes, X-Tenant, Accept, If-None-Match, If-Modified-Since"
+    resp.headers["X-Delta-Accepted"] = delta_accepted
+    resp.headers["X-Delta-Base-ETag"] = etag
+    if forced_full:
+        resp.headers["X-Delta-Probe"] = "1"
     _SNAP.set(snap_key, body_json)
+    _COUNTERS["cards_200"] += 1
+    if delta:
+        _COUNTERS["cards_delta"] += 1
     if METRICS:
         await METRICS.inc("decisionos_cards_etag_total", {"result": "miss"})
     return resp

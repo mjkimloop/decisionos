@@ -1,0 +1,28 @@
+groups:
+- name: decisionos-cards
+  rules:
+  - alert: CardsEtagHitRateLow
+    expr: (sum by(job) (rate(decisionos_cards_etag_total{result="hit"}[5m])) /
+           clamp_min(sum by(job) (rate(decisionos_cards_etag_total[5m])), 1e-9)) < 0.60
+    for: 10m
+    labels: {severity: warning, team: ops}
+    annotations:
+      summary: "ETag hit-rate low (<60%)"
+      description: "Investigate cache/Vary issues."
+
+  - alert: HttpRetryRateHigh
+    expr: (sum(rate(decisionos_http_retry_total[5m])) /
+           clamp_min(sum(rate(decisionos_http_requests_total[5m])), 1e-9)) > 0.05
+    for: 10m
+    labels: {severity: warning, team: ops}
+    annotations:
+      summary: "HTTP retry rate >5%"
+      description: "Downstream instability suspected."
+
+  - alert: CardsLatencyP95High
+    expr: histogram_quantile(0.95, sum(rate(decisionos_cards_latency_ms_bucket[5m])) by (le)) > 250
+    for: 10m
+    labels: {severity: critical, team: ops}
+    annotations:
+      summary: "Cards p95 latency > 250ms"
+      description: "Investigate cache store or evidence IO."

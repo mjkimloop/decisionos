@@ -68,7 +68,8 @@ def http_call(decision: Dict[str, Any]) -> Any:
     RETRY_ON_STATUS = {429, 500, 502, 503, 504}
     IMMEDIATE_FAIL_STATUS = {401, 403, 422}  # Auth/validation errors - no retry
     IDEMPOTENT = {"GET", "HEAD", "OPTIONS", "DELETE"}
-    allow_non_idempotent = os.getenv("DECISIONOS_EXEC_HTTP_RETRY_NON_IDEMPOTENT", "0") == "1"
+    allow_non_idempotent_env = os.getenv("DECISIONOS_EXEC_HTTP_RETRY_NON_IDEMPOTENT", "0") == "1"
+    idempotent_flag = bool(decision.get("idempotent", False))
 
     def _should_retry(method: str, status_code: int, exc: Exception | None) -> bool:
         if exc is not None:
@@ -82,7 +83,7 @@ def http_call(decision: Dict[str, Any]) -> Any:
         jitter = delay * (0.5 + random.random() * 0.5)
         time.sleep(jitter)
 
-    if method not in IDEMPOTENT and not allow_non_idempotent:
+    if method not in IDEMPOTENT and not (allow_non_idempotent_env or idempotent_flag):
         retries = 0
 
     def _maybe_hmac_headers(hdrs: dict, body_obj, method: str = "GET", url: str = "") -> dict:

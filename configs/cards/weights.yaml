@@ -1,0 +1,28 @@
+groups:
+  perf:
+    weight: 1.0
+  infra:
+    weight: 1.5
+  quota:
+    weight: 1.0
+  other:
+    weight: 1.0
+
+labels:
+  perf:
+    group: perf
+    weight: 1.0
+  infra-latency:
+    group: infra
+    weight: 1.0
+  infra-error:
+    group: infra
+    weight: 2.0
+  quota:
+    group: quota
+    weight: 1.0
+
+group_map:
+  perf: ["perf"]
+  infra: ["infra-latency", "infra-error"]
+  quota: ["quota"]

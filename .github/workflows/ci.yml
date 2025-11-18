@@ -550,3 +550,20 @@ PY
             tests/ops/test_cards_vary_and_304_v1.py \
             tests/executor/test_http_retry_policy_v1.py \
             tests/executor/test_http_hmac_header_v1.py
+
+  gate_go_readiness:
+    name: gate_go — Go 기준 점검 (실전 전환)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: pytest (Go readiness checklist)
+        run: |
+          python -m pytest -q tests/e2e/test_go_readiness_checklist_v1.py

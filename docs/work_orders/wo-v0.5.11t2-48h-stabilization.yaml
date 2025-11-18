@@ -1,0 +1,85 @@
+id: wo-v0.5.11t2-48h-stabilization
+title: "48h 안정화 패키지 — Cards 집계 정합·경계 테스트·알람·런북·릴리즈컷"
+owner: platform-ops
+tags: [cards, etag, delta, evidence, alerts, runbook, release]
+milestone_days: 2
+
+scope:
+  - Cards 집계 정합(실 Evidence 인덱스 연동, 가중치/버킷 합산 확정)
+  - ETag/Delta 경계 테스트(시드 충돌 방지, 델타 협상 3케이스)
+  - 관측·알림: ETag hit-rate 급락, HTTP 재시도율 급등, p95 지연 급등 룰
+  - 운영 문서 업데이트(RUNBOOK-OPS.md)
+  - 릴리즈 컷: v0.5.11t+2 태그 + 24h freeze + 샘플 실트래픽 검증
+
+deliverables:
+  - apps/ops/api/cards_data.py              # Evidence 인덱스→라벨가중/버킷 집계 로직 확정
+  - apps/ops/api/cards_delta.py             # Delta 협상 헤더 처리 보강(표식/메트릭)
+  - configs/cards/weights.yaml              # 그룹/라벨 가중치 공식 소스
+  - configs/cards/catalog_sha.lock          # 라벨 카탈로그 SHA 고정(ETag seed 용)
+  - configs/alerts/cards_alerts.yml         # PrometheusRule 3종
+  - docs/ops/RUNBOOK-OPS.md                 # 캐시/ETag/Delta/Vary/운영 플로우 갱신
+  - docs/CHANGELOG.md                       # t2 안정화 릴리스 노트
+  - .github/workflows/ci.yml                # gate_r_48h 안정화 테스트/검증 추가
+
+env:
+  required: []
+  optional:
+    - DECISIONOS_EVIDENCE_INDEX="var/evidence/index.json"
+    - DECISIONOS_TENANT=""
+    - DECISIONOS_CARDS_TTL="60"
+    - DECISIONOS_DELTA_FORCE_FULL_PROBE_PCT="1"   # 무작위 풀페이로드 헬스체크(%)
+    - DECISIONOS_ALERT_P95_MS="250"               # p95 임계
+    - DECISIONOS_ALERT_RETRY_RATE="0.05"          # HTTP 재시도율 임계(5%)
+    - DECISIONOS_ALERT_ETAG_HIT_MIN="0.60"        # hit-rate 하한(60%)
+
+implementation_steps:
+  - step: cards-weights-and-buckets
+    changes:
+      - "apps/ops/api/cards_data.py: Evidence 인덱스(기간/버킷)→라벨 집계 + 그룹 가중 적용"
+      - "configs/cards/weights.yaml: group_weight, label_weight, decay(optional) 정의"
+      - "configs/cards/catalog_sha.lock: 라벨 카탈로그 SHA 저장(ETag seed 포함)"
+    tests:
+      - tests/ops/test_cards_weights_and_buckets_v1.py
+
+  - step: delta-boundary-and-seed-prop
+    changes:
+      - "apps/ops/api/cards_delta.py: X-Delta-Base-ETag 협상 3케이스 수용(일치/불일치/미제공)"
+      - "apps/ops/api/cards_delta.py: ETag seed = tenant + catalog_sha + mtime + query_hash 유지"
+      - "apps/ops/cache/delta.py: 무작위 풀페이로드 강제 비율(DECISIONOS_DELTA_FORCE_FULL_PROBE_PCT)"
+    tests:
+      - tests/property/test_etag_seed_property_v1.py
+      - tests/ops/test_cards_delta_negotiation_v1.py
+
+  - step: alerts-and-observability
+    changes:
+      - "configs/alerts/cards_alerts.yml: hit-rate 급락, HTTP 재시도율 급등, p95 급등 경보"
+      - "apps/executor/plugins.py: retry/latency/export 메트릭 라벨 일관화"
+      - "apps/ops/api/cards_delta.py: decisionos_cards_etag_total 라벨/증분 카운팅 확인"
+    tests:
+      - tests/alerts/test_alerts_yaml_schema_v1.py
+      - tests/metrics/test_cards_etag_metrics_v1.py
+
+  - step: runbook-and-release
+    changes:
+      - "docs/ops/RUNBOOK-OPS.md: Vary/ETag/Delta/테넌트/헬스체크 절차 업데이트"
+      - "docs/CHANGELOG.md: v0.5.11t+2 안정화 기록"
+      - "태그 v0.5.11t+2 + 24h freeze 가이드 서술"
+    tests:
+      - tests/docs/test_runbook_linkcheck_v1.py
+
+acceptance_criteria:
+  - Cards 결과가 weights.yaml/라벨 카탈로그와 정합(테스트로 검증)
+  - 동일 generated_at에서도 상위 label 변화 시 ETag miss 보장(property test 통과)
+  - Delta 협상 3케이스 + 무작위 풀페이로드 강제 프로브 동작
+  - PrometheusRule가 로드/검증되고 threshold env 반영
+  - RUNBOOK-OPS에 캐시 운영 플로우가 명확히 기재
+
+rollback:
+  - weights.yaml/seed 관련 변경 revert
+  - delta force probe 비율 0으로 설정
+  - alerts yml 제외하고 기존 룰 사용
+
+security_notes:
+  - Cards 집계 시 PII 없음 확인
+  - Vary: Authorization, X-Scopes, X-Tenant 등 유지
+  - Delta 페이로드는 증분 데이터만 포함(민감필드 없음)
