@@ -1,1 +1,1 @@
-# Witness module
+"""Witness module."""

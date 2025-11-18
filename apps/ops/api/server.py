@@ -6,7 +6,7 @@ from email.utils import format_datetime
 from typing import Dict, List
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from apps.ops.api.cache import cache, compute_etag_for_html, compute_etag_for_json
 from apps.ops.api.cards_delta import router as cards_delta_router
@@ -183,3 +183,26 @@ def reason_trend_card_html(
     entry = cache.put(key, etag, html, ttl, last_modified_value)
     headers = _cache_headers(entry.etag, ttl, entry.last_modified)
     return HTMLResponse(html, headers=headers)
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """간단한 텍스트 기반 메트릭 노출 (필요 시 Prometheus 서식)."""
+    lines = []
+    try:
+        from apps.ops.api import cards_delta
+
+        lines.append(f'decisionos_cards_etag_total{{result="hit"}} {_safe_int(cards_delta._COUNTERS.get("cards_304", 0))}')
+        lines.append(f'decisionos_cards_etag_total{{result="miss"}} {_safe_int(cards_delta._COUNTERS.get("cards_200", 0))}')
+    except Exception:
+        lines.append('decisionos_cards_etag_total{result="hit"} 0')
+        lines.append('decisionos_cards_etag_total{result="miss"} 0')
+    body = "\n".join(lines) + "\n"
+    return PlainTextResponse(body, media_type="text/plain")
+
+
+def _safe_int(val) -> int:
+    try:
+        return int(val)
+    except Exception:
+        return 0

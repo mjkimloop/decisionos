@@ -1,0 +1,26 @@
+id: wo-v0.5.11u-1-skeleton-hygiene
+title: "Skeleton/Empty File Hygiene — NUL 제거, 빈 __init__ 정리, TODO 스윕, CI 게이트"
+scope:
+  - Windows 유령파일(NUL) 제거 및 재발 방지 체크
+  - 0바이트 __init__.py → 최소 docstring 주입
+  - 주석-only __init__.py → docstring로 정리
+  - 오래된 TODO(이미 구현 완료) 스윕: apps/executor/plugins.py 등 패턴 제거
+  - 스켈레톤 허용 목록(allowlist) 도입: 의도적 스텁/추상은 예외 처리
+deliverables:
+  - scripts/maintenance/apply_hygiene_patches.py
+  - scripts/ci/check_skeletons.py
+  - configs/ci/skeleton_allowlist.txt
+  - .github/workflows/ci.yml (pre_gate에 skeleton hygiene 스텝 추가)
+  - tests/ci/test_check_skeletons_v1.py
+env:
+  optional:
+    - DECISIONOS_SKELETON_ALLOWLIST=configs/ci/skeleton_allowlist.txt
+    - DECISIONOS_SKIP_SKELETON_TEST=0
+acceptance:
+  - NUL 파일 존재 시 CI 실패
+  - 0바이트 __init__ → 자동 패치 후 재검사 통과
+  - allowlist 내 스텁/추상은 경고 없이 통과
+rollback:
+  - CI pre_gate 스텝 제거 및 scripts/ci/check_skeletons.py 호출 해제
+notes:
+  - 패치는 안전한 멱등성(여러 번 실행해도 동일)

@@ -31,8 +31,7 @@ def python_call(decision: Dict[str, Any]) -> Any:
     return _USER_FUNCS[fn_name](*args, **kwargs)
 
 def http_call_stub(decision: Dict[str, Any]) -> Any:
-    # TODO: httpx 요청/서명/재시도. MVP는 스텁
-    return {"status": "stub", "decision": decision}
+    #     return {"status": "stub", "decision": decision}
 
 
 # ---- real HTTP (httpx optional) ----

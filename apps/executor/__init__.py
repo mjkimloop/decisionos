@@ -1,1 +1,1 @@
-# executor stub
+"""Executor module."""

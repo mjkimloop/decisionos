@@ -11,6 +11,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+nul
+NUL
 # metering local data
 var/
 *.sqlite

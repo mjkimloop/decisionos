@@ -1,0 +1,6 @@
+# 의도적 스텁/추상(비어있거나 주석-only 허용 경로) — 상대경로
+apps/infra/redis_stub.py
+apps/infra/s3_stub.py
+apps/kyc/adapters/stub.py
+apps/payments/adapters/stripe_stub.py
+apps/payments/adapters/manual_stub.py

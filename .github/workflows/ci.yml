@@ -567,3 +567,43 @@ PY
       - name: pytest (Go readiness checklist)
         run: |
           python -m pytest -q tests/e2e/test_go_readiness_checklist_v1.py
+
+  gate_r_48h:
+    name: gate_r — 48h stabilization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: tests — cards weights/buckets
+        run: python -m pytest -q tests/ops/test_cards_weights_and_buckets_v1.py
+      - name: tests — delta negotiation
+        run: python -m pytest -q tests/ops/test_cards_delta_negotiation_v1.py tests/property/test_etag_seed_property_v1.py
+      - name: tests — alerts + metrics + runbook
+        run: |
+          python -m pytest -q tests/alerts/test_alerts_yaml_schema_v1.py
+          python -m pytest -q tests/metrics/test_cards_etag_metrics_v1.py
+          python -m pytest -q tests/docs/test_runbook_linkcheck_v1.py
+
+  pre_gate_skeleton_hygiene:
+    name: pre_gate — skeleton hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - name: auto-fix (idempotent)
+        run: python -m scripts.maintenance.apply_hygiene_patches
+      - name: skeleton check
+        env:
+          DECISIONOS_SKELETON_ALLOWLIST: configs/ci/skeleton_allowlist.txt
+        run: python -m scripts.ci.check_skeletons
+      - name: unit (checker self-test)
+        run: python -m pytest -q tests/ci/test_check_skeletons_v1.py
