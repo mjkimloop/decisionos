@@ -49,14 +49,15 @@ python -m pytest -xvs tests/e2e/test_go_readiness_checklist_v1.py::test_go_3_str
 **목표**: ETag 충돌 방지 및 Delta 협상 엣지 케이스 커버
 
 **작업**:
-- [ ] **ETag seed 충돌 방지 테스트**
+- [x] **ETag seed 충돌 방지 테스트** ✅
   - 동일 `generated_at`이더라도 상위 reason 변경 시 miss
   - Property-based test로 무작위 데이터 1000회 검증
+  - 테넌트/catalog SHA/query hash 분리 검증
 
-- [ ] **Delta 협상 3케이스**
-  - 헤더 없음 → delta=null
-  - 불일치 Base ETag → X-Delta-Accepted: 0
-  - 일치 Base ETag + 변경사항 있음 → X-Delta-Accepted: 1
+- [x] **Delta 협상 3케이스** ✅
+  - 헤더 없음 → delta=null, X-Delta-Accepted: 0
+  - 불일치 Base ETag → X-Delta-Accepted: 0, delta=null
+  - 강제 풀 페이로드 프로브 → X-Delta-Probe: 1
 
 **파일**:
 ```
@@ -71,7 +72,16 @@ python -m pytest -q tests/ops/test_cards_delta_negotiation_edge_v1.py
 ```
 
 **리스크**: ETag 충돌 시 잘못된 304 → 오래된 데이터 제공
-**완료 기준**: 충돌 케이스 0건, Delta 협상 3케이스 모두 Green
+**완료 기준**: 충돌 케이스 0건, Delta 협상 3케이스 모두 Green ✅
+
+**검증 결과** (v0.5.11u-2):
+```bash
+$ pytest -q tests/ops/test_cards_etag_collision_v1.py
+...  [100%]  # 3 passed
+
+$ pytest -q tests/ops/test_cards_delta_negotiation_edge_v1.py
+...  [100%]  # 3 passed
+```
 
 ---
 
