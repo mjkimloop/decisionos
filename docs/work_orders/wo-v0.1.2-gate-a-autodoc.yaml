@@ -1,0 +1,97 @@
+meta:
+  version: v0.1.2
+  date: 2025-11-02
+  status: locked
+  summary: "Gate-A — Work Order → TechSpec/Plan 자동 반영(표준 포맷·적용 스크립트·문서 가드·CI)"
+owners:
+  - id: PM
+    name: "Owner"
+  - id: DOC
+    name: "Docs Maintainer"
+
+scope:
+  - 표준 Work Order(YAML) → docs/techspec.md, docs/plan.md 자동 반영
+  - 섹션 마커 기반 patch(mode: replace|append|ensure) 멱등 처리
+  - 헤더(version/date/status/summary) 동기화
+  - index.md / CHANGELOG.md 자동 갱신
+  - 문서 가드(doc_guard): 마커 누락·역참조·포맷 오류 검출
+  - 스키마 검증(JSON Schema) + yamllint
+  - VSCode 태스크 + CI(pre/gate/post) 배선
+  - “Out-of-sync” 탐지(워크오더 대비 문서 미반영 시 CI fail)
+
+deliverables:
+  # 코어
+  - path: scripts/wo_apply.py
+  - path: scripts/doc_guard.py
+  - path: scripts/schemas/work_order.schema.json
+  - path: docs/work_orders/wo-template.yaml
+  # 문서
+  - path: docs/techspec.md
+  - path: docs/plan.md
+  - path: docs/index.md
+  - path: docs/ops/AUTODOC-RUNBOOK.md
+  # 편의
+  - path: .vscode/tasks.json
+  - path: .github/workflows/ci.yml
+  - path: .yamllint
+
+cli:
+  wo_apply:
+    usage: |
+      python scripts/wo_apply.py docs/work_orders/wo-*.yaml --all
+      python scripts/wo_apply.py docs/work_orders/wo-xxxx.yaml --check
+    flags:
+      - --all: docs/work_orders/wo-*.yaml 일괄 적용(버전순 정렬)
+      - --check: 변경사항 유무만 검사(변경 필요하면 non-zero 종료)
+      - --techspec docs/techspec.md --plan docs/plan.md 커스텀 경로 허용
+  doc_guard:
+    usage: |
+      python scripts/doc_guard.py --strict
+    checks:
+      - 섹션 마커 짝 검증(AUTOGEN:BEGIN/END)
+      - 중복/누락 섹션 검증(Work Order ↔ 문서)
+      - meta 헤더(version/date/status/summary) 정합성
+      - Out-of-sync(diff 존재) 시 실패
+
+tests:
+  unit:
+    - tests/docs/test_wo_apply_header_v1.py
+    - tests/docs/test_wo_apply_modes_v1.py
+    - tests/docs/test_wo_apply_idempotent_v1.py
+    - tests/docs/test_work_order_schema_v1.py
+    - tests/docs/test_doc_guard_markers_v1.py
+  e2e:
+    - tests/e2e/test_autodoc_flow_v1.py
+  ci:
+    - pre_gate: yamllint + schema + doc_guard --strict
+    - gate: wo_apply --all --check (변경 필요 시 fail)
+    - post_gate: Step Summary(적용 버전/섹션 수) 출력
+
+acceptance:
+  - `python scripts/wo_apply.py docs/work_orders/wo-v0.1.2-gate-a.yaml` 실행 시:
+    - docs/techspec.md, docs/plan.md 지정 섹션이 정확히 갱신됨
+    - index.md/CHANGELOG.md에 버전 라인이 1회만 추가됨(멱등)
+  - `python scripts/doc_guard.py --strict` 성공(Exit 0)
+  - CI에서 pre→gate→post 그린, gate 단계에서 Out-of-sync 시 정확히 실패
+  - 유효하지 않은 Work Order는 Schema 에러 코드로 실패(DOC/WOS 코드를 남김)
+
+error_codes:
+  - WOS001: Work Order YAML schema invalid
+  - WOS002: patches[].mode 불허
+  - DOC001: 마커 쌍 누락/불일치
+  - DOC002: Out-of-sync(Work Order 적용 필요)
+  - DOC003: 헤더 필수 메타 누락
+  - DOC004: 중복 섹션 식별자
+  - SYS001: 파일 I/O 실패
+
+risk_notes:
+  - 여러 Work Order 동시 적용 시 섹션 충돌 가능 → 섹션 이름 고유화 규칙 준수
+  - 문서를 수동 편집하다 마커를 손상시키면 guard 실패 → 런북에 복구 절차 안내
+
+timeline:
+  day0:
+    - 스키마/가드/적용 스크립트 코어 구현 + 단위 테스트
+  day1:
+    - AUTOGEN 마커 주입(techspec/plan) + E2E 작성
+  day2:
+    - CI 파이프라인 배선 + VSCode 태스크 + 런북

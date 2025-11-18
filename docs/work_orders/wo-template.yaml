@@ -1,55 +1,12 @@
-# Work Order 템플릿
-#
-# 이 템플릿을 복사해서 새로운 Work Order를 작성하세요.
-# 파일명 규칙: wo-vX.Y.Z-gate-<문자>.yaml
-#
-# 예시:
-#   wo-v0.2.0-gate-b.yaml
-#   wo-v0.3.0-gate-c.yaml
-
 meta:
-  version: vX.Y.Z          # 버전 번호 (예: v0.2.0)
-  date: YYYY-MM-DD         # 작업 지시 날짜 (예: 2025-11-03)
-  status: draft            # 상태: draft | locked | archived
-  summary: "한 줄 변경 요약"  # 이 Work Order의 핵심 내용
-
+  version: vX.Y.Z
+  date: YYYY-MM-DD
+  status: locked
+  summary: "한 줄 변경 요약"
 patches:
-  # techspec.md에 적용할 패치
-  techspec:
-    - section: "섹션 이름"    # AUTOGEN 마커 이름
-      mode: replace          # replace | append | ensure
-      content: |
-        여기에 내용을 작성합니다.
-        - 항목 1
-        - 항목 2
-
-  # plan.md에 적용할 패치
-  plan:
-    - section: "Milestones"
-      mode: replace
-      content: |
-        마일스톤 내용...
-
-    - section: "Next Actions"
-      mode: replace
-      content: |
-        Day 1: 작업 내용
-        Day 2: 작업 내용
-
+  techspec: []
+  plan: []
 work:
-  # Claude 작업
-  claude:
-    - id: C-XX              # 작업 ID (예: C-01, C-02)
-      title: "작업 제목"
-      deliverables:
-        - 파일/경로/패턴
-        - apps/module/{file1.py,file2.py}
-      acceptance:
-        - 성공 기준 1
-        - 성공 기준 2
-
-  # Codex 작업 (선택)
+  claude: []
   codex: []
-
-  # Gemini 작업 (선택)
   gemini: []

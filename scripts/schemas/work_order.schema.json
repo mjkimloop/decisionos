@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["meta"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "date", "status", "summary"],
+      "properties": {
+        "version": { "type": "string" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "status": { "type": "string" },
+        "summary": { "type": "string" }
+      }
+    },
+    "patches": {
+      "type": "object",
+      "properties": {
+        "techspec": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/patch" }
+        },
+        "plan": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/patch" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "patch": {
+      "type": "object",
+      "required": ["section", "mode", "content"],
+      "properties": {
+        "section": { "type": "string" },
+        "mode": { "type": "string", "enum": ["replace", "append", "ensure"] },
+        "content": { "type": "string" }
+      }
+    }
+  }
+}
