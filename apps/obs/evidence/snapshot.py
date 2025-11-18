@@ -14,6 +14,7 @@ from dataclasses import dataclass, asdict
 from apps.common.timeutil import time_utcnow
 from apps.rating.engine import RatingResult
 from apps.limits.quota import QuotaDecision
+from apps.common.pii import mask_event as pii_mask_event
 
 
 def _sha256_bytes(b: bytes) -> str:
@@ -112,6 +113,7 @@ def build_snapshot(
         "version": version,
         "generated_at": now_ts.isoformat().replace("+00:00", "Z"),
         "tenant": tenant,
+        "tampered": False,
     }
     witness = {
         "csv_path": witness_csv_path,
@@ -171,20 +173,21 @@ def build_snapshot(
         core["judges"] = judges
     if canary is not None:
         core["canary"] = canary
-    core_json = json.dumps(core, ensure_ascii=False, sort_keys=True)
+    payload = pii_mask_event(core) if os.getenv("DECISIONOS_PII_ENABLE", "0") == "1" else core
+    core_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     integrity = {"signature_sha256": sha256_text(core_json)}
 
     return Evidence(
-        meta=meta,
-        witness=witness,
-        usage=usage,
-        rating=rating_dict,
-        quota=quota_dict,
-        budget=budget_dict,
-        anomaly=anomaly_dict,
-        perf=perf,
-        perf_judge=perf_judge,
-        judges=judges,
-        canary=canary,
+        meta=payload["meta"],
+        witness=payload["witness"],
+        usage=payload["usage"],
+        rating=payload["rating"],
+        quota=payload["quota"],
+        budget=payload["budget"],
+        anomaly=payload["anomaly"],
+        perf=payload.get("perf"),
+        perf_judge=payload.get("perf_judge"),
+        judges=payload.get("judges"),
+        canary=payload.get("canary"),
         integrity=integrity,
     )

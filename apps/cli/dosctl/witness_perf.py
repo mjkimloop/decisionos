@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 from apps.obs.witness.perf import parse_reqlog_csv, summarize_perf
+from apps.cli.dosctl._hooks.pii import apply_pii
 
 
 def main():
@@ -32,6 +33,7 @@ def main():
 
     # 성능 요약 산출
     summary = summarize_perf(reqs)
+    summary = apply_pii(summary)
 
     # JSON 출력
     try:

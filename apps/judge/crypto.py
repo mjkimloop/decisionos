@@ -18,6 +18,8 @@ class KeyMaterial:
     key_id: str
     secret: bytes
     state: str  # "active" | "grace" | "retired"
+    created_at: Optional[float] = None
+    notes: Optional[str] = None
 
 class MultiKeyLoader:
     """ENV(JSON) 기반 멀티키 로더. 예:
@@ -101,10 +103,15 @@ class MultiKeyLoader:
             return
         m: Dict[str, KeyMaterial] = {}
         for item in data:
+            state = item.get("state", "active")
+            if state not in {"active", "grace", "retired"}:
+                state = "retired"
             km = KeyMaterial(
                 key_id=item["key_id"],
                 secret=self._parse_secret(item["secret"]),
-                state=item.get("state","active"),
+                state=state,
+                created_at=item.get("created_at"),
+                notes=item.get("notes"),
             )
             m[km.key_id] = km
         self._keys = m
@@ -136,6 +143,7 @@ class MultiKeyLoader:
             "age_seconds": age,
             "last_error": self._last_error,
             "source_hash": self._source_hash,
+            "states": {state: sum(1 for km in self._keys.values() if km.state == state) for state in ("active", "grace", "retired")},
         }
 
 
@@ -171,14 +179,24 @@ def hmac_sign_canonical(payload_obj, secret: str | bytes) -> str:
 def hmac_verify_canonical(payload_obj, secret: str | bytes, signature_hex: str) -> bool:
     return hmac_verify(payload_obj, _coerce_secret(secret), signature_hex)
 
-def verify_with_multikey(payload_obj, signature_hex: str, key_id: str, loader: MultiKeyLoader) -> Tuple[bool,str]:
+def verify_with_multikey(
+    payload_obj,
+    signature_hex: str,
+    key_id: str,
+    loader: MultiKeyLoader,
+    *,
+    allow_grace: bool = True,
+) -> Tuple[bool, str]:
     km = loader.get(key_id)
     if not km:
         return False, "key.missing"
+    if km.state == "retired":
+        return False, "key.retired"
+    if km.state == "grace" and not allow_grace:
+        return False, "key.grace_forbidden"
     ok = hmac_verify(payload_obj, km.secret, signature_hex)
     if not ok:
         return False, "sig.mismatch"
-    if km.state == "retired":
-        return False, "key.retired"
-    # grace는 검증만 허용
+    if km.state == "grace":
+        return True, "key.grace"
     return True, "ok"

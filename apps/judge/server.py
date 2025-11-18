@@ -3,18 +3,25 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from apps.common.metrics import REG
+from apps.common.rl import attach_rate_limit
 from apps.common.timeutil import time_utcnow, within_clock_skew
-from apps.judge.metrics import JudgeMetrics
 from apps.judge.crypto import MultiKeyLoader, verify_with_multikey
-from apps.judge.replay_plugins import RedisReplayStore, ReplayStoreABC, SQLiteReplayStore
 from apps.judge import slo_judge
+from apps.judge.metrics import JudgeMetrics
+from apps.judge.metrics_readyz import READYZ_METRICS
+from apps.judge.middleware.security import JudgeSecurityMiddleware
+from apps.judge.readyz import build_readyz_router, default_readyz_checks
+from apps.judge.replay_plugins import RedisReplayStore, ReplayStoreABC, SQLiteReplayStore
 from apps.policy.pep import require
-from apps.judge.readyz import check_ready
+from apps.policy.rbac_enforce import RbacMapMiddleware
+from apps.security.pii_middleware import PIIMiddleware
 
 _DEFAULT_WINDOW = int(os.getenv("DECISIONOS_JUDGE_METRIC_WINDOW", "600"))
 _metrics = JudgeMetrics(window_seconds=_DEFAULT_WINDOW)
@@ -33,6 +40,19 @@ def create_app(replay_store: Optional[ReplayStoreABC] = None) -> FastAPI:
     app = FastAPI(title="DecisionOS Judge", version="0.5.11j")
     app.state.metrics = _metrics
     app.state.replay_store = replay_store or _build_replay_store()
+    response_fields_env = os.getenv("DECISIONOS_PII_RESPONSE_FIELDS", "")
+    response_fields = [field.strip() for field in response_fields_env.split(",") if field.strip()]
+    app.add_middleware(JudgeSecurityMiddleware)
+    attach_rate_limit(app)
+    app.add_middleware(PIIMiddleware, response_fields=response_fields)
+    rbac_map_path = os.getenv("DECISIONOS_RBAC_MAP", str(Path("apps/policy/rbac_map.yaml")))
+    default_deny = os.getenv("DECISIONOS_RBAC_DEFAULT_DENY", "0") == "1"
+    app.add_middleware(RbacMapMiddleware, map_path=rbac_map_path, default_deny=default_deny)
+    fail_closed = os.getenv("DECISIONOS_READY_FAIL_CLOSED", "1") == "1"
+    ready_checks = default_readyz_checks(_key_loader, app.state.replay_store)
+    from apps.judge.readyz import build_readyz_router
+
+    app.include_router(build_readyz_router(ready_checks, fail_closed=fail_closed))
 
     @app.post("/judge")
     async def post_judge(request: Request) -> JSONResponse:
@@ -126,18 +146,12 @@ def create_app(replay_store: Optional[ReplayStoreABC] = None) -> FastAPI:
     async def healthz() -> Dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/readyz")
-    async def readyz(request: Request):
-        replay_store = getattr(request.app.state, "replay_store", None)
-        ok, info = check_ready(_key_loader, replay_store)
-        if not ok:
-            raise HTTPException(status_code=503, detail={"status": "fail", "checks": info})
-        return {"status": "ready", "checks": info}
-
     @app.get("/metrics")
     async def metrics_endpoint(request: Request):
-        summary = request.app.state.metrics.summary()
-        return summary
+        # Export readyz sliding window gauges before rendering
+        READYZ_METRICS.export_gauges()
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(REG.render_text(), media_type="text/plain")
 
     return app
 

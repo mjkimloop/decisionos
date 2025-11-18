@@ -1,0 +1,9 @@
+{
+  "version": "v1",
+  "phases": [
+    { "name": "announce", "offset_days": -7, "actions": ["notify_slack", "label:rotation-countdown"] },
+    { "name": "rotate", "offset_days": 0, "actions": ["add_new_key", "grace_old_key"] },
+    { "name": "verify", "offset_days": 1, "actions": ["readyz_check", "signature_sample"] },
+    { "name": "cleanup", "offset_days": 7, "actions": ["retire_old_key"] }
+  ]
+}

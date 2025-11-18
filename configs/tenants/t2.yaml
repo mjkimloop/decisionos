@@ -1,0 +1,30 @@
+tenant_id: t2
+name: "Test Tenant 2"
+status: active
+created_at: "2025-01-12T00:00:00Z"
+updated_at: "2025-01-12T00:00:00Z"
+
+limits:
+  max_qps: 2000
+  max_storage_gb: 200
+  max_users: 100
+
+clock_skew_ms: 60000
+
+slo_overlay:
+  latency_p95_ms: 150.0
+  latency_p99_ms: 400.0
+  error_rate_percent: 0.5
+
+label_overlay:
+  base: "configs/labels/label_catalog_v2.json"
+  tenant: "configs/labels/overlay/t2/label_catalog_v2.json"
+
+billing:
+  plan: "premium"
+  billing_contact: "billing-t2@example.com"
+  cost_center: "TEST-T2"
+
+metadata:
+  owner: "test-team"
+  environment: "test"

@@ -18,17 +18,116 @@ def require_scope(scope: str):
         return True
     return dependency
 
+
+def require_tenant(tenant: Optional[str] = Query(None)):
+    """
+    Validate tenant parameter is provided and active (fail-closed).
+
+    Args:
+        tenant: Tenant ID from query parameter
+
+    Returns:
+        Validated tenant ID
+
+    Raises:
+        HTTPException: If tenant is missing or invalid
+    """
+    if not tenant:
+        raise HTTPException(
+            status_code=400,
+            detail="tenant parameter is required"
+        )
+
+    try:
+        from apps.tenants import validate_tenant_id
+        validate_tenant_id(tenant)
+        return tenant
+    except ValueError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Invalid or inactive tenant: {str(e)}"
+        )
+
 class AggregateReq(BaseModel):
     reasons: List[str] = Field(default_factory=list)
     top: int = 5
 
+@router.get("/cards/cutover-readiness")
+def get_cutover_readiness(
+    tenant_id: str = Depends(require_tenant),
+    _=Depends(require_scope("ops:read"))
+):
+    """Get cutover readiness judgment card with Go/No-Go decision."""
+    from .cards.cutover_readiness import get_cutover_readiness_card
+
+    card = get_cutover_readiness_card()
+
+    return {
+        "tenant": tenant_id,
+        "overall_state": card.overall_state,
+        "go_no_go": card.go_no_go,
+        "timestamp": card.timestamp,
+        "checks": [
+            {
+                "name": c.name,
+                "state": c.state,
+                "message": c.message,
+                "details": c.details,
+            }
+            for c in card.checks
+        ],
+        "metrics": card.metrics,
+    }
+
+@router.get("/cards/rbac-history")
+async def get_rbac_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    tenant_id: str = Depends(require_tenant),
+    _=Depends(require_scope("ops:read"))
+):
+    """Get RBAC map reload history and metrics."""
+    from .cards.rbac_history import get_rbac_history_card, get_rbac_metrics_summary
+
+    card = get_rbac_history_card(limit)
+    metrics = await get_rbac_metrics_summary()
+
+    return {
+        "tenant": tenant_id,
+        **card,
+        "metrics": metrics,
+    }
+
+@router.get("/cards/readyz-window")
+async def get_readyz_window(
+    tenant_id: str = Depends(require_tenant),
+    _=Depends(require_scope("ops:read"))
+):
+    """Get readyz health window with burst detection."""
+    from .cards.readyz_window import get_readyz_window_card, get_readyz_metrics_summary
+
+    card = get_readyz_window_card()
+    metrics = await get_readyz_metrics_summary()
+
+    return {
+        "tenant": tenant_id,
+        **card,
+        "metrics": metrics,
+    }
+
 @router.get("/cards/reason-trends/palette")
-def get_palette(_=Depends(require_scope("ops:read"))):
+def get_palette(
+    tenant_id: str = Depends(require_tenant),
+    _=Depends(require_scope("ops:read"))
+):
     from .cards.aggregation import palette_with_desc, etag_seed
-    return {"seed": etag_seed(), "palette": palette_with_desc()}
+    return {"seed": etag_seed(), "palette": palette_with_desc(), "tenant": tenant_id}
 
 @router.post("/cards/reason-trends")
-def post_trends(req: AggregateReq, _=Depends(require_scope("ops:read"))):
+def post_trends(
+    req: AggregateReq,
+    tenant_id: str = Depends(require_tenant),
+    _=Depends(require_scope("ops:read"))
+):
     from .cards.aggregation import palette_with_desc, aggregate_reasons, label_catalog_hash
     if req.top < 1 or req.top > 50:
         raise HTTPException(status_code=400, detail="top must be 1..50")
@@ -36,6 +135,7 @@ def post_trends(req: AggregateReq, _=Depends(require_scope("ops:read"))):
     return {
         "catalog_sha": label_catalog_hash(),
         "palette": palette_with_desc(),
+        "tenant": tenant_id,
         **agg
     }
 
@@ -64,6 +164,7 @@ def get_summary(
     response: Response,
     start: str,
     end: str,
+    tenant_id: str = Depends(require_tenant),
     top: int = 5,
     bucket: Optional[str] = None,
     seasonality: str = "off",
@@ -258,6 +359,7 @@ def get_summary(
 def label_heatmap(
     response: Response,
     period: str,
+    tenant_id: str = Depends(require_tenant),
     bucket: str = "day",
     overlay: str = "none",
     highlight: int = Query(default=0, ge=0, le=100),
@@ -370,6 +472,7 @@ def label_heatmap(
 @router.get("/cards/highlights/stream")
 def highlights_stream(
     response: Response,
+    tenant_id: str = Depends(require_tenant),
     since: Optional[str] = Query(None),
     limit: int = Query(5, ge=1, le=100),
     bucket: str = Query("day", pattern="^(day|hour)$"),
@@ -488,6 +591,7 @@ def highlights_stream(
 
 @router.get("/cards/reason-summary")
 def reason_summary(
+    tenant_id: str = Depends(require_tenant),
     bucket: str = Query("day", regex="^(day|week|month)$"),
     top_n: int = Query(5, ge=1, le=20),
     compress_threshold: int = Query(3, ge=1),

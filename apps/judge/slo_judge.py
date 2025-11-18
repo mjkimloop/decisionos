@@ -108,6 +108,7 @@ def evaluate(evidence: Dict[str, Any], slo: Dict[str, Any]) -> Tuple[str, List[s
     _evaluate_infra(spec.judge_infra, evidence, reasons)
     _evaluate_canary(spec.canary, evidence, reasons)
     _evaluate_drift(spec.drift, evidence, reasons)
+    _check_saturation(evidence, spec, reasons)
 
     return ("pass" if not reasons else "fail"), reasons
 
@@ -219,3 +220,34 @@ def _evaluate_drift(spec: Optional[Any], evidence: Dict[str, Any], reasons: List
     # KL divergence 검사
     if kl > spec.max_kl:
         reasons.append(f"drift.kl_over:{kl}>{spec.max_kl}")
+
+def _check_saturation(evidence: Dict[str, Any], spec: SLOSpec, reasons: List[str]) -> bool:
+    """Check resource saturation limits"""
+    if not spec.saturation:
+        return True
+    
+    ok = True
+    usage = evidence.get("usage", {})
+    
+    # Check CPU saturation
+    if spec.saturation.max_cpu_percent is not None:
+        cpu_percent = usage.get("cpu_percent")
+        if cpu_percent and cpu_percent > spec.saturation.max_cpu_percent:
+            reasons.append(f"infra.saturation.cpu")
+            ok = False
+    
+    # Check memory saturation
+    if spec.saturation.max_mem_percent is not None:
+        mem_percent = usage.get("mem_percent")
+        if mem_percent and mem_percent > spec.saturation.max_mem_percent:
+            reasons.append(f"infra.saturation.mem")
+            ok = False
+    
+    # Check QPS saturation
+    if spec.saturation.max_qps is not None:
+        qps = usage.get("qps")
+        if qps and qps > spec.saturation.max_qps:
+            reasons.append(f"infra.saturation.qps")
+            ok = False
+    
+    return ok

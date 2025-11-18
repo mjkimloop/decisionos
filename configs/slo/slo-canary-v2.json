@@ -1,0 +1,26 @@
+{
+  "version": "v2",
+  "latency": {
+    "max_p95_ms": 900,
+    "max_p99_ms": 1800,
+    "min_samples": 1000
+  },
+  "error": {
+    "max_error_rate": 0.01,
+    "min_samples": 1000
+  },
+  "witness": { "require_csv_sha256": true, "require_signature": true, "min_rows": 1 },
+  "integrity": { "require_signature": true },
+  "budget": { "allow_levels": ["ok", "warn"] },
+  "quota": { "forbid_actions": {} },
+  "anomaly": { "allow_spike": false },
+  "canary": {
+    "thresholds": {
+      "max_p95_rel_increase": 0.15,
+      "max_error_abs_delta": 0.01,
+      "max_sig_error_delta": 0.0005
+    },
+    "min_sample_count": 1000,
+    "guardband_minutes": 10
+  }
+}

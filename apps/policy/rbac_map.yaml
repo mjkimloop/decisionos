@@ -1,0 +1,23 @@
+routes:
+  - path: /ops/cards/*
+    method: GET
+    scopes:
+      - ops:read
+  
+  - path: /judge/slo
+    method: POST
+    scopes:
+      - judge:run
+  
+  - path: /healthz
+    method: GET
+    scopes: []
+  
+  - path: /readyz
+    method: GET
+    scopes: []
+  
+  - path: /metrics
+    method: GET
+    scopes:
+      - ops:metrics

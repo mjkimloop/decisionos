@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "tenant_id": "t1",
+  "groups": [
+    {
+      "name": "payments",
+      "weight": 2.0,
+      "description": "Payment processing group (high priority for t1)"
+    },
+    {
+      "name": "auth",
+      "weight": 1.5,
+      "description": "Authentication group"
+    }
+  ],
+  "labels": [
+    {
+      "name": "payment_declined",
+      "type": "categorical",
+      "group": "payments",
+      "severity": "high"
+    },
+    {
+      "name": "payment_success",
+      "type": "categorical",
+      "group": "payments",
+      "severity": "low"
+    },
+    {
+      "name": "auth_failed",
+      "type": "categorical",
+      "group": "auth",
+      "severity": "medium"
+    }
+  ]
+}

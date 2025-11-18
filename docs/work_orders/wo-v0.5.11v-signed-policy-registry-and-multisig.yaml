@@ -1,0 +1,86 @@
+id: wo-v0.5.11v-signed-policy-registry-and-multisig
+title: "Signed Policy Registry + Multi-Sig Approval + Supply Chain Attestations"
+milestone: v0.5.11v
+owner: platform
+status: planned
+
+rationale:
+  - SLO/카나리/번레이트 게이트는 준비됐지만, 정책·설정(slo.json, canary policy, freeze window, RBAC map)이
+    위변조되거나 단일 승인으로 합쳐지면 방어선이 무력화될 수 있음
+  - 서명/검증을 런타임과 CI 게이트 모두에 강제하고, PR 수준에서 멀티시그를 요구해 잔여 리스크 제거
+
+scope:
+  registry:
+    - configs/policy/ 하위 모든 정책·설정 파일에 대해 "정책 레지스트리" 메타(issuer, key_id, created_at, sha256) 생성
+    - 정책 스냅샷 인덱스(index.json)와 체인 해시(hash_chain) 유지(이전 커밋의 root_hash 포함)
+  signing:
+    - scripts/policy/sign.py: 파일별/배치 서명(HMAC 또는 KMS 선택), .sig 사이드카 생성
+    - scripts/policy/verify.py: 로컬·CI 검증(서명/체인/허용 키)
+    - KMS/SSM 연동(선택): kms:key_arn 지정 시 KMS 서명/검증 사용, 없으면 HMAC 다중키
+  runtime enforcement:
+    - apps/* 의 로더(Ops/Judge/Controller)가 정책 로딩 시 서명·체인·허용키 검증 실패하면 fail-closed
+    - DECISIONOS_POLICY_ALLOWLIST(키/발행자)로 승인 범위 제한
+  approvals:
+    - .github/approval_policies.yaml: 파일 글롭별 승인 규칙(RBAC map→보안팀 2인, slo/infra→플랫폼 2인, canary→플랫폼+서비스 각 1인)
+    - scripts/ci/check_multisig.py: PR 리뷰어 검증(2-of-N 이상), 라벨/체크런 연동
+  attestations:
+    - scripts/ci/attest_build.py: 게이트 통과 아티팩트에 빌드 어테스테이션(SBOM 해시, 정책 root_hash) 부착
+    - scripts/ci/verify_attestation.py: 포스트게이트 검증
+  integration:
+    - Gate(Pre/Gate/Post)에 verify 단계 추가: 정책 서명/체인/승인 → 실패 시 즉시 차단
+    - promote/pause/abort 등 pipeline 스크립트가 적용 전 verify.py를 호출(–strict)
+
+deliverables:
+  - scripts/policy/sign.py, verify.py
+  - scripts/ci/check_multisig.py, attest_build.py, verify_attestation.py
+  - apps/common/policy_loader.py   # 공통 로더(+fail-closed)
+  - configs/policy/registry.json   # root_hash, entries[], allowed_keys[]
+  - .github/workflows/ci.yml       # pre/gate/post에 검증 스텝 추가
+  - docs/ops/POLICY-SIGNING.md, docs/ops/MULTISIG-APPROVALS.md
+  - docs/CHANGELOG.md, docs/techspec.md
+
+env:
+  required:
+    - DECISIONOS_ALLOW_SCOPES                 # runtime 로더 접근 제한
+  optional:
+    - DECISIONOS_POLICY_KEYS_JSON             # [{key_id, secret, state}] (HMAC)
+    - DECISIONOS_POLICY_KMS_KEY_ARN           # 존재 시 KMS 서명 우선
+    - DECISIONOS_POLICY_APPROVERS_YAML        # 미지정 시 .github/approval_policies.yaml 사용
+    - DECISIONOS_POLICY_FAIL_OPEN="0"         # 기본 0(fail-closed), 1이면 경고만
+
+pass_criteria:
+  - 정책 파일이 서명/체인 검증을 통과하지 못하면: CI Gate 실패 + 런타임 로딩 거부
+  - PR이 파일 글롭별 멀티시그 요건 미충족 시: Checks 실패 및 라벨(reason:policy-approval-missing) 부여
+  - promote/pause/abort 실행 전 verify.py가 성공해야 함(strict)
+  - 어테스테이션에 정책 root_hash가 포함되고, 포스트게이트 검증 성공
+
+tests:
+  unit:
+    - tests/policy/test_sign_and_verify_hmac_v1.py
+    - tests/policy/test_hash_chain_and_root_v1.py
+    - tests/policy/test_loader_fail_closed_v1.py
+  integration:
+    - tests/integration/test_ci_multisig_rules_v1.py
+    - tests/integration/test_pipeline_verify_before_promote_v1.py
+    - tests/integration/test_attestation_roundtrip_v1.py
+  e2e:
+    - tests/e2e/test_pr_blocks_without_multisig_v1.py
+    - tests/e2e/test_runtime_rejects_unsigned_policy_v1.py
+
+ci_pipeline:
+  pre_gate:
+    - policy verify (changed files) + multisig check(dry-run)
+  gate:
+    - policy verify(strict) + attestation attach
+  post_gate:
+    - attestation verify + PR 코멘트 업데이트(요약/링크/라벨)
+
+rollback:
+  - CI에서 policy verify 스텝 비활성
+  - runtime 로더의 fail-open 플래그 임시 허용(긴급 복구 시에만)
+  - 기존 HMAC 키 fallback 허용(기간 한정)
+
+security_notes:
+  - 키 로테이션: allowed_keys[].state=active|grace|retired 준수
+  - 정책/키 PR은 멀티시그 + 서명 검증 모두 통과해야 머지
+  - SBOM/attestation은 내부만 사용(외부 전송 없음)

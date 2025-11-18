@@ -1,0 +1,51 @@
+# Tenant Configuration Schema
+# Each tenant has isolated namespaces, resource limits, and custom overlays
+
+tenant_id: string           # Unique identifier (alphanumeric + dash)
+name: string               # Display name
+status: active|suspended   # Operational status
+created_at: timestamp
+updated_at: timestamp
+
+# Resource limits
+limits:
+  max_qps: int            # Maximum queries per second
+  max_storage_gb: int     # Maximum evidence storage
+  max_users: int          # Maximum user accounts
+
+# Clock skew tolerance for replay protection
+clock_skew_ms: int        # Default: 60000 (1 minute)
+
+# SLO overlay (optional, overrides global defaults)
+slo_overlay:
+  latency_p95_ms: float
+  latency_p99_ms: float
+  error_rate_max: float
+  saturation:
+    max_cpu_percent: float
+    max_mem_percent: float
+    max_qps: int
+
+# Label catalog overlay (optional, extends global catalog)
+label_overlay:
+  additional_labels:
+    - key: string
+      type: categorical|continuous
+      values: list[string]  # For categorical only
+
+# Billing configuration
+billing:
+  plan: free|basic|enterprise
+  currency: USD|KRW
+  rate_per_qps: float
+  rate_per_gb: float
+
+# Contact and metadata
+contacts:
+  technical_email: string
+  billing_email: string
+
+metadata:
+  industry: string
+  region: string
+  compliance_requirements: list[string]  # e.g., ["GDPR", "HIPAA"]

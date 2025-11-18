@@ -1,0 +1,3 @@
+"""
+CI helper scripts package.
+"""

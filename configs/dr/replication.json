@@ -1,0 +1,15 @@
+{
+  "source": {
+    "bucket": "decisionos-evidence-prod",
+    "region": "us-east-1"
+  },
+  "target": {
+    "bucket": "decisionos-evidence-dr",
+    "region": "us-west-2"
+  },
+  "object_lock": {
+    "mode": "COMPLIANCE",
+    "retain_days": 365
+  },
+  "replication_schedule": "0 */6 * * *"
+}

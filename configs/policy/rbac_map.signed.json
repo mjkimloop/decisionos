@@ -1,0 +1,12 @@
+{
+  "payload": {
+    "policy": "rbac",
+    "source": "apps/policy/rbac_map.yaml",
+    "version": "v0.5.11r",
+    "default_deny": true
+  },
+  "signature": {
+    "key_id": "policy-local",
+    "hmac_sha256": "a83e526d18056dea129e110c8cfe93b6aaf1fb547c96d0386b249f6c93682408"
+  }
+}

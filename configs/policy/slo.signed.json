@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "policy": "slo",
+    "source": "configs/slo/slo-judge-infra.json",
+    "version": "v0.5.11r"
+  },
+  "signature": {
+    "key_id": "policy-local",
+    "hmac_sha256": "97239c7b5b476b6adc4825392fa0c3515e3d955f45cd8d929e316a426ac8aed3"
+  }
+}

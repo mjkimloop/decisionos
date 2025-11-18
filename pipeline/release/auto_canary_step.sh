@@ -3,6 +3,9 @@
 # drift severity에 따라 canary step 자동 조정
 set -e
 
+CHANGE_SERVICE="${CHANGE_SERVICE:-ops-api}"
+python -m scripts.change.verify_freeze_window --service "$CHANGE_SERVICE" --labels "${CHANGE_LABELS:-}" || exit 2
+
 DRIFT_PATH="var/alerts/posterior_drift.json"
 CANARY_CONFIG="configs/canary/policy.autotuned.json"
 

@@ -1,0 +1,7 @@
+global:
+  refill_per_sec: 5
+  bucket_cap: 10
+tenants:
+  default:
+    refill_per_sec: 5
+    bucket_cap: 10

@@ -4,6 +4,15 @@ date: 2025-11-12
 status: open
 summary: 운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선
 -->
+## v0.5.11u — Prod Readiness (Freeze · Burn · GameDay)
+- 전역 Freeze 플래그와 캘린더(`configs/freeze/windows.yaml`) → 카나리/프로모션 fail-closed, `deploy:override_freeze` 예외
+- SLO Burn Rate Gate(`jobs/burn_alert_gate.py`) → 다중 윈도/임계, Slack 알림, Ops 카드(`/ops/cards/burn-trends`), Freeze 자동화
+- GameDay Drill(`scripts/gameday/*`) → latency/error/judge 시나리오 자동 리허설 + PR 코멘트/아티팩트 보고
+
+## v0.5.11w — Change Governance (Freeze Window + CAB + Break-Glass)
+- 정책 레지스트리: `configs/change/freeze_windows.yaml`, `configs/change/ownership.yaml`, `configs/policy/approval_policies.yaml` 서명 검증
+- CI/파이프라인 스텝: `scripts/change/verify_freeze_window.py`, `require_cab_multisig.py`, `require_oncall_ack.py`, `break_glass.py` + status artifact
+- Runtime 후크: `apps/experiment/controller.py` stage 차단, Ops API `/ops/change/*` 가시화, PR 코멘트/Checks 배지 업데이트
 
 
 

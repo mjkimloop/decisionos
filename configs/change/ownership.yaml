@@ -1,0 +1,14 @@
+version: v1
+services:
+  - name: "ops-api"
+    owners: ["alice", "bob"]
+    oncall: ["ops-primary", "ops-backup"]
+    cab: ["alice", "bob", "carol"]
+    slack_channel: "#ops-oncall"
+  - name: "ops-jobs"
+    owners: ["dave", "erin"]
+    oncall: ["jobs-primary"]
+    cab: ["erin", "frank"]
+meta:
+  updated_at: "2025-11-16T00:00:00Z"
+  handbook: "docs/ops/RUNBOOK-CHANGE.md"

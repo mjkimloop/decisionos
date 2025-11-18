@@ -37,13 +37,14 @@ def _tier_for(path: Path) -> str:
     return "LOCKED" if path.name.endswith(".locked.json") else "WIP"
 
 
-def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) -> Dict[str, Any]:
+def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None, tenant_filter: Optional[str] = None) -> Dict[str, Any]:
     """
     Scan evidence directory and build index
 
     Args:
         root: Evidence directory path
         redact_config: Optional path to PII redaction rules config
+        tenant_filter: Optional tenant ID to filter results
 
     Returns:
         Index dictionary with files and summary
@@ -95,6 +96,12 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
 
             tier = _tier_for(entry)
             meta = data.get("meta") or {}
+            tenant = meta.get("tenant")
+
+            # Apply tenant filter if specified
+            if tenant_filter and tenant != tenant_filter:
+                continue
+
             files.append(
                 {
                     "path": entry.name,
@@ -105,7 +112,7 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
                     "locked_at": _iso(stat.st_mtime) if tier == "LOCKED" else None,
                     "tampered": tampered,
                     "redacted": redact_config is not None,
-                    "tenant": meta.get("tenant"),
+                    "tenant": tenant,
                     "generated_at": meta.get("generated_at"),
                 }
             )
@@ -130,6 +137,7 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
                 latest_mtime = max(latest_mtime, stat.st_mtime)
             except FileNotFoundError:
                 continue
+    # Build summary with tenant aggregations
     summary = {
         "count": len(files),
         "tampered": sum(1 for f in files if f.get("tampered")),
@@ -137,6 +145,23 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
         "locked": sum(1 for f in files if f.get("tier") == "LOCKED"),
         "redacted": redacted_count if redact_config else 0,
     }
+
+    # Tenant-level aggregations
+    tenants = {}
+    for f in files:
+        tenant = f.get("tenant") or "unknown"
+        if tenant not in tenants:
+            tenants[tenant] = {"count": 0, "wip": 0, "locked": 0, "tampered": 0}
+        tenants[tenant]["count"] += 1
+        if f.get("tier") == "WIP":
+            tenants[tenant]["wip"] += 1
+        if f.get("tier") == "LOCKED":
+            tenants[tenant]["locked"] += 1
+        if f.get("tampered"):
+            tenants[tenant]["tampered"] += 1
+
+    summary["by_tenant"] = tenants
+
     last_updated = _iso(latest_mtime) if latest_mtime else None
     return {
         "generated_at": _iso(datetime.now(timezone.utc).timestamp()),
@@ -144,6 +169,7 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
         "root": str(root_path),
         "files": files,
         "summary": summary,
+        "tenant_filter": tenant_filter,
         "redaction": {
             "enabled": redact_config is not None,
             "config": redact_config,
@@ -152,7 +178,7 @@ def scan_dir(root: str = "var/evidence", redact_config: Optional[str] = None) ->
     }
 
 
-def write_index(root: str = "var/evidence", out: str | None = None, redact_config: Optional[str] = None) -> str:
+def write_index(root: str = "var/evidence", out: str | None = None, redact_config: Optional[str] = None, tenant_filter: Optional[str] = None) -> str:
     """
     Write evidence index to file
 
@@ -160,29 +186,31 @@ def write_index(root: str = "var/evidence", out: str | None = None, redact_confi
         root: Evidence directory path
         out: Output path (default: {root}/index.json)
         redact_config: Optional path to PII redaction rules config
+        tenant_filter: Optional tenant ID to filter results
 
     Returns:
         Path to written index file
     """
-    index = scan_dir(root, redact_config=redact_config)
+    index = scan_dir(root, redact_config=redact_config, tenant_filter=tenant_filter)
     out_path = Path(out) if out else Path(root) / "index.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(index, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return str(out_path)
 
 
-def scan_evidence_dir(root: str = "var/evidence", redact_config: Optional[str] = None) -> Dict[str, Any]:
+def scan_evidence_dir(root: str = "var/evidence", redact_config: Optional[str] = None, tenant_filter: Optional[str] = None) -> Dict[str, Any]:
     """
     Scan evidence directory (wrapper for scan_dir)
 
     Args:
         root: Evidence directory path
         redact_config: Optional path to PII redaction rules config
+        tenant_filter: Optional tenant ID to filter results
 
     Returns:
         Index dictionary
     """
-    return scan_dir(root, redact_config=redact_config)
+    return scan_dir(root, redact_config=redact_config, tenant_filter=tenant_filter)
 
 
 __all__ = ["scan_dir", "scan_evidence_dir", "write_index"]

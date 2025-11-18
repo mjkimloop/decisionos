@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "tenant_id": "t2",
+  "groups": [
+    {
+      "name": "api",
+      "weight": 1.8,
+      "description": "API endpoints group"
+    },
+    {
+      "name": "database",
+      "weight": 2.5,
+      "description": "Database operations (critical for t2)"
+    }
+  ],
+  "labels": [
+    {
+      "name": "api_timeout",
+      "type": "categorical",
+      "group": "api",
+      "severity": "medium"
+    },
+    {
+      "name": "db_connection_failed",
+      "type": "categorical",
+      "group": "database",
+      "severity": "critical"
+    }
+  ]
+}

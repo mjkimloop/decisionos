@@ -6,6 +6,7 @@ apps/obs/witness/perf.py
 from __future__ import annotations
 import csv
 import datetime as dt
+from datetime import timezone
 from typing import TextIO, List, Dict, Any
 from dataclasses import dataclass
 
@@ -34,9 +35,18 @@ def parse_reqlog_csv(f: TextIO) -> List[Req]:
     reader = csv.DictReader(f)
     reqs = []
     for row in reader:
-        raw_ts = row["ts"].strip()
+        raw_ts = (row.get("ts") or "").strip()
+        if not raw_ts:
+            continue
         normalized_ts = raw_ts.replace("Z", "+00:00") if raw_ts.endswith("Z") else raw_ts
-        ts = dt.datetime.fromisoformat(normalized_ts)
+        try:
+            ts = dt.datetime.fromisoformat(normalized_ts)
+        except ValueError as exc:  # pragma: no cover - defensive
+            raise ValueError(f"invalid timestamp in reqlog: {raw_ts}") from exc
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        else:
+            ts = ts.astimezone(timezone.utc)
         status = int(row["status"].strip())
         latency_ms = float(row["latency_ms"].strip())
         reqs.append(Req(ts=ts, status=status, latency_ms=latency_ms))
@@ -93,12 +103,18 @@ def summarize_perf(reqs: List[Req]) -> Dict[str, Any]:
 
     # 시간 윈도우
     timestamps = [r.ts for r in reqs]
-    window_start = min(timestamps).isoformat()
-    window_end = max(timestamps).isoformat()
+    start_dt = min(timestamps).astimezone(timezone.utc)
+    end_dt = max(timestamps).astimezone(timezone.utc)
+    window_start = start_dt.isoformat().replace("+00:00", "Z")
+    window_end = end_dt.isoformat().replace("+00:00", "Z")
 
     return {
         "latency_ms": {"p50": round(p50, 2), "p95": round(p95, 2), "p99": round(p99, 2)},
         "error_rate": round(error_rate, 6),
         "count": len(reqs),
-        "window": {"start": window_start, "end": window_end},
+        "window": {
+            "start": window_start,
+            "end": window_end,
+            "duration_sec": int((end_dt - start_dt).total_seconds()),
+        },
     }

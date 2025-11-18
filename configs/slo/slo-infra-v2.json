@@ -1,0 +1,24 @@
+{
+  "version": "v2",
+  "latency": {
+    "max_p95_ms": 900,
+    "max_p99_ms": 1800,
+    "min_samples": 1000
+  },
+  "error": {
+    "max_error_rate": 0.01,
+    "min_samples": 500
+  },
+  "witness": { "require_csv_sha256": true, "require_signature": true, "min_rows": 1 },
+  "integrity": { "require_signature": true },
+  "budget": { "allow_levels": ["ok", "warn"] },
+  "quota": { "forbid_actions": {} },
+  "anomaly": { "allow_spike": false },
+  "judge_infra": {
+    "latency": { "max_p95_ms": 900, "max_p99_ms": 1800, "min_samples": 500 },
+    "availability": { "min_availability": 0.99 },
+    "sig": { "max_sig_error_rate": 0.0005, "min_samples": 500 },
+    "window_sec": 300,
+    "grace_burst": 0.5
+  }
+}

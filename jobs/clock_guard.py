@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
-from apps.common.clock import drift_seconds, now_utc
+from apps.common.clock_guard import check_clock, ensure_reference
 
 
 def main() -> None:
@@ -16,20 +15,18 @@ def main() -> None:
 
     ref_path = Path(args.ref)
     if not ref_path.exists():
-        ref_path.parent.mkdir(parents=True, exist_ok=True)
-        ref_path.write_text(now_utc().strftime("%Y-%m-%dT%H:%M:%SZ"), encoding="utf-8")
+        ensure_reference(args.ref)
         print(f"[clock_guard] reference created at {ref_path}")
         return
 
     try:
-        ref = datetime.fromisoformat(ref_path.read_text(encoding="utf-8").strip().replace("Z", "+00:00"))
-    except Exception as exc:  # pragma: no cover - invalid file contents
-        print(f"[clock_guard] invalid reference timestamp: {exc}", file=sys.stderr)
+        ok, drift = check_clock(args.ref, args.max_skew_sec)
+    except ValueError as exc:
+        print(f"[clock_guard] {exc}", file=sys.stderr)
         sys.exit(2)
 
-    delta = drift_seconds(now_utc(), ref)
-    print(f"[clock_guard] drift={delta:.3f}s (limit={args.max_skew_sec}s)")
-    if delta > args.max_skew_sec:
+    print(f"[clock_guard] drift={drift:.3f}s (limit={args.max_skew_sec}s)")
+    if not ok:
         print("[clock_guard] FAIL: drift too large", file=sys.stderr)
         sys.exit(2)
 

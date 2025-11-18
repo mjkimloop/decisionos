@@ -1,0 +1,42 @@
+id: wo-v0.5.11t-2-rotation-pr-bot-and-policy-diff
+title: "Key Rotation PR Bot + Countdown Labels + Policy Diff Summary (critical fields)"
+milestone: v0.5.11t
+owner: platform-security
+status: planned
+
+scope:
+  - Rotation Bot: 만료 임박 키가 있으면 자동 브랜치/커밋/PR 생성(드래프트), 코멘트/라벨 부착
+  - Countdown Labels: rotation:soon-14 / -7 / -3 라벨 존재/동기화/자동 부여
+  - Policy Diff Summary: 정책 JSON 변경 시 핵심 필드만 요약(MD/JSON) 생성 → PR 코멘트/Checks에 노출
+  - CI 통합: 스케줄(매일) + PR 이벤트 훅(pull_request)에 증설
+
+deliverables:
+  - scripts/ci/key_rotation_bot.py            # PR 자동 생성(없으면 Issue fallback), dry-run 지원
+  - scripts/ci/ensure_rotation_labels.py      # 카운트다운 라벨 팔레트 동기화
+  - scripts/ci/policy_diff_summarize.py       # 핵심 필드 diff 요약(MD/JSON 동시 출력)
+  - .github/workflows/rotation-bot.yml        # cron: 매일 02:10 UTC
+  - docs/ops/POLICY-ROTATION.md               # 운영 가이드 보강(봇/라벨/승인 절차)
+  - docs/CHANGELOG.md                         # 항목 추가
+
+env:
+  required:
+    - GITHUB_TOKEN
+  optional:
+    - GITHUB_REPOSITORY            # 미지정 시 자동 추론
+    - CI_PR_NUMBER                 # PR 컨텍스트(없으면 일부 단계 스킵)
+    - ROTATION_SOON_DAYS=14
+    - ROTATION_PR_ENABLE=1         # 0이면 봇 비활성화
+    - ROTATION_BRANCH_PREFIX="chore/rotate-keys"
+    - ROTATION_PR_BASE             # 없으면 기본 브랜치
+    - ALLOW_ISSUE_FALLBACK=1       # PR 불가 시 Issue 생성
+    - REQUIRED_LABEL="review/2-approvers"
+    - POLICY_GLOB="configs/policy/*.signed.json"
+
+pass_criteria:
+  - 만료 14/7/3일 구간 매칭 시 라벨 자동 생성/동기화/부착
+  - 경고 발생 시 드래프트 PR(또는 Issue) 1건 자동 발행 + 요약/아티팩트 링크
+  - 정책 diff 요약(MD/JSON) 생성 및 주 PR 코멘트/Checks에 병합
+
+rollback:
+  - rotation-bot.yml workflow disable
+  - CI에서 해당 증설 스텝 조건 비활성(ROTATION_PR_ENABLE=0)

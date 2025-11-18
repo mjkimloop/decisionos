@@ -92,6 +92,14 @@ class SLODrift(BaseModel):
     forbid_severity: List[str] = Field(default_factory=lambda: ["critical"])
 
 
+class SLOSaturation(BaseModel):
+    """Resource saturation limits (cpu/mem/qps)"""
+    max_cpu_percent: Optional[float] = 90.0
+    max_mem_percent: Optional[float] = 85.0
+    max_qps: Optional[int] = None
+    fail_closed: bool = True
+
+
 class SLOSpec(BaseModel):
     version: str = "v1"
     budget: SLOBudget = SLOBudget()
@@ -105,3 +113,4 @@ class SLOSpec(BaseModel):
     judge_infra: Optional[SLOJudgeInfra] = None
     canary: Optional[SLOCanary] = None
     drift: Optional[SLODrift] = None
+    saturation: Optional[SLOSaturation] = None

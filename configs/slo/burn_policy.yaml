@@ -1,0 +1,25 @@
+windows:
+  - name: "5m"
+    duration: "5m"
+    fast_threshold: 2.0
+    slow_threshold: 4.0
+  - name: "30m"
+    duration: "30m"
+    fast_threshold: 2.0
+    slow_threshold: 4.0
+  - name: "1h"
+    duration: "1h"
+    fast_threshold: 2.0
+    slow_threshold: 4.0
+  - name: "6h"
+    duration: "6h"
+    fast_threshold: 2.0
+    slow_threshold: 4.0
+
+metrics:
+  error_rate:
+    objective_availability: 0.995
+  latency_p95:
+    objective_ms: 400
+  latency_p99:
+    objective_ms: 600

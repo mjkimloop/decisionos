@@ -1,0 +1,11 @@
+# Redis DSN for production
+# Format: redis://[:password]@host:port/db or rediss:// for TLS
+#
+# Example:
+# redis://localhost:6379/0
+# rediss://user:pass@redis.prod.internal:6380/0
+#
+# Set via environment variable:
+# DECISIONOS_REDIS_URL=rediss://...
+
+${DECISIONOS_REDIS_URL}

@@ -1,0 +1,20 @@
+# PII Redaction Policy
+
+enabled: true
+
+# Tokenization mode
+mode: token  # "token" or "mask"
+
+# PII patterns configuration
+patterns_config: configs/pii/patterns_kr.json
+
+# Escrow (reversible tokenization)
+escrow:
+  enabled: false
+  redis_dsn: ${ESCROW_REDIS_DSN}  # Optional: for reversible mapping
+  ttl_days: 90
+
+# Audit logging
+audit:
+  enabled: true
+  log_path: var/logs/pii_redaction.log

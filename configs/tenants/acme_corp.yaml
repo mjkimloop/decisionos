@@ -1,0 +1,48 @@
+# ACME Corporation Tenant Configuration
+# Enterprise customer with custom SLO requirements
+
+tenant_id: acme-corp
+name: ACME Corporation
+status: active
+created_at: "2025-01-15T00:00:00Z"
+updated_at: "2025-01-15T00:00:00Z"
+
+limits:
+  max_qps: 5000
+  max_storage_gb: 1000
+  max_users: 500
+
+clock_skew_ms: 30000  # Stricter clock skew for financial industry
+
+slo_overlay:
+  latency_p95_ms: 100.0
+  latency_p99_ms: 250.0
+  error_rate_max: 0.001
+  saturation:
+    max_cpu_percent: 85.0
+    max_mem_percent: 80.0
+    max_qps: 5000
+
+label_overlay:
+  additional_labels:
+    - key: business_unit
+      type: categorical
+      values: ["sales", "engineering", "finance", "operations"]
+    - key: priority
+      type: categorical
+      values: ["critical", "high", "medium", "low"]
+
+billing:
+  plan: enterprise
+  currency: USD
+  rate_per_qps: 0.0005
+  rate_per_gb: 0.05
+
+contacts:
+  technical_email: platform@acme.com
+  billing_email: finance@acme.com
+
+metadata:
+  industry: financial_services
+  region: us-east-1
+  compliance_requirements: ["SOC2", "PCI-DSS", "GDPR"]

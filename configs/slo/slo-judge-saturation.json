@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "saturation": {
+    "max_cpu_percent": 90.0,
+    "max_mem_percent": 85.0,
+    "max_qps": 10000,
+    "fail_closed": true
+  },
+  "latency": {
+    "max_p95_ms": 150,
+    "max_p99_ms": 300
+  },
+  "error": {
+    "max_error_rate": 0.001
+  }
+}

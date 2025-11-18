@@ -1,0 +1,12 @@
+email:
+  pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+  mode: mask
+phone:
+  pattern: "\\b01[0-9]-?\\d{3,4}-?\\d{4}\\b"
+  mode: mask
+name:
+  pattern: "\\b[가-힣]{2,4}\\b"
+  mode: mask_short
+addr_partial:
+  pattern: "(?:[가-힣0-9]+\\s){2,}[가-힣0-9]+(동|로|길)"
+  mode: token

@@ -1,0 +1,9 @@
+windows:
+  - name: "weekly-maintenance"
+    days: ["sat", "sun"]
+    start_time: "00:00"
+    end_time: "06:00"
+    timezone: "UTC"
+  - name: "release-freeze-2025w47"
+    start: "2025-11-20T00:00:00Z"
+    end: "2025-11-24T06:00:00Z"

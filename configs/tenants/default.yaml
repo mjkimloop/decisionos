@@ -1,0 +1,39 @@
+# Default Tenant Configuration
+# Used for testing and single-tenant deployments
+
+tenant_id: default
+name: Default Tenant
+status: active
+created_at: "2025-01-01T00:00:00Z"
+updated_at: "2025-01-01T00:00:00Z"
+
+limits:
+  max_qps: 1000
+  max_storage_gb: 100
+  max_users: 50
+
+clock_skew_ms: 60000
+
+slo_overlay:
+  latency_p95_ms: 200.0
+  latency_p99_ms: 500.0
+  error_rate_max: 0.01
+  saturation:
+    max_cpu_percent: 90.0
+    max_mem_percent: 85.0
+    max_qps: 1000
+
+billing:
+  plan: basic
+  currency: USD
+  rate_per_qps: 0.001
+  rate_per_gb: 0.10
+
+contacts:
+  technical_email: ops@example.com
+  billing_email: billing@example.com
+
+metadata:
+  industry: technology
+  region: us-west-2
+  compliance_requirements: []

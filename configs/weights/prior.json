@@ -1,0 +1,26 @@
+{
+  "infra": {
+    "mean": 1.0,
+    "std": 0.1,
+    "bounds": [0.8, 1.2],
+    "description": "Infrastructure failures (highest priority)"
+  },
+  "perf": {
+    "mean": 0.8,
+    "std": 0.1,
+    "bounds": [0.6, 1.0],
+    "description": "Performance regressions"
+  },
+  "canary": {
+    "mean": 0.9,
+    "std": 0.1,
+    "bounds": [0.7, 1.1],
+    "description": "Canary drift"
+  },
+  "quota": {
+    "mean": 0.7,
+    "std": 0.1,
+    "bounds": [0.5, 0.9],
+    "description": "Quota/rate limits"
+  }
+}

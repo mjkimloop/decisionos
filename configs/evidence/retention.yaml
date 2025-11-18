@@ -1,0 +1,25 @@
+# Evidence Retention Policy (per tenant)
+#
+# WIP: Work-in-progress evidence (mutable, short retention)
+# LOCKED: Immutable evidence (long retention for compliance)
+
+default:
+  wip_days: 7
+  locked_days: 365
+  description: "Default retention: 7 days WIP, 1 year LOCKED"
+
+tenants:
+  default:
+    wip_days: 7
+    locked_days: 365
+
+  acme-corp:
+    wip_days: 3
+    locked_days: 730
+    description: "Financial compliance: 2 years LOCKED"
+
+# Global settings
+gc:
+  dry_run: true
+  batch_size: 100
+  report_path: "var/reports/evidence_gc_{tenant}_{date}.json"

@@ -1,0 +1,7 @@
+prefix: "dos"
+namespaces:
+  etag: "dos:etag:{scope}:{id}"
+  replay: "dos:replay:{tenant}:{nonce}"
+ttl_ms:
+  etag_default: 600000
+  replay_window: 300000

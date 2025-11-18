@@ -1,0 +1,152 @@
+meta:
+  version: v0.5.11t
+  date: 2025-11-12
+  owner: "DecisionOS Core"
+  status: open
+  summary: >
+    시크릿/KMS 하드닝, 분산 레이트리밋/ETagStore, Evidence PII 마스킹,
+    SLO Saturation(자원) 확장, Blue/Green 커버리지, DR/백업,
+    Ops API 인증/감사, 가중치 옵티마이저 오프라인 잡, 런타임 플래그, 인덱싱 성능 개선.
+
+objectives:
+  - prod 환경에서 비밀/키/시계/알림/증빙 체인의 보안·가용·추적성 강화
+  - 게이트/런북 자동화와 DR 복원력을 상향
+  - 대시보드·PR 신뢰지표에 자원 포화(Saturation) 및 가중치 학습 신호 추가
+
+scope:
+
+  # T0) Secrets/KMS Hardening
+  secrets_kms:
+    deliverables:
+      - path: apps/secrets/kms_loader.py        # ENV/SSM 파라미터 병합, 버전/그레이스, 감사로그
+      - path: configs/secrets/policies.json     # 키 역할/회전주기/그레이스 규칙
+      - path: tests/gates/gate_sec/test_kms_loader_rotation_v1.py
+    acceptance:
+      - "ENV→SSM 오버레이 병합, stale 버전 경고, grace 동안 허용 → 이후 fail-closed"
+      - "감사로그에 key_id, version, source(ENV|SSM), loaded_at 기록"
+
+  # T1) 분산 레이트리밋 & ETag Store (Redis)
+  dist_limits_etag:
+    deliverables:
+      - path: apps/alerts/ratelimit_redis.py    # LUA/슬라이딩 윈도우 구현
+      - path: apps/ops/etag_store_redis.py      # TTL, eviction, namespace
+      - path: configs/redis/dsn.txt             # 운영 DSN 자리표시자
+      - path: tests/gates/gate_ops/test_redis_rate_limiter_v1.py
+      - path: tests/gates/gate_ops/test_etag_store_redis_v1.py
+    acceptance:
+      - "멀티 프로세스에서 윈도우/카운트 일관성 보장"
+      - "ETag put/get/mutate TTL 만료 후 자동 미스"
+
+  # T2) Evidence PII 마스킹
+  pii_redaction:
+    deliverables:
+      - path: apps/obs/evidence/redactor.py     # 이메일/전화/식별자 패턴 마스킹
+      - path: configs/evidence/redaction.json   # on/off, 패턴/치환 규칙
+      - path: tests/gates/gate_t/test_evidence_redaction_v1.py
+    acceptance:
+      - "샘플 Evidence에 포함된 PII가 인덱싱/업로드 전 모두 마스킹"
+      - "무결성 해시는 마스킹 결과 기준으로 계산"
+
+  # T3) SLO Saturation(자원) 확장
+  slo_saturation:
+    deliverables:
+      - path: apps/judge/slo_schema.py          # cpu/mem/qps saturation 한계
+      - path: apps/judge/slo_judge.py           # infra.saturation_* 이유코드
+      - path: configs/slo/slo-judge-saturation.json
+      - path: tests/gates/gate_aj/test_slo_saturation_v1.py
+    acceptance:
+      - "p95/에러 외에 saturation 한계 초과 시 fail-closed"
+      - "이유코드: infra.saturation.cpu|mem|qps"
+
+  # T4) Blue/Green Rollout 커버리지
+  blue_green:
+    deliverables:
+      - path: apps/experiment/controller.py     # stage: blue|green 전환 + health gate
+      - path: pipeline/release/blue_green_cutover.sh
+      - path: tests/gates/gate_ah/test_blue_green_switch_v1.py
+    acceptance:
+      - "green healthy & gates pass → cutover, 실패 시 즉시 blue rollback"
+
+  # T5) DR/백업 (Evidence/ObjectLock 복제)
+  dr_backup:
+    deliverables:
+      - path: jobs/evidence_replication.py      # 리전 간 복제 + ObjectLock 확인
+      - path: configs/dr/replication.json       # 소스/타겟 버킷·리전·락 모드
+      - path: tests/integration/test_evidence_replication_v1.py
+    acceptance:
+      - "락 위반/정책 불일치 시 fail, 복제 성공 시 인덱스 갱신"
+
+  # T6) Ops API 인증/감사 강화
+  ops_api_auth_audit:
+    deliverables:
+      - path: apps/ops/api.py                   # Bearer(JWT)/HMAC 중 택1, RBAC + 감사로그
+      - path: tests/gates/gate_ops/test_ops_api_auth_audit_v1.py
+    acceptance:
+      - "미인증 → 401, 권한 없음 → 403, 모든 호출에 trace_id·actor 로깅"
+
+  # T7) 가중치 옵티마이저(오프라인)
+  weight_optimizer:
+    deliverables:
+      - path: jobs/weights_optimize.py          # BayesianOpt 스켈레톤(오프라인)
+      - path: configs/weights/prior.json
+      - path: tests/gates/gate_q/test_weights_optimizer_sanity_v1.py
+    acceptance:
+      - "priors→posterior 산출, 안전범위(하·상한) 준수"
+
+  # T8) 런타임 플래그/킬스위치
+  runtime_flags:
+    deliverables:
+      - path: apps/runtime/flags.py
+      - path: configs/flags/flags.json          # feature_on/off, kill_switches
+      - path: tests/gates/gate_ops/test_runtime_flags_v1.py
+    acceptance:
+      - "플래그 변경 시 재시작 없이 반영(파일 시그널/mtime 폴링)"
+
+  # T9) Evidence 인덱싱 성능 개선
+  indexing_perf:
+    deliverables:
+      - path: apps/obs/evidence/indexer.py      # 배치 해시, mmap/스트리밍 옵션
+      - path: tests/gates/gate_t/test_indexer_perf_regression_v1.py
+    acceptance:
+      - "샘플 10k 파일 기준 v0.5.11s 대비 처리시간 ≥20% 개선"
+
+configs:
+  ensure:
+    - path: configs/judge/providers.yaml
+    - path: configs/labels/label_catalog_v2.json
+    - path: data/reqlog_sample.csv
+
+ci_integration:
+  pre_gate:
+    - name: "SEC — KMS/Secrets sanity"
+      run: "python -m pytest -q tests/gates/gate_sec/test_kms_loader_rotation_v1.py"
+    - name: "OPS — Redis limiter/etag"
+      run: "python -m pytest -q tests/gates/gate_ops/test_redis_rate_limiter_v1.py tests/gates/gate_ops/test_etag_store_redis_v1.py"
+    - name: "T — Evidence redaction"
+      run: "python -m pytest -q tests/gates/gate_t/test_evidence_redaction_v1.py"
+  gate:
+    - name: "AJ — SLO saturation"
+      run: "python -m pytest -q tests/gates/gate_aj/test_slo_saturation_v1.py"
+    - name: "AH — Blue/Green switch"
+      run: "python -m pytest -q tests/gates/gate_ah/test_blue_green_switch_v1.py"
+  post_gate:
+    - name: "DR — Evidence replication"
+      run: "python -m pytest -q tests/integration/test_evidence_replication_v1.py"
+    - name: "Q — Weights optimizer sanity"
+      run: "python -m pytest -q tests/gates/gate_q/test_weights_optimizer_sanity_v1.py"
+
+acceptance_criteria:
+  - 모든 테스트 그린, CI pre/gate/post 단계 통과
+  - prod/staging/dev에서 알림·증빙·게이트 동작이 RBAC/시크릿 정책과 충돌 없이 실행
+  - Evidence PII가 마스킹되고 무결성 해시/인덱스가 그 상태를 반영
+  - Blue/Green 전환이 실패 시 자동 롤백되고, 이벤트·판정·알림이 남는다
+  - DR 복제가 ObjectLock 정책을 위반하지 않고, 인덱서가 타겟 버킷 스냅샷을 식별
+
+commands:
+  - "python scripts/wo_apply.py docs/work_orders/wo-v0.5.11t-critical-ops-hardening.yaml"
+  - "python scripts/doc_guard.py"
+  - "python -m pytest -q"
+
+rollback:
+  - "git revert -n HEAD && git commit -m 'revert: v0.5.11t critical ops hardening'"
+  - "git checkout -- apps configs pipeline jobs"

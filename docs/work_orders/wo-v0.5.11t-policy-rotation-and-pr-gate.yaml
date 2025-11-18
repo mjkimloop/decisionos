@@ -1,0 +1,34 @@
+id: wo-v0.5.11t-policy-rotation-and-pr-gate
+title: "Signed-Policy Key Rotation Alert & Policy-Change PR Gate (2-Reviewer Label)"
+owner: platform-security
+status: planned
+milestone: v0.5.11t
+scope:
+  - Key rotation 알림: 서명 키 만료 임박/겹침 미보장 감지 → PR 코멘트/체크런 노출
+  - 정책 변경 PR 게이트: 정책 파일 변경 시 'review/2-approvers' 라벨 없으면 gate 실패
+  - (선택) 2인 승인 감지: GitHub reviews >=2 로 대체 가능(ENV 토글)
+deliverables:
+  - scripts/ci/key_rotation_alert.py
+  - scripts/ci/policy_diff_guard.py
+  - docs/ops/POLICY-ROTATION.md (운영 기준/치트시트)
+  - .github/workflows/ci.yml (pre_gate/post_gate 증설)
+env:
+  required:
+    - GITHUB_TOKEN
+  optional:
+    - CI_REPO                         # owner/repo (미설정 시 추론 시도)
+    - CI_PR_NUMBER                    # PR 번호(없으면 PR 가시화 단계 스킵)
+    - DECISIONOS_POLICY_KEYS          # JSON 배열, 없으면 DECISIONOS_JUDGE_KEYS 폴백
+    - ROTATION_SOON_DAYS=14           # 만료 임박 임계
+    - GRACE_OVERLAP_DAYS=7            # 키 겹침 최소 보장
+    - REQUIRE_APPROVALS=0             # 1이면 라벨 대신 '2 approvals' 체크
+    - REQUIRED_LABEL="review/2-approvers"
+    - POLICY_GLOB="configs/policy/*.signed.json"
+pass_criteria:
+  - 만료 임박/겹침 미보장 탐지 시 WARN/NOK를 체크런·PR 코멘트에 노출
+  - 정책 파일 변경 시 라벨(or 2 approvals) 없으면 pre_gate 실패
+  - CI 전체가 토큰/PR 미존재 환경에서도 안전하게 스킵
+rollback:
+  - .github/workflows/ci.yml에서 해당 스텝 제거 또는 조건 토글
+notes:
+  - 기존 signed-policy 검증 로직과 충돌 없음(읽기 전용)

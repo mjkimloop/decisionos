@@ -25,8 +25,9 @@ def test_canary_auto_promote_promote_exit(tmp_path, monkeypatch):
 
     # 환경 설정 및 모듈 리로드
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "3")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "0")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "3")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "0")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)

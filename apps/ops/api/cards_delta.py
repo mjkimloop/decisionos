@@ -1,76 +1,93 @@
 from __future__ import annotations
-from fastapi import APIRouter, Response, Header
-from typing import Optional
-import json, os, time, pathlib
 
-from apps.ops.cache.snapshot_store import build_snapshot_store
-from apps.ops.cache.delta import compute_etag, make_delta_etag, not_modified
+import email.utils
+import hashlib
+import json
+import os
+import time
+from typing import Any, Dict
 
-router = APIRouter()
+from fastapi import APIRouter, Request, Response
 
-TTL = int(os.getenv("DECISIONOS_CARDS_TTL", "60"))
-INDEX_PATH = os.getenv("DECISIONOS_EVIDENCE_INDEX", "var/evidence/index.json")
+from apps.ops.api.cards_data import compute_reason_trends
+from apps.ops.cache.snapshot_store import SnapshotStore
+from apps.policy.rbac_enforce import require_scopes
+
+# Optional metrics
+try:
+    from apps.metrics.registry import METRICS_V2 as METRICS
+except Exception:
+    METRICS = None
+
 TENANT = os.getenv("DECISIONOS_TENANT", "").strip()
-_KEY_BASE = "cards:reason-trends"
-KEY = f"{TENANT}:{_KEY_BASE}" if TENANT else _KEY_BASE
+CATALOG_SHA = os.getenv("DECISIONOS_LABEL_CATALOG_SHA", "").strip()
+_TTL = int(os.getenv("DECISIONOS_CARDS_TTL", "60"))
+_SNAP = SnapshotStore()
 
-# In-memory cache for last ETag (per-route)
-_LAST_ETAG_CACHE = {}
+router = APIRouter(
+    prefix="/ops/cards",
+    tags=["ops-cards"],
+    dependencies=[require_scopes("ops:read")],
+)
 
-def _load_live_payload() -> dict:
-    p = pathlib.Path(INDEX_PATH)
-    if p.exists():
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            # 최소 필드만 정규화 (대시보드가 기대하는 키)
-            trends = data.get("reason_trends") or data.get("trends") or []
-            top = data.get("top_impact") or []
-            gen_at = data.get("generated_at") or int(pathlib.Path(INDEX_PATH).stat().st_mtime)
-            return {
-                "generated_at": gen_at,
-                "reason_trends": trends,
-                "top_impact": top,
-            }
-        except Exception:
-            pass
-    # 인덱스가 없을 때의 안전한 기본값
-    return {"generated_at": int(time.time()), "reason_trends": [], "top_impact": []}
+
+def _cache_key(q: Dict[str, Any]) -> str:
+    """Prevent key collision by folding tenant/catalog/q into the key."""
+    qhash = hashlib.sha1(json.dumps(q, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    parts = [p for p in (TENANT, "cards:reason-trends", CATALOG_SHA, qhash) if p]
+    return ":".join(parts)
+
+
+def _etag(body: dict, q: Dict[str, Any]) -> str:
+    raw = json.dumps({"t": TENANT, "c": CATALOG_SHA, "body": body.get("generated_at"), "q": q}, sort_keys=True, separators=(",", ":")).encode()
+    return '"' + hashlib.sha256(raw).hexdigest() + '"'
+
+
+def _httpdate(ts: float) -> str:
+    return email.utils.formatdate(ts, usegmt=True)
+
 
 @router.get("/reason-trends")
-async def get_reason_trends(
-    response: Response,
-    if_none_match: Optional[str] = Header(default=None),
-):
-    store = build_snapshot_store()
-    route_key = KEY
+async def reason_trends(request: Request, period: str = "7d", bucket: str = "day"):
+    q = {"period": period, "bucket": bucket}
+    body_obj = compute_reason_trends(period=period, bucket=bucket)
+    body_json = json.dumps(body_obj, ensure_ascii=False)
+    etag = _etag(body_obj, q)
 
-    # Get previous ETag from cache
-    prev_etag = _LAST_ETAG_CACHE.get(route_key)
+    if request.headers.get("If-None-Match") == etag:
+        resp = Response(status_code=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = f"private, max-age={_TTL}"
+        resp.headers["Vary"] = "Authorization, X-Scopes, X-Tenant, Accept, If-None-Match, If-Modified-Since"
+        resp.headers["Content-Length"] = "0"
+        return resp
 
-    # If-None-Match short-circuit using last etag
-    if if_none_match and prev_etag and if_none_match == prev_etag:
-        response.status_code = 304
-        response.headers["ETag"] = prev_etag
-        response.headers["Cache-Control"] = f"public, max-age={TTL}"
-        return
+    snap_key = _cache_key(q)
+    prev = _SNAP.get(snap_key)
+    delta = None
+    if prev:
+        try:
+            prev_obj = json.loads(prev[0])
+            prev_top = {x["reason"]: x["score"] for x in prev_obj.get("top_reasons", [])}
+            curr_top = {x["reason"]: x["score"] for x in body_obj.get("top_reasons", [])}
+            added = {k: curr_top[k] for k in curr_top.keys() - prev_top.keys()}
+            removed = {k: prev_top[k] for k in prev_top.keys() - curr_top.keys()}
+            changed = {
+                k: curr_top[k] - prev_top.get(k, 0)
+                for k in curr_top.keys() & prev_top.keys()
+                if abs(curr_top[k] - prev_top[k]) > 1e-6
+            }
+            delta = {"added": added, "removed": removed, "changed": changed}
+        except Exception:
+            delta = None
 
-    payload = _load_live_payload()
-    # 기본 ETag는 payload 해시, 이전 etag는 delta 계산 용도로만 사용
-    server_etag = compute_etag(payload)
-
-    client_tag = if_none_match.strip('"') if if_none_match else None
-    if client_tag == server_etag:
-        response.status_code = 304
-        response.headers["ETag"] = server_etag
-        response.headers["Cache-Control"] = f"public, max-age={TTL}"
-        return
-
-    # 스냅샷 갱신 (etag를 키로 사용)
-    await store.set(server_etag, payload, ttl_sec=TTL)
-
-    # Update ETag cache
-    _LAST_ETAG_CACHE[route_key] = server_etag
-
-    response.headers["ETag"] = server_etag
-    response.headers["Cache-Control"] = f"public, max-age={TTL}"
-    return payload
+    payload = {"data": body_obj, "delta": delta, "_meta": {"tenant": TENANT, "catalog_sha": CATALOG_SHA}}
+    resp = Response(content=json.dumps(payload, ensure_ascii=False), media_type="application/json")
+    resp.headers["ETag"] = etag
+    resp.headers["Last-Modified"] = _httpdate(time.time())
+    resp.headers["Cache-Control"] = f"private, max-age={_TTL}"
+    resp.headers["Vary"] = "Authorization, X-Scopes, X-Tenant, Accept, If-None-Match, If-Modified-Since"
+    _SNAP.set(snap_key, body_json)
+    if METRICS:
+        await METRICS.inc("decisionos_cards_etag_total", {"result": "miss"})
+    return resp

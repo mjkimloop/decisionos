@@ -1,0 +1,18 @@
+version: v1
+rules:
+  - name: default-config
+    match:
+      paths: ["configs/**"]
+      services: ["*"]
+    min_signatures: 2
+    roles: ["cab"]
+    tags_any: ["urgent", "hotfix"]
+  - name: ops-api
+    match:
+      services: ["ops-api"]
+    min_signatures: 2
+    required_signers: ["alice", "bob", "carol"]
+    min_roles:
+      cab: 2
+meta:
+  updated_at: "2025-11-16T00:00:00Z"

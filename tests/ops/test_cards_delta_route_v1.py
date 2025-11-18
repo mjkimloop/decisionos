@@ -11,6 +11,7 @@ def test_cards_delta_etag_generation(tmp_path):
 
     # Must set before import
     os.environ["DECISIONOS_EVIDENCE_INDEX"] = str(idx)
+    os.environ["DECISIONOS_RBAC_TEST_MODE"] = "1"
 
     # Import after env var is set
     from apps.ops.api import cards_delta
@@ -23,7 +24,7 @@ def test_cards_delta_etag_generation(tmp_path):
     c = TestClient(app)
 
     # First request should return 200 with ETag
-    r1 = c.get("/ops/cards/reason-trends")
+    r1 = c.get("/ops/cards/reason-trends", headers={"X-Scopes": "ops:read"})
     assert r1.status_code == 200
     etag1 = r1.headers.get("ETag")
     assert etag1
@@ -35,9 +36,5 @@ def test_cards_delta_etag_generation(tmp_path):
 
     # Second request should also return 200 (payload unchanged but ETag chain changes)
     # This is expected behavior for delta ETag with chaining
-    r2 = c.get("/ops/cards/reason-trends")
-    assert r2.status_code == 200
-    etag2 = r2.headers.get("ETag")
-    assert etag2
-    # ETag should be different due to chaining, but that's OK
-    # The important thing is that 304 works when client sends correct ETag
+    r2 = c.get("/ops/cards/reason-trends", headers={"If-None-Match": etag1, "X-Scopes": "ops:read"})
+    assert r2.status_code == 304

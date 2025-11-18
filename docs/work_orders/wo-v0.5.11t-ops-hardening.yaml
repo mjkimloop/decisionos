@@ -1,0 +1,137 @@
+meta:
+  version: v0.5.11t
+  codename: "Ops Hardening & Compliance GA"
+  date: 2025-11-12
+  status: proposed
+  owner: "ops@decisionos"
+  summary: >
+    Redis ETagStore/RateLimit, Keys/KMS 로테이션, PII 마스킹, Evidence 보존·GC,
+    DR(백업/복구), 멀티테넌트 격리, Judge/Ops API 보안·관측 하드닝과 CI 게이트 강화.
+
+objectives:
+  - 생산(Prod) 환경의 캐시·키·로그·증빙·릴리스 게이트를 GA 수준으로 하드닝
+  - People/Process/Platform 관점 DR·복구과정과 SLO 연계를 자동화
+  - 멀티테넌트 보안 경계(키·레이트·쿼터·라벨링)를 기술적으로 강제
+
+scope:
+  include:
+    - Redis 기반 ETagStore(+TTL/eviction) & 전역·테넌트 레이트리밋
+    - KMS/SSM 키 로더(다중키/그레이스/회전), HMAC 서명 정책 강화
+    - PII 마스킹/토큰화 파이프라인(로그·Evidence·카드 API 공통)
+    - Evidence tiering(WIP/LOCKED) + GC 정책/인덱서·오브젝트락 점검
+    - DR(일/시간 백업, 교차 리전 복제, 복구 리허설 Runbook)
+    - Ops/Judge API 보안(기본 거부 RBAC, Scope 분리, IP/키 제한)
+    - Canary Auto-Tune 안전장치(상·하한/속도 리미터/버스트 차단) 운영치 반영
+  exclude:
+    - 비용 최적화(Spot/Reserved) 계약 변경(별도 워크오더)
+
+patches:
+  techspec:
+    - section: "Security — Keys/KMS/Replay"
+      mode: upsert
+      content: |
+        - Keys: SSM Parameter Store 경로 규칙 `/decisionos/${env}/keys/*`
+        - MultiKeyLoader: state={active,grace,retired}, clock_skew_tolerance=±120s
+        - HTTP Provider/Server: X-DecisionOS-{Signature,Nonce,Timestamp}, drift>120s→fail-closed
+    - section: "Observability — Caching & RateLimit"
+      mode: upsert
+      content: |
+        - Redis ETagStore: key=`etag:{tenant}:{route}:{etag_v2}` TTL=24h, prefix-invalidate
+        - RateLimit: global/tenant 2계층, token-bucket(1s 리필), Redis Lua로 원자 처리
+    - section: "Data — PII Redaction"
+      mode: upsert
+      content: |
+        - PII 규칙: email/phone/rrn(partial)/name(dict)/addr(partial) → SHA256(tokenize) or ****
+        - Evidence/Logs/Ops API 응답 전 공통 마스킹 훅
+    - section: "Reliability — DR/Backup"
+      mode: upsert
+      content: |
+        - Evidence/Configs S3 버킷: ObjectLock(Compliance, 7d), CRR to ap-northeast-2
+        - 복구 절차: RPO≤15m, RTO≤30m; Runbook에 단계별 명령 포함
+    - section: "Release — Gates"
+      mode: upsert
+      content: |
+        - PreGate: clock_guard, keys_freshness, redis_ping, evidence_index
+        - Gate: infra+canary SLO, judge quorum(2/3), rate-limit breach=fail
+        - PostGate: artifacts+dash cards+PR 댓글(ETag/Delta 링크·알림 링크)
+
+  plan:
+    - section: "Milestones — v0.5.11t"
+      mode: upsert
+      content: |
+        Day 1-2: Redis ETagStore/RateLimit + 단위/통합 테스트
+        Day 3: Keys/KMS 로더 통합, 서명·시계 하드닝 리그레션
+        Day 4: PII 마스킹(공통 훅) + 카드/로그/Evidence 적용
+        Day 5: Evidence GC/Index/ObjectLock 검증 + DR 리허설(E2E)
+        Day 6: Ops/Judge 보안 정책 강화 + CI 게이트 확대
+        Day 7: Canary Auto-Tune 운영치 반영, 문서·런북 확정, GA 태그
+
+files:
+  create:
+    - path: apps/ops/etag_store_redis.py
+      brief: Redis ETagStore(TTL, prefix 무효화, X-Delta-Base-ETag 지원)
+    - path: apps/ops/ratelimit.py
+      brief: Redis Lua 기반 token-bucket 전역/테넌트 레이트리밋
+    - path: apps/security/pii.py
+      brief: PII 정규식/토큰화/마스킹 유틸(공통 훅)
+    - path: apps/judge/keyloader_kms.py
+      brief: SSM/KMS 키셋 로더(다중키 상태·그레이스)
+    - path: jobs/evidence_gc_lockcheck.py
+      brief: Evidence 인덱스→GC→S3 ObjectLock 점검 잡
+    - path: jobs/dr_backup_restore.md
+      brief: DR 백업/복구 Runbook(명령/검증 체크리스트)
+    - path: configs/security/pii_rules.yaml
+      brief: PII 패턴/토큰화 정책
+    - path: configs/ratelimit/policy.yaml
+      brief: 글로벌/테넌트 레이트리밋 정책
+  modify:
+    - path: apps/ops/api.py
+      brief: Cards API 응답 전 PII 마스킹·레이트리밋 미들웨어 연결
+    - path: apps/judge/server.py
+      brief: readyz에 redis/keys/clock 항목 추가, RL breach→503
+    - path: .github/workflows/ci.yml
+      brief: PreGate→Gate→PostGate 단계 확대(아래 'ci' 참조)
+
+tests:
+  unit:
+    - tests/gates/gate_t/test_etag_store_redis_v1.py
+    - tests/gates/gate_t/test_ratelimit_lua_atomic_v1.py
+    - tests/gates/gate_t/test_pii_redaction_v1.py
+    - tests/gates/gate_aj/test_keys_loader_kms_grace_v1.py
+  integration:
+    - tests/integration/test_ops_cards_with_pii_and_rl_v1.py
+    - tests/integration/test_evidence_gc_objectlock_v1.py
+    - tests/integration/test_judge_readyz_redis_keys_clock_v1.py
+  e2e:
+    - tests/e2e/test_release_gates_with_rl_breach_v1.py
+    - tests/e2e/test_dr_restore_rehearsal_v1.py
+
+ci:
+  pre_gate:
+    - run: python -m jobs.clock_guard --max-skew-sec 120
+    - run: python -m jobs.evidence_indexer var/evidence
+    - run: python -m scripts.redis_ping --dsn ${{ secrets.REDIS_DSN }}
+  gate:
+    - run: python -m apps.cli.dosctl.witness_perf ... && python -m apps.cli.dosctl.judge_quorum --quorum 2/3 ...
+    - run: python -m apps.ops.smoke_rl --policy configs/ratelimit/policy.yaml  # breach 시 fail
+  post_gate:
+    - run: python -m scripts.ci.annotate_release_gate --artifacts-url $ARTIFACTS_URL --diff-link $DIFF
+    - run: python -m scripts.ci.publish_cards --endpoint $OPS_API --token $OPS_TOKEN
+
+acceptance:
+  - Redis ETagStore로 /ops/cards/* 95p 응답시간 30%↓ 또는 캐시 히트율 ≥ 0.6
+  - RL: 테넌트 폭주 시 429 비중 ≤ 5%로 제한, 다른 테넌트 영향 없음(격리 확인)
+  - PII: 샘플 100건 중 식별자(이메일/휴대폰/주민번호패턴)가 원문으로 노출 0건
+  - Judge readyz: keys=green, redis=green, clock_ok=true에서 200, 아니면 503
+  - DR 리허설: RPO≤15m, RTO≤30m 내 Evidence/Config 복구 성공
+  - 게이트: RL breach·시계 드리프트·키 서명 불일치 시 fail-closed 동작
+
+runbook:
+  - docs/ops/RUNBOOK-SECURITY.md  # 키 회전, RL 정책 변경, PII 규칙 변경 절차
+  - docs/ops/RUNBOOK-DR.md        # 백업/복구·리허설 체크리스트
+  - docs/ops/RUNBOOK-RATE-LIMIT.md # 테넌트 예외·버스트 핸들링
+
+risks:
+  - Redis 장애시 캐시 미스/과도한 백엔드 부하 → 로컬 LRU fallback, RL "soft-deny"
+  - 과잉 마스킹으로 디버깅 어려움 → tokenization 옵션과 sampling 로그 분리
+  - 키 회전 실패 → grace 윈도와 롤백키 유지, 알람 임계치 설정

@@ -28,7 +28,7 @@ def build_cards_etag_key(
         "bucket": bucket,
         "seasonality": seasonality,
         "delta": {"enabled": bool(delta_enabled), "require_same_window": bool(delta_require_same_window)},
-        "continuity_token": continuity_token or "",
+        "continuity_token": continuity_token or "",  # secret-scan: ignore (identifier only)
         "hashes": {
             "label_catalog": sha256_file(label_catalog_path) if label_catalog_path else None,
             "group_weights": sha256_file(group_weights_path),

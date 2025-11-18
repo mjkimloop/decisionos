@@ -1,0 +1,12 @@
+{
+  "payload": {
+    "policy": "canary",
+    "source": "configs/canary/default.yaml",
+    "version": "v0.5.11r",
+    "required": true
+  },
+  "signature": {
+    "key_id": "policy-local",
+    "hmac_sha256": "8705aec1d0adc6a06ffd0232513ac0295bfedf227e564cda30c34448d4c3d16c"
+  }
+}

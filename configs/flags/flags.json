@@ -1,0 +1,22 @@
+{
+  "flags": {
+    "pii_redaction": {
+      "enabled": true,
+      "value": "strict",
+      "description": "PII redaction mode (strict/lenient/off)"
+    },
+    "redis_etag_store": {
+      "enabled": false,
+      "description": "Use Redis for ETag store (vs in-memory)"
+    },
+    "blue_green_auto_promote": {
+      "enabled": true,
+      "description": "Auto-promote green stage if health checks pass"
+    },
+    "_kill_switches": {
+      "evidence_replication": false,
+      "weight_optimization": false
+    }
+  },
+  "version": "v1"
+}

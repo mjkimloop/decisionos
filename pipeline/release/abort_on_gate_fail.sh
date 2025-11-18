@@ -28,7 +28,8 @@ rc=$?
 set -e
 
 if [[ $rc -ne 0 ]]; then
-  echo "[abort-gate] judge failed (rc=$rc) → invoking abort.sh"
+  echo "[abort-gate] judge failed (rc=$rc) -> invoking abort.sh"
+  cat var/gate/reasons.json 2>/dev/null | tr -d '\n' | sed 's/^/# reason=/' || true
   bash pipeline/release/abort.sh || true
   exit 2
 fi

@@ -1,0 +1,28 @@
+work_order: v0.5.11t
+title: RBAC 맵 핫리로드 + readyz 이유코드/메트릭 노출
+objectives:
+  - RBAC 경로/스코프 맵 파일(rbac_map.yaml) 변경을 런타임 자동 반영(폴링 기반 핫리로드)
+  - /readyz 응답에 각 체크의 사유코드(reason)와 간단 메트릭(metrics) 포함
+  - 실패 시 fail-closed 유지(503), 관측지표 카운터 노출(메모리)
+scope:
+  code:
+    - apps/policy/rbac_enforce.py: HotReloading RBAC 미들웨어
+    - apps/judge/readyz.py: reason/metrics 확장, 스키마 후방호환
+    - apps/judge/metrics_readyz.py: 간단 카운터/슬라이딩 윈도(인메모리)
+    - apps/ops/api.py, apps/judge/server.py: 미들웨어/readyz 라우터 연결 파라미터 추가
+  configs:
+    - apps/policy/rbac_map.yaml: 샘플 유지
+  tests:
+    - tests/gates/gate_sec/test_rbac_hotreload_map_switch_v1.py
+    - tests/gates/gate_aj/test_readyz_reasons_and_metrics_v1.py
+env:
+  - DECISIONOS_RBAC_MAP=apps/policy/rbac_map.yaml
+  - DECISIONOS_RBAC_RELOAD_SEC=2          # 폴링 주기(초)
+  - DECISIONOS_READY_FAIL_CLOSED=1
+acceptance:
+  - rbac_map.yaml 수정 후 RELOAD_SEC 내에 새로운 스코프 규칙이 반영됨
+  - /readyz 응답에 checks[*].ok, checks[*].reason, checks[*].metrics 존재
+  - 실패 케이스에서 status=503, reason 코드가 원인과 일치
+ci:
+  - marker gate_sec/gate_aj 포함 테스트 그린
+  - pre/gate/post 파이프라인 변동 없음(테스트만 추가)

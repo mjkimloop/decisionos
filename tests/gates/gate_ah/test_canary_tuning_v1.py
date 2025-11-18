@@ -36,9 +36,10 @@ def test_canary_tuning_5_consecutive_passes(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)
@@ -66,9 +67,12 @@ def test_canary_tuning_burst_tolerance(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
+    burst_log = tmp_path / "burst.json"
+    monkeypatch.setenv("DECISIONOS_CANARY_BURST_LOG", str(burst_log))
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)
@@ -77,6 +81,11 @@ def test_canary_tuning_burst_tolerance(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as se:
         cap.main()
     assert se.value.code == 2  # abort
+    logged = json.loads(burst_log.read_text(encoding="utf-8"))
+    assert logged.get("cause") == "burst_threshold"
+    assert logged.get("max_burst") == 1.0
+    assert logged.get("recent_window_count") == 5
+    assert isinstance(logged.get("windows"), list) and logged["windows"]
 
 def test_canary_tuning_min_observation_time(tmp_path, monkeypatch):
     """30분 미만 관찰 시 hold"""
@@ -96,9 +105,10 @@ def test_canary_tuning_min_observation_time(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)
@@ -125,9 +135,10 @@ def test_canary_tuning_4_passes_hold(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)
@@ -155,9 +166,10 @@ def test_canary_tuning_one_fail_in_5_hold(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)
@@ -185,9 +197,10 @@ def test_canary_tuning_exactly_30min_promote(tmp_path, monkeypatch):
     latest.write_text(json.dumps(ev), encoding="utf-8")
 
     monkeypatch.setenv("DECISIONOS_EVIDENCE_LATEST", str(latest))
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_N", "5")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MAX_BURST", "1")
-    monkeypatch.setenv("DECISIONOS_AUTO_PROMOTE_MIN_OBSERVATION_MIN", "30")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_ENABLE", "1")
+    monkeypatch.setenv("DECISIONOS_CANARY_REQUIRED_PASSES", "5")
+    monkeypatch.setenv("DECISIONOS_CANARY_MAX_BURST", "1")
+    monkeypatch.setenv("DECISIONOS_AUTOPROMOTE_MIN_OBSERVATION_MIN", "30")
 
     import jobs.canary_auto_promote as cap
     importlib.reload(cap)

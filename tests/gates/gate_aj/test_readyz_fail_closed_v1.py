@@ -1,18 +1,17 @@
 import importlib
-from starlette.testclient import TestClient
+
 import pytest
+from starlette.testclient import TestClient
 
 pytestmark = [pytest.mark.gate_aj]
 
+
 def test_readyz_fail_closed(monkeypatch):
-    # server 모듈이 check_ready를 직접 참조하므로 모듈 네임스페이스에서 패치
+    monkeypatch.setenv("DECISIONOS_READY_FAIL_CLOSED", "1")
+    monkeypatch.setenv("DECISIONOS_JUDGE_KEYS", "[]")
+    monkeypatch.setenv("DECISIONOS_ALLOW_SCOPES", "judge:run")
     import apps.judge.server as server
-    
-    # 준비 불가 상황 시뮬레이션
-    def fake_check_ready(key_loader=None, replay_store=None):
-        return False, {"reasons": ["keys.stale"]}
-    
-    monkeypatch.setattr("apps.judge.server.check_ready", fake_check_ready)
+
     importlib.reload(server)
 
     client = TestClient(server.app)

@@ -19,6 +19,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--canary-json", help="Optional canary comparison JSON (control/canary CSV already compared)")
     parser.add_argument("--canary-control", help="Optional control CSV to compute canary deltas on the fly")
     parser.add_argument("--canary-canary", help="Optional canary CSV to compute canary deltas on the fly")
+    parser.add_argument("--windows-json", help="Optional path to canary windows list")
     parser.add_argument("--s3-uri", help="Optional s3://bucket/key for uploading perf_judge JSON")
     return parser.parse_args()
 
@@ -42,7 +43,13 @@ def _load_canary(args: argparse.Namespace) -> Dict[str, Any] | None:
         return json.loads(Path(args.canary_json).read_text(encoding="utf-8"))
     if args.canary_control and args.canary_canary:
         return compare_canary(args.canary_control, args.canary_canary)
-    return None
+    block: Dict[str, Any] = {}
+    if args.windows_json and Path(args.windows_json).exists():
+        try:
+            block["windows"] = json.loads(Path(args.windows_json).read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return block or None
 
 
 def main() -> None:
@@ -63,7 +70,7 @@ def main() -> None:
     if args.evidence:
         blocks: Dict[str, Any] = {"perf_judge": summary}
         if canary_block:
-            blocks["canary"] = canary_block
+            blocks.setdefault("canary", {}).update(canary_block)
         merge_blocks(args.evidence, **blocks)
         merged_keys = ", ".join(blocks.keys())
         print(f"[evidence_harvest_judgelog] merged blocks[{merged_keys}] -> {args.evidence}")
@@ -73,5 +80,5 @@ def main() -> None:
         print(f"[evidence_harvest_judgelog] uploaded {out_path} -> {args.s3_uri}")
 
 
-if __name__ == "__main__":
-    main()
++if __name__ == "__main__":
++    main()

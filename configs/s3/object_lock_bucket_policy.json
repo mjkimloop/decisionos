@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyUnEncryptedInTransit",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::decisionos-evidence/*",
+        "arn:aws:s3:::decisionos-evidence"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "EnforceObjectLock",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:PutObjectRetention",
+        "s3:BypassGovernanceRetention"
+      ],
+      "Resource": "arn:aws:s3:::decisionos-evidence/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:ObjectLockEnabled": "true"
+        }
+      }
+    }
+  ]
+}

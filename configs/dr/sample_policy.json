@@ -1,0 +1,8 @@
+{
+  "include_globs": ["*.json"],
+  "exclude_globs": ["*tmp*.json"],
+  "max_files": 1000,
+  "verify_lock": true,
+  "verify_sha": true,
+  "flatten": true
+}

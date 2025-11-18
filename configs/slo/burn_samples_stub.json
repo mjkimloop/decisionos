@@ -1,0 +1,8 @@
+{
+  "samples": [
+    { "ts": 1731800000, "requests": 1200, "errors": 3, "latency_p95": 420, "latency_p99": 560 },
+    { "ts": 1731800600, "requests": 1100, "errors": 2, "latency_p95": 390, "latency_p99": 540 },
+    { "ts": 1731801200, "requests": 900, "errors": 6, "latency_p95": 480, "latency_p99": 620 },
+    { "ts": 1731804000, "requests": 800, "errors": 1, "latency_p95": 360, "latency_p99": 520 }
+  ]
+}

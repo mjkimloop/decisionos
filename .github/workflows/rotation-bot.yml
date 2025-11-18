@@ -1,0 +1,43 @@
+name: rotation-bot
+
+on:
+  schedule:
+    # Run daily at 02:10 UTC
+    - cron: "10 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  rotation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip
+
+      - name: Ensure countdown labels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m scripts.ci.ensure_rotation_labels
+
+      - name: Run rotation bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DECISIONOS_POLICY_KEYS: ${{ secrets.DECISIONOS_POLICY_KEYS }}
+          ROTATION_PR_ENABLE: "1"
+          ROTATION_SOON_DAYS: "14"
+          ALLOW_ISSUE_FALLBACK: "1"
+        run: python -m scripts.ci.key_rotation_bot

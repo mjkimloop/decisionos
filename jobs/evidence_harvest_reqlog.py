@@ -35,6 +35,7 @@ def _load_args() -> argparse.Namespace:
     parser.add_argument("--evidence", help="Evidence JSON to merge perf block into")
     parser.add_argument("--s3-uri", help="Optional s3://bucket/prefix/key for uploading the perf summary")
     parser.add_argument("--sha-out", help="Optional path to write SHA256(reqlog)")
+    parser.add_argument("--window-json", help="Optional path to write perf window summary")
     return parser.parse_args()
 
 
@@ -63,6 +64,16 @@ def main() -> None:
     if args.evidence:
         merge_blocks(args.evidence, perf=summary)
         print(f"[evidence_harvest_reqlog] perf merged into {args.evidence}")
+
+    if args.window_json and summary.get("window"):
+        window_path = Path(args.window_json)
+        window_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "window": summary["window"],
+            "count": summary.get("count", 0),
+        }
+        window_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[evidence_harvest_reqlog] perf window -> {window_path}")
 
     if args.s3_uri:
         _upload_to_s3(out_path, args.s3_uri)

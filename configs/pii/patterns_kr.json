@@ -1,0 +1,35 @@
+{
+  "resident_id": {
+    "pattern": "\\b\\d{6}-?\\d{7}\\b",
+    "description": "주민등록번호"
+  },
+  "mobile_phone": {
+    "pattern": "\\b01[016789]-?\\d{3,4}-?\\d{4}\\b",
+    "description": "휴대전화번호"
+  },
+  "tel_phone": {
+    "pattern": "\\b0\\d{1,2}-?\\d{3,4}-?\\d{4}\\b",
+    "description": "일반전화번호"
+  },
+  "email": {
+    "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+    "description": "이메일 주소"
+  },
+  "credit_card": {
+    "pattern": "\\b(?:\\d[ -]*?){13,19}\\b",
+    "luhn": true,
+    "description": "신용카드번호 (Luhn 검증)"
+  },
+  "bank_account": {
+    "pattern": "\\b\\d{2,6}-\\d{1,8}-\\d{1,8}\\b",
+    "description": "은행 계좌번호"
+  },
+  "postal_code": {
+    "pattern": "\\b\\d{5}\\b",
+    "description": "우편번호"
+  },
+  "road_address_hint": {
+    "pattern": "(로|길)\\s?\\d{1,4}(-\\d{1,2})?",
+    "description": "도로명 주소 힌트"
+  }
+}

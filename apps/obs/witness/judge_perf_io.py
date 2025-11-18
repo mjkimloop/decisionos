@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
@@ -22,7 +23,7 @@ def parse_judge_log_csv(path: str | Path) -> List[JudgeRequest]:
         for row in reader:
             rows.append(
                 JudgeRequest(
-                    ts=row.get("ts", ""),
+                    ts=_normalize_ts(row.get("ts", "")),
                     status=int(row.get("status", "0")),
                     latency_ms=float(row.get("latency_ms", "0")),
                     signature_error=row.get("signature_error", row.get("verify_error", "0")) in ("1", "true", "True"),
@@ -85,3 +86,19 @@ def _percentile(values: List[float], fraction: float) -> float:
 
 
 __all__ = ["JudgeRequest", "parse_judge_log_csv", "summarize_judge_perf"]
+
+
+def _normalize_ts(raw: str) -> str:
+    raw = (raw or "").strip()
+    if not raw:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    normalized = raw.replace("Z", "+00:00") if raw.endswith("Z") else raw
+    try:
+        ts = datetime.fromisoformat(normalized)
+    except ValueError:  # pragma: no cover - defensive
+        return raw
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    else:
+        ts = ts.astimezone(timezone.utc)
+    return ts.isoformat().replace("+00:00", "Z")

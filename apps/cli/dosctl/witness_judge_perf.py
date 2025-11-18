@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from apps.cli.dosctl._hooks.pii import apply_pii
 from apps.obs.witness.judge_perf_io import parse_judge_log_csv, summarize_judge_perf
 
 
@@ -15,6 +16,7 @@ def main(argv: list[str] | None = None) -> None:
 
     requests = parse_judge_log_csv(args.csv)
     summary = summarize_judge_perf(requests)
+    summary = apply_pii(summary)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

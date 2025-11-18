@@ -1,0 +1,62 @@
+# Multisig approval policies for policy file changes
+#
+# Each rule specifies:
+# - glob: File pattern to match
+# - required_approvers: Minimum number of approvers
+# - required_teams: Teams that must approve (optional)
+# - min_per_team: Minimum approvers per team (default: 1)
+# - description: Human-readable description
+
+version: 1
+
+rules:
+  - name: RBAC policies
+    glob: "configs/policy/rbac*.{json,yaml}"
+    required_approvers: 2
+    required_teams:
+      - security
+    description: RBAC changes require 2 security team approvals
+
+  - name: SLO and infrastructure policies
+    glob: "configs/policy/slo*.json"
+    required_approvers: 2
+    required_teams:
+      - platform
+    description: SLO changes require 2 platform team approvals
+
+  - name: Canary policies
+    glob: "configs/policy/canary*.{json,yaml}"
+    required_approvers: 2
+    required_teams:
+      - platform
+      - service
+    min_per_team: 1
+    description: Canary changes require platform + service owner approval
+
+  - name: Freeze window policies
+    glob: "configs/change/freeze*.yaml"
+    required_approvers: 2
+    required_teams:
+      - platform
+    description: Freeze window changes require 2 platform approvals
+
+  - name: Ownership policies
+    glob: "configs/change/ownership.yaml"
+    required_approvers: 2
+    required_teams:
+      - platform
+    description: Ownership changes require 2 platform approvals
+
+  - name: All other policy files
+    glob: "configs/policy/*.{json,yaml,signed}"
+    required_approvers: 2
+    description: Default 2-approver requirement for policy changes
+
+  - name: Policy signing keys
+    glob: "configs/policy/registry.json"
+    required_approvers: 3
+    required_teams:
+      - security
+      - platform
+    min_per_team: 1
+    description: Policy registry changes require security + platform approval (3 total)

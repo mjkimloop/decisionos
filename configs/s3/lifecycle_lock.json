@@ -1,0 +1,36 @@
+{
+  "Rules": [
+    {
+      "ID": "WIP-to-LOCKED",
+      "Status": "Enabled",
+      "Filter": {
+        "Tag": {
+          "Key": "tier",
+          "Value": "WIP"
+        }
+      },
+      "Transitions": [
+        {
+          "Days": 7,
+          "StorageClass": "STANDARD_IA"
+        }
+      ],
+      "Expiration": {
+        "Days": 365
+      }
+    },
+    {
+      "ID": "LOCKED-retain",
+      "Status": "Enabled",
+      "Filter": {
+        "Tag": {
+          "Key": "tier",
+          "Value": "LOCKED"
+        }
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 730
+      }
+    }
+  ]
+}
