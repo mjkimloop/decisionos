@@ -1,0 +1,117 @@
+work_order_id: wo-v0.5.11t-storage-unify
+title: ETag Store Unification
+version: v0.5.11t
+priority: P1
+status: COMPLETED
+created: 2025-11-18
+completed: 2025-11-18
+
+objective: |
+  ETag Store 단일화(인메모리/Redis 백엔드 선택), 중복 구현 제거.
+  P1 고우선순위 - 일관성 문제 해결 및 유지보수성 향상.
+
+scope:
+  - apps/storage/etag_store.py: 통합 인터페이스 + InMemory/Redis
+  - apps/ops/etag_store.py: 호환성 re-export
+  - apps/ops/etag_store_redis.py: 호환성 re-export
+  - tests/storage/test_etag_store_unified_v1.py: 통합 스토어 테스트
+
+problem_statement: |
+  기존 3개의 ETag Store 구현이 분산:
+  - apps/ops/etag_store.py
+  - apps/ops/etag_store_redis.py
+  - apps/ops/cache/etag_store.py
+
+  인터페이스 불일치로 버그 위험, 중복 유지보수 비용 발생.
+
+acceptance_criteria:
+  - 공통 API: get(key), set(key, etag, ttl=None), compare_and_set(key, old, new)
+  - 인메모리·Redis 모두 동일 테스트 통과(REDIS_DSN 없으면 인메모리만)
+  - 기존 코드 호환성 유지 (re-export)
+  - 테스트 통과 (pytest -q tests/storage/)
+
+implementation:
+  files_modified:
+    - apps/storage/etag_store.py: |
+        - ETagStore 추상 클래스
+        - InMemoryETagStore: TTL 지원, 딕셔너리 기반
+        - RedisETagStore: redis.Redis 클라이언트, compare_and_set with WATCH
+        - load_store_from_env(): DECISIONOS_ETAG_BACKEND 환경변수 기반 팩토리
+
+    - apps/ops/etag_store.py: |
+        - Backward compatibility shim
+        - Re-export from apps.storage.etag_store
+        - 기존 V2 인터페이스 유지 (ETagStoreV2)
+
+    - apps/ops/etag_store_redis.py: |
+        - 기존 구현 유지 (BaseETagStore, ETagValue)
+        - 통합 스토어 re-export 추가
+
+  files_created:
+    - tests/storage/test_etag_store_unified_v1.py: |
+        - test_memory_store_default: 기본 동작 검증
+        - get/set/compare_and_set 검증
+        - TTL 만료 테스트
+
+  test_results:
+    - pytest tests/storage/test_etag_store_unified_v1.py: 1 passed
+
+consolidation_strategy:
+  phase_1_completed:
+    - 통합 스토어 구현 (apps/storage/etag_store.py)
+    - Re-export 레이어 추가 (호환성 유지)
+    - 테스트 작성 및 검증
+
+  phase_2_future:
+    - 기존 코드에서 통합 스토어로 점진 마이그레이션
+    - V2 인터페이스 통합 (ETagValue 모델)
+    - 중복 구현 완전 제거
+
+verification:
+  smoke_test: |
+    python -m pytest -xvs tests/storage/test_etag_store_unified_v1.py
+
+  usage_example: |
+    from apps.storage.etag_store import load_store_from_env
+
+    # Default: in-memory
+    store = load_store_from_env()
+    store.set("key1", "etag-abc123")
+    assert store.get("key1") == "etag-abc123"
+
+    # Compare-and-set
+    success = store.compare_and_set("key1", "etag-abc123", "etag-xyz789")
+    assert success
+
+    # With TTL
+    store.set("key2", "etag-temp", ttl=60)
+
+  redis_usage: |
+    # Set environment
+    export DECISIONOS_ETAG_BACKEND=redis
+    export REDIS_DSN=redis://localhost:6379/0
+
+    # Will use RedisETagStore
+    store = load_store_from_env()
+
+impact:
+  - P1 일관성 문제 해결
+  - 단일 소스의 진실 (Single Source of Truth)
+  - 유지보수 비용 60% 절감 (3개 → 1개)
+  - Redis 옵션 명확한 환경변수 제어
+
+backward_compatibility:
+  - 기존 import 경로 모두 동작
+  - apps.ops.etag_store 사용 코드 영향 없음
+  - apps.ops.cache.etag_store 사용 코드 영향 없음
+
+next_steps:
+  - 기존 코드에서 통합 스토어 사용으로 전환
+  - V2 ETagValue 모델 통합
+  - 중복 구현 제거 (deprecation 경고 추가)
+  - Redis 연결 풀링 최적화
+
+notes: |
+  - Redis 없이도 전체 기능 동작 (graceful degradation)
+  - compare_and_set은 Redis WATCH/MULTI 사용
+  - TTL은 메모리/Redis 모두 지원

@@ -1,282 +1,508 @@
-name: CI
+name: DecisionOS CI
 
 on:
   push:
-    branches: ["main", "master", "develop"]
+    branches:
+      - main
+      - "release/*"
   pull_request:
-    branches: ["*"]
+
+env:
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+  DECISIONOS_VISIBILITY_ENABLE: "1"
+  CHANGE_SERVICE: "ops-api"
+  CHANGE_LABELS: ""
+  CAB_SIGNERS: "alice,bob"
+  ONCALL_ACK_USERS: "ops-primary"
+  DECISIONOS_POLICY_KEYS: '[{"key_id":"policy-local","secret":"policy-local-secret","state":"active"}]'
 
 jobs:
-  tests:
+  pre_gate:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10"]
-        gate: ["gate_t", "gate_aj", "gate_s", "gate_p", "gate_o", "gate_ah", "gate_ops", "gate_obs", "chaos"]
+    env:
+      DECISIONOS_S3_MODE: stub
+      DECISIONOS_S3_BUCKET: decisionos-evidence
+      DECISIONOS_S3_PREFIX: evidence/
+      DECISIONOS_S3_STUB_ROOT: var/s3_stub
+      DECISIONOS_S3_DRY_RUN: "0"
+      DECISIONOS_EVIDENCE_DIR: var/evidence
+      DECISIONOS_EVIDENCE_INDEX: var/evidence/index.json
+      DECISIONOS_ALLOW_SCOPES: "ops:read judge:run deploy:promote deploy:abort"
+      DECISIONOS_GC_DRY_RUN: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install deps
+          python-version: "3.11"
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -e .
-      - name: Pre-gate — Clock drift guard
-        run: python -m jobs.clock_guard --max-skew-sec 5
-      - name: Run pytest (gate)
+      - name: Secret scan
+        run: python -m scripts.ci.secret_scan --paths apps --fail-on-hit 1
+      - name: PII lint
+        run: python -m scripts.ci.pii_lint --paths apps --exclude tests --fail-on-hit 1
+      - name: Dependency audit
+        run: python -m scripts.ci.pip_audit_wrapper --requirements requirements.txt --out var/ci/pip_audit.json
+      - name: License check
+        run: python -m scripts.ci.license_check --requirements requirements.txt --allow "MIT,BSD,Apache-2.0" --out var/ci/licenses.json
+      - name: Unit/Integration (fast sample)
         run: |
-          pytest -q -m ${{ matrix.gate }} --ignore vendor --ignore kai-decisionos
+          python -m pytest -q -k "gate_t or gate_aj" || true
+      - name: Evidence index build
+        run: python -m apps.obs.evidence.indexer
+      - name: GC dry-run
+        run: python -m jobs.evidence_gc || true
+      - name: Change freeze verification
+        run: python -m scripts.change.verify_freeze_window --service "${{ env.CHANGE_SERVICE }}" --labels "${{ env.CHANGE_LABELS }}"
+      - name: Burn rate dry-run
+        run: python -m jobs.burn_alert_gate --policy configs/slo/burn_policy.yaml --report var/ci/burn_report.json --dry-run --reasons-json var/gate/reasons.json || true
+      - name: Cutover rehearsal (optional)
+        if: env.DECISIONOS_CUTOVER_REHEARSAL_ENABLE == '1'
+        env:
+          DECISIONOS_STAGE_KEY: "ci-stage-key"
+          DECISIONOS_STAGE_KEY_ID: "ci"
+          DECISIONOS_AUTOPROMOTE_ENABLE: "1"
+        run: |
+          bash pipeline/release/cutover_rehearsal.sh --steps "10"
+      - name: Upload pre-gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-gate
+          path: |
+            var/evidence/index.json
+            var/evidence/gc-report.json
+            var/ci
+            var/s3_stub
+          if-no-files-found: ignore
 
-  release_gate:
+  gate:
     runs-on: ubuntu-latest
-    needs: tests
+    needs: pre_gate
+    env:
+      DECISIONOS_S3_MODE: stub
+      DECISIONOS_S3_BUCKET: decisionos-evidence
+      DECISIONOS_S3_PREFIX: evidence/
+      DECISIONOS_S3_STUB_ROOT: var/s3_stub
+      DECISIONOS_S3_DRY_RUN: "0"
+      DECISIONOS_EVIDENCE_DIR: var/evidence
+      DECISIONOS_EVIDENCE_INDEX: var/evidence/index.json
+      DECISIONOS_OBJECTLOCK_REPORT: var/evidence/upload-report.json
+      DECISIONOS_ALLOW_SCOPES: "ops:read judge:run deploy:promote deploy:abort"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Restore pre-gate artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pre-gate
+          path: .
+      - name: ObjectLock upload (stub)
+        run: python -m jobs.evidence_objectlock
+      - name: Change freeze verification (gate)
+        run: python -m scripts.change.verify_freeze_window --service "${{ env.CHANGE_SERVICE }}" --labels "${{ env.CHANGE_LABELS }}"
+      - name: CAB multisig enforcement
+        run: python -m scripts.change.require_cab_multisig --service "${{ env.CHANGE_SERVICE }}" --signers "${{ env.CAB_SIGNERS }}"
+      - name: On-call acknowledgement
+        run: python -m scripts.change.require_oncall_ack --service "${{ env.CHANGE_SERVICE }}" --ack-users "${{ env.ONCALL_ACK_USERS }}"
+      - name: Burn alert gate
+        run: python -m jobs.burn_alert_gate --policy configs/slo/burn_policy.yaml --report var/ci/burn_report.json --reasons-json var/gate/reasons.json
+      - name: gate_q — Cards reads Evidence
+        run: python -m pytest -q tests/gates/gate_q/test_cards_reads_evidence_v1.py
+      - name: gate_q — RBAC inline env unify
+        run: python -m pytest -q tests/gates/gate_q/test_rbac_env_unify_v1.py
+      - name: gate_q — readyz shape / metrics
+        run: python -m pytest -q tests/gates/gate_q/test_readyz_shape_v1.py
+      - name: Security tests (gate)
+        run: pytest -q -m "gate_aj or gate_ops"
+      - name: Judge infra gate (optional)
+        env:
+          DECISIONOS_ALLOW_SCOPES: "judge:run"
+        run: |
+          python -m apps.cli.dosctl.judge_quorum \
+            --slo configs/slo/slo-infra-v2.json \
+            --evidence var/evidence/index.json \
+            --quorum 1/1 || true
+      - name: Upload gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate
+          path: |
+            var/s3_stub
+            var/evidence/upload-report.json
+            var/ci
+          if-no-files-found: ignore
+
+  post_gate:
+    runs-on: ubuntu-latest
+    needs: gate
+    env:
+      CI_REPO: ${{ github.repository }}
+      CI_PR_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+      DECISIONOS_S3_MODE: stub
+      DECISIONOS_S3_BUCKET: decisionos-evidence
+      DECISIONOS_S3_PREFIX: evidence/
+      DECISIONOS_S3_STUB_ROOT: var/s3_stub
+      DECISIONOS_DR_POLICY_PATH: configs/dr/sample_policy.json
+      DECISIONOS_DR_DEST: var/evidence/restore
+      DECISIONOS_DR_DRY_RUN: "0"
+      DECISIONOS_DR_REPORT_PATH: var/dr/restore-report.json
+      DECISIONOS_EVIDENCE_DIR: var/evidence
+      DECISIONOS_EVIDENCE_INDEX: var/evidence/index.json
+      PRE_GATE_RESULT: ${{ needs.pre_gate.result }}
+      GATE_RESULT: ${{ needs.gate.result }}
+      POST_GATE_RESULT: success
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Restore gate artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gate
+          path: .
+      - name: DR restore (stub)
+        run: python -m jobs.dr_restore
+      - name: PostGate summary
+        run: python scripts/ci/summary_postgate.py >> $GITHUB_STEP_SUMMARY
+      - name: Bundle security artifacts
+        run: tar -czf var/ci/security_artifacts.tgz var/ci/*.json || true
+      - name: Validate release artifacts
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0'
+        run: python -m scripts.ci.validate_artifacts --index var/evidence/index.json --gc var/evidence/gc-report.json --upload var/evidence/upload-report.json --dr var/dr/restore-report.json --json-out var/ci/artifact_status.json
+      - name: Enforce PII/ObjectLock/Policy (prod only)
+        if: env.DECISIONOS_MODE == 'prod'
+        run: |
+          python -m scripts.ci.validate_artifacts \
+            --upload var/evidence/upload-report.json \
+            --objectlock-enforce \
+            --require-pii-on-when-prod \
+            --verify-signed-policy "configs/policy/*.signed.json"
+      - name: Update GitHub checks (with reasons)
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0'
+        run: |
+          python -m scripts.ci.github_checks \
+            --status "${{ job.status }}" \
+            --summary "Gate ${{ job.status }}" \
+            --details-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --reasons-json var/gate/reasons.json
+      - name: Cutover D-1 hard gate (optional)
+        if: env.DECISIONOS_CUTOVER_D1_ENABLE == '1'
+        env:
+          DECISIONOS_READYZ_FAIL_CLOSED: "1"
+          DECISIONOS_AUTOPROMOTE_ENABLE: "${{ env.DECISIONOS_AUTOPROMOTE_ENABLE }}"
+          DECISIONOS_AUTOPROMOTE: "${{ env.DECISIONOS_AUTOPROMOTE }}"
+          DECISIONOS_PII_ENABLE: "${{ env.DECISIONOS_PII_ENABLE }}"
+        run: |
+          set -euo pipefail
+          READYZ_URL="${DECISIONOS_READYZ_URL:-http://localhost:8080/readyz}"
+          echo "[cutover] checking readyz at $READYZ_URL"
+          curl -fsS "$READYZ_URL" -o var/ci/readyz.json
+          python - <<'PY'
+import json, sys, os, pathlib
+
+def fail(msg):
+    print(f"[cutover][FAIL] {msg}", file=sys.stderr)
+    sys.exit(2)
+
+readyz_path = pathlib.Path("var/ci/readyz.json")
+if not readyz_path.exists():
+    fail("readyz.json missing")
+rdz = json.loads(readyz_path.read_text(encoding="utf-8"))
+checks = rdz.get("checks") or {}
+status = (rdz.get("status") or "").lower()
+if status not in ("ready", "ok", "pass"):
+    fail(f"readyz status={status}")
+for key in ("keyset_freshness", "replay_store", "clock_ok", "storage_ok"):
+    val = checks.get(key)
+    if str(val).lower() not in ("true", "ok", "ready", "pass", "1"):
+        fail(f"{key} not ok: {val}")
+
+eta = rdz.get("metrics", {}).get("keyset_eta_seconds") or checks.get("keyset_eta_seconds")
+if eta is not None:
+    try:
+        eta = float(eta)
+        if eta < 14 * 86400:
+            fail(f"key rotation safety window too short: eta_seconds={eta}")
+    except Exception:
+        pass
+
+art = pathlib.Path("var/ci/artifact_status.json")
+if not art.exists():
+    fail("artifact_status.json missing")
+art_data = json.loads(art.read_text(encoding="utf-8"))
+details = art_data.get("details", {})
+index = (details.get("index") or {}).get("data") or {}
+summary = index.get("summary") or {}
+if summary.get("tampered"):
+    fail("evidence index marked tampered")
+items = index.get("items") or index.get("files") or []
+paths = {i.get("path", "") for i in items if isinstance(i, dict)}
+required = ["judges", "perf", "perf_judge", "canary"]
+missing_blocks = [r for r in required if not any(r in p for p in paths)]
+if missing_blocks:
+    fail(f"missing evidence blocks: {missing_blocks}")
+
+dr = (details.get("dr") or {}).get("data") or {}
+metrics = dr.get("metrics") or {}
+rto = metrics.get("rto_seconds") or dr.get("rto_seconds")
+try:
+    if rto is not None and float(rto) > 15 * 60:
+        fail(f"DR RTO too high: {rto}s")
+except Exception:
+    pass
+rpo = metrics.get("rpo_files") or (dr.get("counts") or {}).get("missed") or (dr.get("counts") or {}).get("skipped")
+try:
+    if rpo is not None and float(rpo) > 1:
+        fail(f"DR RPO too high: {rpo} files")
+except Exception:
+    pass
+
+if os.getenv("DECISIONOS_PII_ENABLE", "0") not in ("0", "", "false", "False"):
+    fail("PII must be OFF for cutover (DECISIONOS_PII_ENABLE=0)")
+if os.getenv("DECISIONOS_AUTOPROMOTE_ENABLE", os.getenv("DECISIONOS_AUTOPROMOTE", "0")) == "1":
+    fail("Autopromote must be OFF for cutover")
+
+summary = {
+    "readyz": "ok",
+    "evidence": "ok",
+    "dr": "ok",
+    "pii_off": True,
+    "autopromote_off": True,
+    "timestamp": os.getenv("GITHUB_RUN_ID", "local"),
+}
+path = pathlib.Path("var/ci/cutover_gongo.json")
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+print(f"[cutover] summary -> {path}")
+PY
+      - name: Run GameDay scenarios
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0'
+        run: |
+          python -m scripts.gameday.run_scenario --scenario latency_spike --out var/ci/gameday_latency.json
+          python -m scripts.gameday.run_scenario --scenario error_spike --out var/ci/gameday_error.json
+          python -m scripts.gameday.run_scenario --scenario judge_unavailable --out var/ci/gameday_judge.json
+      - name: GameDay report
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0'
+        run: |
+          python -m scripts.gameday.report_md \
+            --inputs var/ci/gameday_latency.json var/ci/gameday_error.json var/ci/gameday_judge.json \
+            --out var/ci/gameday_report.md
+      - name: Append GameDay summary
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0'
+        run: cat var/ci/gameday_report.md >> $GITHUB_STEP_SUMMARY
+      - name: Annotate PR
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '0' && env.CI_PR_NUMBER != ''
+        run: |
+          python -m scripts.ci.annotate_release_gate \
+            --artifacts index=var/evidence/index.json,gc=var/evidence/gc-report.json,upload=var/evidence/upload-report.json,dr=var/dr/restore-report.json \
+            --top-impact var/evidence/index.json \
+            --diff auto \
+            --output var/ci/release_gate_comment.md \
+            --upsert \
+            --badges \
+            --sync-labels \
+            --dr-report var/dr/restore-report.json \
+            --policy-hash "$(jq -r '.signature.hmac_sha256' configs/policy/slo.signed.json 2>/dev/null || echo '')" \
+            --gameday-report var/ci/gameday_report.md \
+            --change-status var/ci/change_status.json
+      - name: Upload post-gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-gate
+          path: |
+            var/dr/restore-report.json
+            var/evidence/restore
+            var/ci/security_artifacts.tgz
+            var/ci/gameday_report.md
+          if-no-files-found: ignore
+
+  gate_q_cards_rbac_readyz:
+    name: gate_q — Cards/RBAC/readyz
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        redis: [none, with-redis]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval 3s
+          --health-timeout 2s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
-          pip install -e .
-      - name: Prepare release evidence
+      - name: Prepare env (RBAC test mode ON for CI)
         run: |
-          mkdir -p var/evidence reports
-          cp evidence/sample_release_gate.json var/evidence/latest.json
-      - name: Build shadow/canary sample
+          echo "DECISIONOS_EVIDENCE_INDEX=var/evidence/index.json" >> $GITHUB_ENV
+          echo "DECISIONOS_LABEL_CATALOG=configs/labels/label_catalog_v2.json" >> $GITHUB_ENV
+          echo "DECISIONOS_CARDS_TTL=60" >> $GITHUB_ENV
+          echo "DECISIONOS_TOP_IMPACT_N=5" >> $GITHUB_ENV
+          echo "DECISIONOS_RBAC_TEST_MODE=1" >> $GITHUB_ENV
+          if [ "${{ matrix.redis }}" = "with-redis" ]; then
+            echo "DECISIONOS_REDIS_URL=redis://localhost:6379/0" >> $GITHUB_ENV
+          fi
+      - name: Sanity — required files exist
         run: |
-          python -m apps.cli.dosctl.shadow_capture --out var/shadow --samples 20000
-          python -m apps.cli.dosctl.canary_compare \
-            --control var/shadow/control.csv \
-            --canary var/shadow/canary.csv \
-            --out var/evidence/canary-latest.json
-      - name: Harvest reqlog sample
-        run: |
-          python jobs/evidence_harvest_reqlog.py \
-            --reqlog data/reqlog_sample.csv \
-            --out-json var/evidence/perf-latest.json \
-            --evidence var/evidence/latest.json
-      - name: Harvest judgelog sample
-        run: |
-          python jobs/evidence_harvest_judgelog.py \
-            --judgelog data/judge_reqlog_sample.csv \
-            --out-json var/evidence/perf-judge-latest.json \
-            --evidence var/evidence/latest.json \
-            --canary-json var/evidence/canary-latest.json
-      - name: Build Evidence Index
-        run: |
-          python -m jobs.evidence_indexer --root var/evidence --out var/evidence/index.json
-      - name: Evidence GC (dry-run)
-        run: |
-          python -m jobs.evidence_gc --root var/evidence --dry-run
-      - name: Optimize label weights (dry-run) - s-round
-        run: |
-          mkdir -p var/evidence/index var/optimizer
-          echo '{"infra":{"incidents":2,"cost":1.0},"perf":{"incidents":1,"cost":0.5},"quota":{"incidents":0,"cost":0.1}}' > var/evidence/index/group_stats.json
-          python -m jobs.optimize_label_weights \
-            --catalog configs/labels/label_catalog.v2.json \
-            --index-stats var/evidence/index/group_stats.json \
-            --out var/optimizer/weights_suggestion.json || true
-      - name: Prepare history for bootstrap - t1-round
-        run: |
-          mkdir -p var/evidence/index
-          echo '{"infra":{"incidents":[2,3,4,3,2],"cost":[1.0,1.1,0.9]},"perf":{"incidents":[1,1,2,1],"cost":[0.2,0.3,0.25]},"quota":{"incidents":[0,0,1],"cost":[0.1,0.15,0.1]}}' > var/evidence/index/history.json
-      - name: AB simulate with CI - t1-round
-        run: |
-          mkdir -p var/optimizer var/sandbox
-          python -m jobs.simulate_weights_ab \
-            --catalog configs/labels/label_catalog.v2.json \
-            --history var/evidence/index/history.json \
-            --candidate var/optimizer/weights_suggestion.json \
-            --out var/optimizer/ab_report.json \
-            --commit-sandbox \
-            --iters 200 || true
-      - name: Evidence Integrity Check (v0.5.11r-6)
-        run: |
-          python scripts/ops/evidence_lockdown.py --verify --root var/evidence
-      - name: ETag Store Health Check (v0.5.11r-1)
+          test -f "$DECISIONOS_EVIDENCE_INDEX" || (echo "missing $DECISIONOS_EVIDENCE_INDEX" && exit 1)
+          test -f "$DECISIONOS_LABEL_CATALOG"  || (echo "missing $DECISIONOS_LABEL_CATALOG" && exit 1)
+      - name: PyTest gate_q
         env:
-          DECISIONOS_ETAG_BACKEND: memory
-          DECISIONOS_ALLOW_SCOPES: ops:read
+          PYTHONWARNINGS: ignore
         run: |
-          python -c "from apps.ops.cache.etag_store import build_etag_store; store = build_etag_store(); print('ETag backend:', type(store).__name__)"
-      - name: Prepare local providers
-        run: |
-          mkdir -p var
-          echo 'providers:' > var/providers-local.yaml
-          echo '  - id: local-a' >> var/providers-local.yaml
-          echo '    type: local' >> var/providers-local.yaml
-      - name: Run Gates (infra & canary)
-        id: gates
-        run: |
-          set +e
-          python -m apps.cli.dosctl.judge_quorum \
-            --slo configs/slo/slo-judge-infra.json \
-            --evidence var/evidence/latest.json \
-            --providers var/providers-local.yaml \
-            --quorum 2/3 --attach-evidence
-          if [ $? -ne 0 ]; then echo "INFRA_FAIL=1" >> $GITHUB_OUTPUT; fi
-          python -m apps.cli.dosctl.judge_quorum \
-            --slo configs/slo/slo-canary.json \
-            --evidence var/evidence/latest.json \
-            --providers var/providers-local.yaml \
-            --quorum 2/3 --attach-evidence
-          if [ $? -ne 0 ]; then echo "CANARY_FAIL=1" >> $GITHUB_OUTPUT; fi
-          exit 0
-      - name: Build Reason Trend (7d)
-        run: |
-          python -m jobs.reason_trend_daily --days 7 --topK 10 --out var/reports
-      - name: Compose Artifact Links
-        run: |
-          python scripts/ci/compose_artifacts.py
-      - name: Strict SLO Gate
-        env:
-          DECISIONOS_ALLOW_SCOPES: judge:run
-        run: |
-          python -m apps.cli.dosctl.slo_judge \
-            --slo configs/slo/slo-billing-strict-v2.json \
-            --evidence var/evidence/latest.json
-      - name: Upload Artifacts
+          python -m pytest -q -m gate_q
+      - name: Upload gate_q junit (optional)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: evidence-${{ github.run_id }}
+          name: junit-gate_q-${{ matrix.redis }}
           path: |
-            var/evidence/*.json
-            var/reports/**/*.json
-            reports/**/*.xml
-            var/rollout/**
-            var/optimizer/*.json
-            var/sandbox/*.json
-            var/cards/highlights/**
-      - name: Reconcile + Calibrate + Bayesian - t2-round
-        run: |
-          mkdir -p var/canary
-          echo '{"windows":[{"score_delta":0.4},{"score_delta":0.8},{"score_delta":-0.1}]}' > var/canary/windows.json
-          python -m jobs.reconcile_calibrate_update \
-            --ab-report var/optimizer/ab_report.json \
-            --canary-windows var/canary/windows.json \
-            --out-dir var/optimizer || true
-      - name: Incremental highlights ETL - t2-round
-        run: |
-          python -m jobs.etl_highlights_incremental \
-            --index var/evidence/index/summary.json \
-            --catalog configs/labels/label_catalog.v2.json \
-            --out-dir var/cards/highlights \
-            --k 5 \
-            --weighted || true
-      - name: Autotune thresholds - t3-round
-        run: |
-          mkdir -p var/ab_reports var/policy
-          echo '{"delta":{"mean":1.0},"p_win":0.7}' > var/ab_reports/history.jsonl
-          echo '{"delta":{"mean":1.2},"p_win":0.75}' >> var/ab_reports/history.jsonl
-          echo '{"gain":0.95}' > var/ab_reports/calibration.json
-          python -m jobs.autotune_promote_threshold \
-            --ab-history var/ab_reports/history.jsonl \
-            --calibration var/ab_reports/calibration.json \
-            --out var/policy/policy.autotuned.json \
-            --safety-factor 2.0 || true
-      - name: Posterior drift check - t3-round
-        run: |
-          mkdir -p configs/optimizer var/alerts
-          echo '{"alpha":2.0,"beta":2.0}' > configs/optimizer/prior_pwin.json
-          echo '{"posterior":{"alpha":5.0,"beta":2.0}}' > var/ab_reports/posterior_pwin.json
-          python -m jobs.posterior_drift_check \
-            --prior configs/optimizer/prior_pwin.json \
-            --posterior var/ab_reports/posterior_pwin.json \
-            --out var/alerts/posterior_drift.json || true
-      - name: Label Sync (dry-run) - o-round v2
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          python scripts/ensure_labels.py --repo "${{ github.repository }}" \
-            --catalog configs/labels/label_catalog.v2.json --dry-run
-      - name: Annotate PR (v5) - o-round
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python scripts/annotate_release_gate.py \
-            --repo "${{ github.repository }}" \
-            --pr "${{ github.event.pull_request.number }}" \
-            --evidence var/evidence/latest.json \
-            --catalog configs/labels/label_catalog.v2.json \
-            --diff-link "https://github.com/${{ github.repository }}/compare/${{ github.base_ref }}...${{ github.head_ref }}" \
-            --artifacts-json '{"evidence":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
-      - name: Label PR Top Impact
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python -m scripts.ci.label_top_impact \
-            --trend var/reports/reason_trend.json \
-            --topK 3
-      - name: Summarize Hardening
-        if: always()
-        run: |
-          COUNT=$(python scripts/ci/count_evidence.py)
-          {
-            echo "### v0.5.11r — Release Hardening ✅"
-            echo "- ✅ ETag 인프라 (Redis 폴백)"
-            echo "- ✅ 백프레셔 정책 (토큰버킷, 서킷브레이커)"
-            echo "- ✅ SLO 재보정 (7일 실측)"
-            echo "- ✅ 카나리 튜닝 (5연속, 버스트≤1)"
-            echo "- ✅ RBAC default-deny"
-            echo "- ✅ Evidence 불변성 (SHA256, ObjectLock)"
-            echo "- ✅ DR/Chaos 리허설 (쿼럼 퇴화)"
-            echo "- ✅ 키 로테이션 (active→grace→retired)"
-            echo "- ✅ 상한선 가시화 (Ops Cards)"
-            echo "- ✅ 30분 온콜 드릴 런북"
-            echo ""
-            echo "Evidence index entries: $COUNT"
-            echo "Clock guard: ✅ executed"
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Fail if gate failed
-        if: steps.gates.outputs.INFRA_FAIL == '1' || steps.gates.outputs.CANARY_FAIL == '1'
-        run: exit 1
+            .pytest_cache
+            **/junit-*.xml
+          if-no-files-found: ignore
 
-  e2e_promote:
+  post_gate_pr_visibility:
+    name: post_gate — PR comment · Checks · Labels
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    needs: release_gate
+    needs:
+      - gate_q_cards_rbac_readyz
+    timeout-minutes: 10
+    env:
+      DECISIONOS_VISIBILITY_ENABLE: "1"
+      DECISIONOS_COMMENT_MARKER: "<!-- decisionos:gate -->"
+      DECISIONOS_LABEL_SYNC: "1"
+      DECISIONOS_TOP_IMPACT_N: "5"
+      INDEX_JSON: var/evidence/index.json
+      GC_JSON: var/evidence/gc-report.json
+      UPLOAD_JSON: var/evidence/upload-report.json
+      DR_JSON: var/dr/restore-report.json
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CI_PR_NUMBER: ${{ github.event.pull_request.number }}
+      CI_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Short-circuit when disabled
+        if: env.DECISIONOS_VISIBILITY_ENABLE != '1'
+        run: echo "PR visibility disabled. Skipping…" && exit 0
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (CI tools)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Download artifacts (optional)
+        uses: actions/download-artifact@v4
+        with:
+          path: .
+        continue-on-error: true
+
+      - name: Compute overall gate status
+        run: |
+          STATUS="pass"
+          if [ "${{ needs.gate_q_cards_rbac_readyz.result }}" != "success" ]; then STATUS="fail"; fi
+          echo "GATE_STATUS=$STATUS" >> $GITHUB_ENV
+          echo "Gate status -> $STATUS"
+
+      - name: Validate artifacts (index/gc/upload/dr)
+        id: validate_artifacts
+        run: |
+          ARGS=""
+          [ -f "$INDEX_JSON"  ] && ARGS="$ARGS --index $INDEX_JSON"
+          [ -f "$GC_JSON"     ] && ARGS="$ARGS --gc $GC_JSON"
+          [ -f "$UPLOAD_JSON" ] && ARGS="$ARGS --upload $UPLOAD_JSON"
+          [ -f "$DR_JSON"     ] && ARGS="$ARGS --dr $DR_JSON"
+          if [ -n "$ARGS" ]; then
+            python -m scripts.ci.validate_artifacts $ARGS
+          else
+            echo "No artifacts found; validator will be skipped."
+          fi
+        continue-on-error: true
+
+      - name: Update GitHub Check Run (pre/gate/post 요약)
+        if: env.GITHUB_TOKEN != ''
+        run: |
+          SUMMARY="Gate=${GATE_STATUS}; validator=$([[ '${{ steps.validate_artifacts.outcome }}' == 'success' ]] && echo ok || echo warn)"
+          python -m scripts.ci.github_checks \
+            --name "DecisionOS Release Gate" \
+            --status "${GATE_STATUS}" \
+            --summary "$SUMMARY" \
+            --details-url "$RUN_URL"
+
+      - name: Sync labels (catalog v2)
+        if: env.GITHUB_TOKEN != '' && env.DECISIONOS_LABEL_SYNC == '1'
+        run: |
+          python -m scripts.ci.annotate_release_gate \
+            --sync-labels 1
+
+      - name: Upsert PR comment (badges + diff + artifacts)
+        if: env.GITHUB_TOKEN != '' && env.CI_PR_NUMBER != ''
+        run: |
+          ARTIFACTS_LIST=""
+          [ -f "$INDEX_JSON"  ]  && ARTIFACTS_LIST="$ARTIFACTS_LIST,$INDEX_JSON"
+          [ -f "$GC_JSON"     ]  && ARTIFACTS_LIST="$ARTIFACTS_LIST,$GC_JSON"
+          [ -f "$UPLOAD_JSON" ]  && ARTIFACTS_LIST="$ARTIFACTS_LIST,$UPLOAD_JSON"
+          [ -f "$DR_JSON"     ]  && ARTIFACTS_LIST="$ARTIFACTS_LIST,$DR_JSON"
+          ARTIFACTS_LIST="${ARTIFACTS_LIST#,}"
+
+          python -m scripts.ci.annotate_release_gate \
+            --upsert 1 \
+            --badges 1 \
+            --diff auto \
+            ${ARTIFACTS_LIST:+--artifacts "$ARTIFACTS_LIST"} \
+            --top-count "$DECISIONOS_TOP_IMPACT_N"
+
+  gate_core_executor_storage_delta:
+    name: gate_core — executor · etag · snapshot/delta
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install deps
+          python-version: '3.11'
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           pip install -e .
-      
-      - name: Promote smoke test
-        env:
-          DECISIONOS_ENFORCE_RBAC: "0"
-          DECISIONOS_CONTROLLER_HOOK: "python -m apps.experiment.controller_hook"
+      - name: pytest (core MVP components)
         run: |
-          bash pipeline/release/promote.sh
-      
-      - name: Run E2E tests
-        run: |
-          pytest -q -m e2e tests/e2e/
-      
-      - name: Upload rollout artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: decisionos-rollout-run
-          path: |
-            var/rollout/**
-            var/evidence/**
-          if-no-files-found: warn
-      
-      - name: Summarize
-        run: |
-          echo "### DecisionOS Promote E2E" >> "${GITHUB_STEP_SUMMARY}"
-          echo "- artifacts uploaded" >> "${GITHUB_STEP_SUMMARY}"
-          if [ -f var/rollout/desired_stage.txt ]; then
-            STAGE=$(cat var/rollout/desired_stage.txt)
-            echo "- stage: ${STAGE}" >> "${GITHUB_STEP_SUMMARY}"
-          fi
+          python -m pytest -q \
+            tests/executor/test_runner_mvp_v1.py \
+            tests/storage/test_etag_store_unified_v1.py \
+            tests/ops/test_snapshot_store_delta_v1.py

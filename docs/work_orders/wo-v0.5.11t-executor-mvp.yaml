@@ -1,0 +1,83 @@
+work_order_id: wo-v0.5.11t-executor-mvp
+title: Executor MVP Implementation
+version: v0.5.11t
+priority: P0
+status: COMPLETED
+created: 2025-11-18
+completed: 2025-11-18
+
+objective: |
+  실행기(Executor) MVP 가동. 정책/저지 결과를 실제 "행동"으로 실행.
+  P0 블로커 해결 - 의사결정 실행 가능하도록 기본 인프라 구축.
+
+scope:
+  - apps/executor/runner.py: 동기 실행 엔진, 플러그인 레지스트리, 표준 Result 스키마
+  - apps/executor/plugins.py: python 콜러/HTTP 스텁 플러그인
+  - tests/executor/test_runner_mvp_v1.py: 실행기 스모크 테스트
+
+acceptance_criteria:
+  - 등록된 함수 실행(성공/예외) 리턴 수집
+  - 입력/출력 Evidence 트레이스 필드 보존
+  - 실패 시 명확한 reason code(exec.error) 부여
+  - 테스트 통과 (pytest -q tests/executor/)
+
+implementation:
+  files_created:
+    - apps/executor/runner.py: |
+        - ExecutorRunner 클래스: decision dict를 받아 실행
+        - PluginRegistry: action → handler 매핑
+        - ExecResult: ok, elapsed_ms, output, error, reason, meta 포함
+    - apps/executor/plugins.py: |
+        - python_call: 등록된 함수 호출
+        - http_call_stub: HTTP 요청 스텁 (향후 httpx 통합)
+    - tests/executor/test_runner_mvp_v1.py: |
+        - test_executor_ok: 정상 실행 검증
+        - test_executor_missing_handler: 에러 핸들링 검증
+
+  test_results:
+    - pytest tests/executor/test_runner_mvp_v1.py: 2 passed
+
+verification:
+  smoke_test: |
+    python -m pytest -xvs tests/executor/test_runner_mvp_v1.py
+
+  usage_example: |
+    from apps.executor.runner import ExecutorRunner, PluginRegistry
+    from apps.executor.plugins import register_python_func, python_call
+
+    reg = PluginRegistry()
+    reg.register("python.call", python_call)
+
+    def add(a, b, x=0):
+        return a + b + x
+
+    register_python_func("add", add)
+    runner = ExecutorRunner(reg)
+
+    result = runner.execute({
+        "action": "python.call",
+        "fn": "add",
+        "args": [1, 2],
+        "kwargs": {"x": 3},
+        "trace": {"tenant": "t1", "evidence_id": "e123"}
+    })
+
+    assert result.ok
+    assert result.output == 6
+    assert result.reason == "exec.ok"
+
+impact:
+  - P0 블로커 해결: 의사결정 실행 가능
+  - 플러그인 아키텍처로 확장 가능
+  - Evidence 트레이스 보존으로 감사 추적 지원
+
+next_steps:
+  - HTTP 플러그인 실구현 (httpx 통합)
+  - 비동기 실행 지원
+  - 재시도/타임아웃 정책
+  - 실행 히스토리 저장
+
+notes: |
+  - 동기 실행만 지원 (MVP)
+  - 플러그인 레지스트리는 전역 상태 없이 인스턴스 기반
+  - 에러 발생 시 traceback 3단계까지 캡처
