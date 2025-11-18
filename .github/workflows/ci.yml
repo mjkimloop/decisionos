@@ -506,3 +506,22 @@ PY
             tests/executor/test_runner_mvp_v1.py \
             tests/storage/test_etag_store_unified_v1.py \
             tests/ops/test_snapshot_store_delta_v1.py
+
+  gate_q_cards_delta_and_http_exec:
+    name: gate_q — cards delta + http exec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: pytest (cards delta + http exec)
+        run: |
+          python -m pytest -q \
+            tests/ops/test_cards_delta_route_v1.py \
+            tests/executor/test_http_plugin_v1.py

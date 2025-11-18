@@ -9,6 +9,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.ops.api.cache import cache, compute_etag_for_html, compute_etag_for_json
+from apps.ops.api.cards import router as cards_router
+from apps.ops.api.cards_delta import router as cards_delta_router
 from apps.ops.reports.reason_trend import aggregate_reason_trend, get_index_signature
 from apps.policy import pep
 
@@ -56,6 +58,8 @@ def _cache_headers(etag: str, ttl: int, last_modified: str | None) -> Dict[str, 
 
 
 app = FastAPI(title="DecisionOS Ops API", version="v0.5.11p-1")
+app.include_router(cards_router)
+app.include_router(cards_delta_router, prefix="/ops/cards", tags=["ops-cards"])
 
 try:
     from fastapi.middleware.cors import CORSMiddleware
