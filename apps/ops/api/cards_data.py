@@ -104,11 +104,11 @@ def compute_reason_trends(
         bucket_groups = defaultdict(lambda: {"score": 0.0, "count": 0})
         for label, count in reasons.items():
             lbl = str(label)
-            cnt = float(count or 0)
+            cnt = int(count or 0)  # Keep as int for count fields
             grp = _label_group(lbl)
             l_w = label_weights.get(lbl, 1.0)
             g_w = group_weights.get(grp, 1.0)
-            score = cnt * l_w * g_w
+            score = float(cnt) * l_w * g_w  # Use float only for score calculation
             bucket_groups[grp]["score"] += score
             bucket_groups[grp]["count"] += cnt
             groups[grp]["score"] += score

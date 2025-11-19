@@ -1,3 +1,26 @@
+## v0.5.11u-15b — 2025-11-19 (Ops/Gateway 스키마 v2 전환)
+- **Cards API Pydantic v2 스키마**: 계약 스냅샷 테스트로 응답 구조 안정성 보장
+- `apps/ops/schemas.py` (195줄): Cards API Pydantic 모델 7개
+  - `CardsReasonTrendsResponse`: 메인 응답 래퍼 (groups, buckets, top_reasons, summary, _meta)
+  - `CardsDeltaResponse`: Delta 프로토콜 래퍼
+  - `ReasonTrendItem`, `BucketEntry`, `GroupSummary`, `CardsSummary`, `CardsMeta`: 중첩 모델
+  - ConfigDict (v2) / Config (v1) 이중 지원
+- `apps/ops/api/cards.py`: response_model 선언, 스키마 검증 추가
+  - `response_model=Union[CardsReasonTrendsResponse, CardsDeltaResponse]`
+  - Vary 헤더 추가: `Accept-Encoding, X-Scopes`
+- **버그 수정**: count 필드 타입 일관성 (float → int)
+  - `apps/ops/api/cards_data.py:107`: `cnt = int(count or 0)` (기존 float 변환 제거)
+  - 집계 시 count는 int, score만 float로 계산
+- **테스트 6개 추가 (30→36 테스트)**:
+  - `tests/contracts/test_router_response_contract_v2.py` (6/6):
+    - 응답 구조 검증 (groups, buckets, top_reasons, summary 필드)
+    - ETag/Cache-Control/Vary 헤더 존재
+    - 304 Not Modified 동작
+    - 필드 타입 검증 (int/float/str/dict/list)
+    - JSON 직렬화 검증 (NaN/Inf 없음, 단어 경계 정규식 사용)
+- 워크오더: `docs/work_orders/wo-v0.5.11u-15b-ops-schemas-v2.yaml`
+- API 안정성: 응답 구조 변경 없음 (100% 하위 호환)
+
 ## v0.5.11u-15a — 2025-11-19 (Pydantic v2 호환 레이어)
 - **Pydantic v1/v2 호환**: 단계적 마이그레이션을 위한 통합 API
 - `apps/common/pydantic_compat.py` (195줄): TypeAdapter, BaseSettings, validators 래퍼

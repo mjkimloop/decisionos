@@ -1,6 +1,6 @@
 <!--
-version: vX.Y.Zs-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
-date: YYYY-MM-DD
+version: v0.5.8a
+date: 2025-11-06
 status: locked
 summary: DocOps Hotfix: plan.md Gate-Scoped Upsert — 게이트별 섹션 분리 및 upsert 모드 적용 (No-Gemini)
 
