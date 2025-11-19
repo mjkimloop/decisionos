@@ -22,4 +22,5 @@ def test_autodoc_flow(tmp_path, monkeypatch):
     # doc_guard strict 호출이 성공해야 함
     monkeypatch.setattr(doc_guard, "TECHSPEC", techspec)
     monkeypatch.setattr(doc_guard, "PLAN", plan)
+    monkeypatch.setattr(doc_guard, "latest_work_order_meta", lambda: wo["meta"])
     doc_guard.main()

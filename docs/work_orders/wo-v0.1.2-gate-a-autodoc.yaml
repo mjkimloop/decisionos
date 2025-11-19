@@ -68,10 +68,10 @@ tests:
     - post_gate: Step Summary(적용 버전/섹션 수) 출력
 
 acceptance:
-  - `python scripts/wo_apply.py docs/work_orders/wo-v0.1.2-gate-a.yaml` 실행 시:
+  - python scripts/wo_apply.py docs/work_orders/wo-v0.1.2-gate-a.yaml 실행 시:
     - docs/techspec.md, docs/plan.md 지정 섹션이 정확히 갱신됨
     - index.md/CHANGELOG.md에 버전 라인이 1회만 추가됨(멱등)
-  - `python scripts/doc_guard.py --strict` 성공(Exit 0)
+  - python scripts/doc_guard.py --strict 성공(Exit 0)
   - CI에서 pre→gate→post 그린, gate 단계에서 Out-of-sync 시 정확히 실패
   - 유효하지 않은 Work Order는 Schema 에러 코드로 실패(DOC/WOS 코드를 남김)
 
@@ -95,3 +95,4 @@ timeline:
     - AUTOGEN 마커 주입(techspec/plan) + E2E 작성
   day2:
     - CI 파이프라인 배선 + VSCode 태스크 + 런북
+

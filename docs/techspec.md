@@ -1,8 +1,14 @@
 <!--
-version: v0.1.2s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
-date: 2025-11-02
+version: vX.Y.Zs-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaaaa
+date: YYYY-MM-DD
 status: locked
-summary: Gate-A 통과용 작업지시 + 문서 자동기입 도입
+summary: DocOps Hotfix: plan.md Gate-Scoped Upsert — 게이트별 섹션 분리 및 upsert 모드 적용 (No-Gemini)
+
+
+
+
+
+
 -->
 ## v0.5.11u — Prod Readiness (Freeze · Burn · GameDay)
 - 전역 Freeze 플래그와 캘린더(`configs/freeze/windows.yaml`) → 카나리/프로모션 fail-closed, `deploy:override_freeze` 예외
@@ -81,15 +87,17 @@ SLA:
 
 <!-- AUTOGEN:BEGIN:Interfaces — API/CLI -->
 API:
-  - POST /api/v1/policies/apply {bundle.tgz}  # 서명·검증, dry-run 옵션
-  - GET  /api/v1/policies/eval {subject, action, resource, context}
-  - GET  /api/v1/policies/list | GET /api/v1/policies/changes
-  - POST /api/v1/policies/approve {policy_id, comment}
-  - GET  /api/v1/boundaries/check?dataset=&org_id=
+  - POST /api/v1/dr/backup/run {type, scope}
+  - GET  /api/v1/dr/backup/status?id=
+  - POST /api/v1/dr/restore/validate {snapshot_id}
+  - POST /api/v1/dr/failover {service, mode[canary|full]}
+  - POST /api/v1/dr/failback {service}
+  - GET  /api/v1/dr/rpo_rto/report?period=
 CLI(dosctl):
-  - `dosctl policy init|lint|dryrun|apply|rollback`
-  - `dosctl policy eval --subject '{"role":"reviewer"}' --action read --resource dataset://loans`
-  - `dosctl boundary check --dataset loans_kr --org 123`
+  - `dosctl dr backup run --type db-physical|db-logical|meta|objects`
+  - `dosctl dr restore validate --snapshot <id>`
+  - `dosctl dr failover --service core --mode canary`
+  - `dosctl dr rpo-rto report --period 7d`
 <!-- AUTOGEN:END:Interfaces — API/CLI -->
 
 <!-- AUTOGEN:BEGIN:UI — Inbox/Case/Appeals -->
@@ -101,11 +109,8 @@ web/hitl/:
 <!-- AUTOGEN:END:UI — Inbox/Case/Appeals -->
 
 <!-- AUTOGEN:BEGIN:Security/Compliance -->
-- 기본 거부, 허용은 최소 범위. 모든 예외는 만료/사후감사 필요
-- 정책 번들 서명/검증, 배포 전 dry-run + 영향분석
-- 로그/트레이스에 policy_id, decision, masked_fields 라벨 필수
-- RLS/CLS/Masking 단위 테스트 + 공격 패턴 회귀(예: always-true bypass)
-- 데이터 경계 위반 감지 → 자동 차단 + P0 알림(Gate-T 경로)
+ABAC 필드 레벨 접근, pii/residency 태그 강제, Q게이트 레저 링크, Privacy/Residency 위반 사전 차단.
+Codegen 산출물에 마스킹/레드액션 어노테이션 반영.
 <!-- AUTOGEN:END:Security/Compliance -->
 
 <!-- AUTOGEN:BEGIN:SLO & Acceptance -->
@@ -204,16 +209,34 @@ enforcement:
 - Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
 - Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
 - Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
+- Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
+- Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
+- Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
+- Switchboard 실벤더 2종 채택(모의→실제) — v0.2.0 후보
+- Consent API 스키마 확장(주체/범위/유효기간) — v0.2.0 후보
+- Rule Linter 커버리지 리포트 시각화 — v0.2.0 후보
 <!-- AUTOGEN:END:Open Issues -->
 
 <!-- AUTOGEN:BEGIN:Security Controls -->
-최소 통제 6/6 (v0.1.2 기준)
-1) at-rest 암호화(AES-256, 키 래퍼 스텁)
-2) in-transit 보호(TLS dev 예외, API Key 필수)
-3) RBAC 3계층(admin/agent/auditor)
-4) OAuth2(+MFA 옵션) dev 토큰 발급
-5) DLP/마스킹(주민/계좌/연락처), CSV export 제한
-6) 동의/철회/파기 API + 로그
+최소 통제 6/6 (v0.1.3 기준) — 구현 + 문서화
+1) at-rest 암호화(AES-256 키랩퍼 스텁) — audit.ndjson, export/* 마스킹
+2) in-transit 보호(TLS dev 예외, API Key 필수) — prod는 TLS 강제
+3) RBAC 3계층(admin/agent/auditor) — 라우트별 접근표 첨부
+4) OAuth2(+MFA 옵션) dev 토큰 발급 — /auth/token(mock)
+5) DLP/마스킹(주민/계좌/연락처), CSV export 제한 — 패턴/샘플 포함
+6) 동의/철회/파기 API + 감사 로그 — /api/v1/consent/*
+추가 통제(고객 PoV):
+- IP Allowlist(nginx/middleware) — tenant.yaml의 ip_allowlist 반영
+- Secrets Handling — secrets/ 볼륨 마운트(읽기전용), .env.client만 참조
+- Lineage — consent_snapshot + decision_input_hash 함께 보관
+청구 보안/컴플라이언스 추가:
+- PII 최소화: 인보이스에 개인식별정보 금지(회사명/담당 성만)
+- 보존: usage_events 90일, summary 1년(드라이런)
+- 무결성: 인보이스 해시/서명, 웹훅 HMAC(shared secret)
+- 멱등성: idempotency‑key 필수, 중복 요청 차단
+보호 조치:
+- /healthz는 내부 전용, /readyz는 IP allowlist, /livez와 /admin/*는 RBAC+HMAC 옵션
+- 카오스/드릴 엔드포인트는 로컬 인증 토큰 별도
 <!-- AUTOGEN:END:Security Controls -->
 
 
@@ -1937,11 +1960,8 @@ scenarios: zero-shot, few-shot, chain-of-thought誘導, toolcall-bypass, long-co
 
 
 <!-- AUTOGEN:BEGIN:Dashboards & Evidence -->
-evidence/expops/<run_id>/
-  - witness_refs.json (gate-t 소스/해시/기간)
-  - verdicts_{x190a,c102,cli}.json
-  - quorum_verdict.json
-  - discrepancies.csv (판정 불일치)
+dashboards/modelops/{registry.json, rollout.json, serve_perf.json, cost.json}
+Evidence(ModelOps): parity_report.csv, skew_matrix.csv, drift_report.json, rollout_decisions.json
 <!-- AUTOGEN:END:Dashboards & Evidence -->
 
 
@@ -2492,9 +2512,9 @@ Evidence에 judges 블록 추가(선택):
 
 
 <!-- AUTOGEN:BEGIN:Gate-AJ — RBAC Enforcement v1 -->
-- env DECISIONOS_ENFORCE_RBAC=1일 때 PEP.enforce 필수.
-- 정책 토큰: 'judge.run' + resource 'slo:<file>'.
-- 거부 시 exit code 3.
+- 정책: action 'judge.run' / resource 'slo:<name>'.
+- env DECISIONOS_ENFORCE_RBAC=1일 때 필수. 거부 시 exit 3.
+- PEP 인터페이스 enforce(policy, actor, resource, context).
 <!-- AUTOGEN:END:Gate-AJ — RBAC Enforcement v1 -->
 
 
@@ -2819,8 +2839,8 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 
 
 <!-- AUTOGEN:BEGIN:Canary — Auto Promote/Abort -->
-- N연속 통과 + 버스트 없음 → promote
-- SLO 위반/버스트 → abort_on_gate_fail
+- policy.json: consecutive_passes, grace_burst, max_step_pct
+- N연속 통과 승격, 버스트 즉시 abort
 <!-- AUTOGEN:END:Canary — Auto Promote/Abort -->
 
 
@@ -2890,3 +2910,200 @@ SLO 알람: latency p95, error_rate, judge availability, signature_error_rate, c
 - 실라벨 ↔ 카탈로그 차이를 labels_drift.json으로 산출, 아티팩트 업로드.
 - 기본: 워닝만, 삭제는 휴먼 승인 필요.
 <!-- AUTOGEN:END:Reporting — Labels Drift -->
+
+<!-- AUTOGEN:BEGIN:Milestones -->
+(툴이 이 영역을 관리합니다)
+<!-- AUTOGEN:END:Milestones -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions -->
+(툴이 이 영역을 관리합니다)
+<!-- AUTOGEN:END:Next Actions -->
+
+
+
+<!-- AUTOGEN:BEGIN:Payments — Architecture -->
+목표:
+  - Gate-S의 인보이스/사용량을 실제 결제로 연결
+  - 다중 PG 어댑터, 안전한 웹훅, 정산/대사, 환불·조정
+구성:
+  - adapters/: pg별 모듈(토큰화, auth/capture/refund/void, webhooks)
+  - payments_core/: 결제 세션, 결제 의도, 영수증, 결제 상태머신
+  - settlement/: 정산 배치, 대사 엔진(내부 원장 vs PG 정산 파일)
+  - taxes/: VAT/세율 룰, 인보이스 라인별 세금 계산 훅
+  - disputes/: 차지백/분쟁 수신·응답 스텁
+통화/지역:
+  - 기본 KRW, 멀티통화 설계(ISO-4217) + 환율 스냅샷 테이블
+<!-- AUTOGEN:END:Payments — Architecture -->
+
+
+<!-- AUTOGEN:BEGIN:PG Adapters & Flows -->
+표준 인터페이스(IPayAdapter):
+  - create_payment_intent(amount, currency, customer_ref, meta)
+  - confirm/authorize(intent_id, payment_method)
+  - capture(charge_id, amount?) / void(intent_id)
+  - refund(charge_id, amount?, reason)
+  - webhook_verify(headers, payload) → event
+제공 어댑터(초기):
+  - manual_stub(테스트), stripe_stub(맵핑), generic_pg(서명검증/웹훅 공통)
+상태머신:
+  - intent: created → authorized → captured → settled
+  - 실패: requires_action(3DS 등), canceled, charge_failed, refund_pending → refunded
+웹훅:
+  - events: payment_succeeded/failed, refund_succeeded/failed, chargeback_open/closed
+  - 재시도: idempotency_key·리플레이 방지 해시
+<!-- AUTOGEN:END:PG Adapters & Flows -->
+
+
+<!-- AUTOGEN:BEGIN:KYC / AML — Collection & Verification -->
+대상:
+  - 개인고객: 이름, 생년월일, 이메일/전화, 신분증 스캔(스텁), 셀피(옵션)
+  - 사업자: 상호/사업자번호, 대표자, 사업자등록증(스캔), 통신판매업번호(옵션)
+프로세스:
+  - risk_tier 평가(low/med/high) → 요구 서류 다름
+  - 검증: 외부 KYC provider 스텁(adapter_kyc_stub) + 수동 검토(HITL queue)
+  - 결과: verified|needs_more|rejected, 유효기간 및 재검증 주기(예: 12개월)
+보존/보안:
+  - 원본은 암호화 저장(AES-256), 썸네일/PII 마스킹, 접근 RBAC(billing_admin|auditor)
+  - 삭제요청은 보존정책 예외 저장소로 이관(감사 링크 유지)
+<!-- AUTOGEN:END:KYC / AML — Collection & Verification -->
+
+
+<!-- AUTOGEN:BEGIN:Settlement & Reconciliation -->
+원장:
+  - ledger_txns{ id, org_id, invoice_id?, charge_id?, type[charge|refund|fee|payout],
+                 amount, currency, pg, status[pending|posted], ts }
+정산:
+  - settlement_batches{ id, pg, period, file_uri, imported_at }
+  - 대사(recon): ledger vs settlement 파일 매칭 → 불일치 보고서(diff)
+수수료:
+  - pg_fee, fx_fee, 플랫폼 수수료 라인 분리 → margin 계산과 연동(Gate-S)
+<!-- AUTOGEN:END:Settlement & Reconciliation -->
+
+
+<!-- AUTOGEN:BEGIN:Taxes & Invoicing -->
+VAT/세금:
+  - region_rules.yaml: 국가/지역별 세율/면세/과세구분
+  - invoice_lines에 tax_rate/tax_amount 계산/표기, 영수증에도 반영
+영수증:
+  - receipts{ id, charge_id, org_id, total, tax_amount, issued_at, pdf_uri, json_uri }
+<!-- AUTOGEN:END:Taxes & Invoicing -->
+
+
+<!-- AUTOGEN:BEGIN:Interfaces — API/CLI/Webhooks -->
+API:
+  - POST /api/v1/payments/intent {org_id, amount, currency, customer_ref}
+  - POST /api/v1/payments/confirm {intent_id, payment_method}
+  - POST /api/v1/payments/capture {charge_id, amount?}
+  - POST /api/v1/payments/refund {charge_id, amount?, reason}
+  - GET  /api/v1/payments/charges/:id | GET /api/v1/payments/receipts/:id
+  - POST /api/v1/kyc/submit {org_id, type, docs[]}
+  - GET  /api/v1/kyc/status?org_id=
+  - POST /api/v1/webhooks/pg/{adapter}  # 서명검증
+CLI(dosctl):
+  - `dosctl pay intent --org <id> --amount 100000 --ccy KRW`
+  - `dosctl pay confirm --intent <id> --pm tok_test`
+  - `dosctl pay refund --charge <id> --amount 50000`
+  - `dosctl kyc submit --org <id> --type business --docs ...`
+  - `dosctl kyc status --org <id>`
+Webhooks(ours→partners):
+  - billing.invoice.issued, payment.charge.succeeded, refund.processed, kyc.updated
+<!-- AUTOGEN:END:Interfaces — API/CLI/Webhooks -->
+
+
+<!-- AUTOGEN:BEGIN:Security / Compliance -->
+- 카드 데이터 비저장(토큰만 저장), 웹훅 서명검증 필수, 재생공격 방지
+- PII/문서 암호화, 접근 로깅, 7년 보존, 감사 해시체인 링크(Gate-Q)
+- 차지백 알림 수신 → HITL 케이스 자동 생성(Gate-R)
+- 권한: billing_admin, finance_ops, auditor 전용 API 분리
+<!-- AUTOGEN:END:Security / Compliance -->
+
+
+<!-- AUTOGEN:BEGIN:Testing — Gate Seeds -->
+- Gate-S(결제/메터링/레이팅/한도), Gate-P(검색/카탈로그/라인리지), Gate-O(커넥터/ETL/CDC/데이터 계약) 테스트 시드를 추가.
+- 초기 상태는 @pytest.mark.xfail(strict=False)로 안전하게 통과시킨다.
+- 구현 진행에 따라 xfail 제거 → 실제 어설션/피쳐 검증 추가.
+<!-- AUTOGEN:END:Testing — Gate Seeds -->
+
+
+<!-- AUTOGEN:BEGIN:Ops — ETag Infra & Cache -->
+- Backend: inmem(default), redis(DECISIONOS_REDIS_URL)
+- TTL: 3600s(버킷 단위), Key: etag:v2:{period}:{bucket}:{weights_hash}:{catalog_hash}
+- 폴백: Redis 장애 시 inmem로 자동 전환, 5xx=0 보장
+<!-- AUTOGEN:END:Ops — ETag Infra & Cache -->
+
+
+<!-- AUTOGEN:BEGIN:Traffic — Backpressure & Circuit Breaker -->
+- TokenBucket(qps, burst), Exponential Backoff, Open/half-open/close 임계 표준화
+- Judge Provider/Server 공통 상수: QPS_MAX, BURST_MAX, OPEN_AFTER_N_ERRORS, COOL_DOWN_SEC
+<!-- AUTOGEN:END:Traffic — Backpressure & Circuit Breaker -->
+
+
+<!-- AUTOGEN:BEGIN:SLO — Recalibration Guidelines -->
+- 7일 reqlog 요약(p50/p95/p99/error_rate), min_samples/window_sec 반영
+- false-positive ≤ 2%, gate 실패율 ≤ 1% 목표
+<!-- AUTOGEN:END:SLO — Recalibration Guidelines -->
+
+
+<!-- AUTOGEN:BEGIN:Security — RBAC Default Deny -->
+- DECISIONOS_ALLOW_SCOPES 요구, 모든 CLI/API/파이프라인 pep.require()
+- 스코프: ops:read, judge:run, deploy:promote, deploy:abort
+<!-- AUTOGEN:END:Security — RBAC Default Deny -->
+
+
+<!-- AUTOGEN:BEGIN:Evidence — Immutability & Index/GC -->
+- indexer: tier(WIP/LOCKED), tampered, sha256, generated_at
+- GC: WIP 보존 N일, LOCKED 보존 무기한(ObjectLock)
+<!-- AUTOGEN:END:Evidence — Immutability & Index/GC -->
+
+
+<!-- AUTOGEN:BEGIN:DR/Chaos — Scenarios -->
+- 지연 스파이크, 5xx 버스트, Redis 장애 → fail-closed, stage=stable 복구
+<!-- AUTOGEN:END:DR/Chaos — Scenarios -->
+
+
+<!-- AUTOGEN:BEGIN:Key Rotation & Clock -->
+- MultiKeyLoader(KMS/ENV), grace_window, clock_guard 프리게이트 강제
+<!-- AUTOGEN:END:Key Rotation & Clock -->
+
+
+<!-- AUTOGEN:BEGIN:Ops Cards — Limits & Targets -->
+- 비용/쿼터 상한, p95 목표선, Top-impact 라벨·그룹 가중치 반영(ETag v2)
+<!-- AUTOGEN:END:Ops Cards — Limits & Targets -->
+
+
+<!-- AUTOGEN:BEGIN:Runbook — 30-min Oncall Drill -->
+- 승격/차단/증빙 링크 공유까지 30분 내 수행 체크리스트
+<!-- AUTOGEN:END:Runbook — 30-min Oncall Drill -->
+
+
+<!-- AUTOGEN:BEGIN:Security — Keys/KMS/Replay -->
+- Keys: SSM Parameter Store 경로 규칙 `/decisionos/${env}/keys/*`
+- MultiKeyLoader: state={active,grace,retired}, clock_skew_tolerance=±120s
+- HTTP Provider/Server: X-DecisionOS-{Signature,Nonce,Timestamp}, drift>120s→fail-closed
+<!-- AUTOGEN:END:Security — Keys/KMS/Replay -->
+
+
+<!-- AUTOGEN:BEGIN:Observability — Caching & RateLimit -->
+- Redis ETagStore: key=`etag:{tenant}:{route}:{etag_v2}` TTL=24h, prefix-invalidate
+- RateLimit: global/tenant 2계층, token-bucket(1s 리필), Redis Lua로 원자 처리
+<!-- AUTOGEN:END:Observability — Caching & RateLimit -->
+
+
+<!-- AUTOGEN:BEGIN:Data — PII Redaction -->
+- PII 규칙: email/phone/rrn(partial)/name(dict)/addr(partial) → SHA256(tokenize) or ****
+- Evidence/Logs/Ops API 응답 전 공통 마스킹 훅
+<!-- AUTOGEN:END:Data — PII Redaction -->
+
+
+<!-- AUTOGEN:BEGIN:Reliability — DR/Backup -->
+- Evidence/Configs S3 버킷: ObjectLock(Compliance, 7d), CRR to ap-northeast-2
+- 복구 절차: RPO≤15m, RTO≤30m; Runbook에 단계별 명령 포함
+<!-- AUTOGEN:END:Reliability — DR/Backup -->
+
+
+<!-- AUTOGEN:BEGIN:Release — Gates -->
+- PreGate: clock_guard, keys_freshness, redis_ping, evidence_index
+- Gate: infra+canary SLO, judge quorum(2/3), rate-limit breach=fail
+- PostGate: artifacts+dash cards+PR 댓글(ETag/Delta 링크·알림 링크)
+<!-- AUTOGEN:END:Release — Gates -->

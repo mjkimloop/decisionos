@@ -1,5 +1,21 @@
 # DecisionOS Docs — Version Index
 - v0.1.6 — 2025-11-02 — PoV 드라이런(도커 패키징·커넥터 v1·관측성·Runbook·롤백). No‑Gemini 유지
+- v0.0.3 — 2025-03-03 — e2e
+- v0.0.2 — 2025-02-02 — sum
+- v0.0.1 — 2025-01-01 — 
+- v0.5.11t-6 — 2025-11-11 — Risk Governor(다중 신호 융합) + Error-Budget Burn-rate 게이트 + Shadow Sampler(부하 적응형) + 경보/플레이북 코멘트 확장 + 프로메테우스 계측 + CI 게이트 연동
+
+- v0.5.11t-4 — 2025-11-11 — Autotune 안전장치(바운드·slew·롤백) + Drift SLO 게이트 연계 + 버킷 explain 가시화
+- v0.5.11t-3 — 2025-11-11 — Calibrated-Δ 기반 자동 승격 임계 재조정 + posterior drift 모니터 + Cards Stream ETag-Delta/버킷 통합
+- v0.5.11t-1 — 2025-11-11 — 시뮬레이터 분산/신뢰구간 + Heatmap 상위 가중 하이라이트 + 카나리 실측 Δ ↔ 오프라인 예측 Δ 정합성 리포트
+- v0.5.11t — 2025-11-12 — 시크릿/KMS 하드닝, 분산 레이트리밋/ETagStore, Evidence PII 마스킹, SLO Saturation(자원) 확장, Blue/Green 커버리지, DR/백업, Ops API 인증/감사, 가중치 옵티마이저 오프라인 잡, 런타임 플래그, 인덱싱 성능 개선.
+
+- v0.5.11r-o — 2025-11-11 — Labels/PR 주석 정밀화 + Canary 정책 미세튜닝(o-round)
+- v0.5.11q-4.6.1 — 2025-11-11 — Cards API ETag v2(키 확장) + PR 코멘트에 Alerts URL 자동 삽입
+- v0.5.11q-4.1 — 2025-11-11 — Cards API에 그룹 가중치/Top-N(라벨·그룹) 동시 반환, PR 코멘트에 라벨 카탈로그 SHA 표시
+- v0.5.10h — 2025-11-10 — Gate-S/P/O 테스트 시드 추가 및 CI 매트릭스 확장 (xfail 기반)
+- v0.4.1 — 2025-11-04 — Gate-U: Payments & KYC · PG Integration · Settlement · Refunds/Adjustments (No-Gemini)
+- vX.Y.Z — YYYY-MM-DD — 한 줄 변경 요약
 - v0.5.11s-2 — 2025-11-12 — 운영 채널 분기(환경/사유별), Slack 알림 레이트-리밋, 라벨 팔레트 v2 정교화 및 CI 테스트 배선
 
 - v0.5.11s-1 — 2025-11-12 — 운영값(슬랙 Webhook/채널, SSM 파라미터, Redis DSN, 카나리 스텝 스케줄) 반영 핫픽스

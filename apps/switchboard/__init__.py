@@ -1,0 +1,3 @@
+"""
+Switchboard module placeholder.
+"""

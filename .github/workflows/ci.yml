@@ -607,3 +607,42 @@ PY
         run: python -m scripts.ci.check_skeletons
       - name: unit (checker self-test)
         run: python -m pytest -q tests/ci/test_check_skeletons_v1.py
+
+  pre_gate_gateb:
+    name: pre_gate ? Gate-B docs&schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: yamllint docs/work_orders
+      - run: python -m pytest -q tests/docs/test_work_order_schema_v1.py
+      - run: python scripts/doc_guard.py --strict
+
+  gate_gateb:
+    name: gate ? Gate-B core
+    runs-on: ubuntu-latest
+    needs: [pre_gate, pre_gate_gateb, pre_gate_skeleton_hygiene]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests/consent tests/metrics tests/audit tests/switchboard || true
+
+  post_gate_gateb:
+    name: post_gate ? annotate Gate-B
+    runs-on: ubuntu-latest
+    if: always()
+    needs: gate_gateb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m cli.dosctl main metrics get --json | tee var/ci-metrics.json || true
+      - run: python -m scripts.ci.annotate_release_gate --upsert 1 --badges 1 --artifacts var/ci-metrics.json || true
+

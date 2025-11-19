@@ -1,8 +1,14 @@
 <!--
-version: v0.1.2s-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
-date: 2025-11-02
+version: vX.Y.Zs-2s-1q-4q-3q-2q-1qqp-1ponmmllki.2i.2i.1ihgfedcbaccbabaaa
+date: YYYY-MM-DD
 status: locked
-summary: Gate-A 통과용 작업지시 + 문서 자동기입 도입
+summary: DocOps Hotfix: plan.md Gate-Scoped Upsert — 게이트별 섹션 분리 및 upsert 모드 적용 (No-Gemini)
+
+
+
+
+
+
 -->
 
 # DecisionOS Implementation Plan
@@ -738,6 +744,10 @@ Day 3: 운영문서 업데이트(Ops API/대시보드 카드)
 <!-- AUTOGEN:BEGIN:Releases -->
 - v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러
 - v0.5.11p-1: Ops 카드 API 캐싱/ETag + RBAC(ops:read)
+- v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러
+- v0.5.11p-1: Ops 카드 API 캐싱/ETag + RBAC(ops:read)
+- v0.5.11p: Ops Trend API, PR artifacts 링크, Top-impact 레이블러
+- v0.5.11p-1: Ops 카드 API 캐싱/ETag + RBAC(ops:read)
 <!-- AUTOGEN:END:Releases -->
 
 ## Milestones — v0.5.11p-1
@@ -896,16 +906,419 @@ D+2: Drift 리포트 모니터링, 라벨 변경 시 카드 즉시 반영 확인
 <!-- AUTOGEN:END:CI Steps -->
 
 <!-- AUTOGEN:BEGIN:Milestones -->
-W2 Gate-A 마일스톤(현행):
-- /decide e2e 3케이스 200 OK, 평균 <300ms(모델 미호출)
-- dosctl simulate → JSON+HTML 리포트 산출
-- 보안 최소통제 6/6 체크 통과
-- 감사 NDJSON 해시 체인(prev→curr) 일관 확인
+- Region/Residency 모델·구성(매트릭스/라벨)
+- PEP 훅·Router(LLM/API/Jobs) 통합
+- Transfer 평가/승인/레저·SCC 번들
+- Orchestrator(복제/승격/회수)·지연/실패 복구
+- 대시/증빙·SLO 측정
 <!-- AUTOGEN:END:Milestones -->
 
 <!-- AUTOGEN:BEGIN:Next Actions -->
-Day 0–1: 스키마/DSL/Executor 코어
-Day 2: Gateway 3 API + dosctl
-Day 3: Switchboard 폴백 + Offline Eval 리포트
-Day 4–5: 보안 6/6 + Lending 규칙 6개 튜닝
+Day 176: regions.yaml/transfer_matrix.yaml · models/service 스캐폴드
+Day 177: PEP 훅(residency) · Router 통합(LLM/API)
+Day 178: transfer assessor/ledger · 승인흐름(Q 연계) · SCC 템플릿
+Day 179: orchestrator(복제/승격/회수) · lag 측정 · 실패 보상
+Day 180: API/CLI · 대시보드 · SLO 측정 · Evidence(Residency)
 <!-- AUTOGEN:END:Next Actions -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions (delta) -->
+D+0: apps/tenancy/models.py/service.py 스캐폴드 · db/migrations/tenancy.sql 초안
+D+1: apps/metering/{schema,ingest,reconcile} · ingest.apply_event(source-aware lag)
+D+2: rating {plans,engine,proration} · configs/billing/pricing.yaml · dashboards/billing/*
+D+3: limits {quota,throttle} · cost_guard {budget,anomaly(EWMA),actions} · Evidence 훅
+D+4: invoice {draft,pdf} · routers/* · dosctl billing · tests/test_gate_s_* · 리포트/증빙 생성
+<!-- AUTOGEN:END:Next Actions (delta) -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-AJ -->
+- dosctl exp_judge DSL 모드 릴리스(기본 slo.json+ad-hoc)
+- golden_trace self-test 번들(evidence/golden/*)
+- verdicts_cli.json → witness 참조 자동화
+<!-- AUTOGEN:END:Milestones — Gate-AJ -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-AJ -->
+Day 201: Gate-T witness exporter 스키마/샘플
+Day 202: X-190a(codex) judge 구현 · gold_witness 작성
+Day 203: C-102(claude) judge 구현 · dosctl DSL 판
+Day 204: quorum 합의/불일치 처리 · AH/S 훅 교체
+Day 205: 백테스트 크론 · Evidence/대시 업데이트
+<!-- AUTOGEN:END:Next Actions — Gate-AJ -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-T -->
+- backfill_runner CLI (witness+raw) + Δ 보고
+- calibration/golden_trace.py 스크립트 및 문서
+- daily cron에서 golden trace → backfill → judge 스모크 자동화
+<!-- AUTOGEN:END:Milestones — Gate-T -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-T -->
+Day 201: 스키마/인변식 구현, Δ 허용치 적용
+Day 202: exporter_x/exporter_c 가동 · Δ 비교 리포트
+Day 203: backfill_runner 배치, golden_trace 교정
+Day 204: 알림/대시 카드, Q-ledger 앵커링 점검
+Day 205: 문서/런북 PR
+<!-- AUTOGEN:END:Next Actions — Gate-T -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — CI Matrix Expand -->
+- tests/gates/gate_s/*, gate_p/*, gate_o/* 시드 파일 생성
+- CI matrix: gate_s, gate_p, gate_o 추가
+- 최초 파이프라인 green 확인
+<!-- AUTOGEN:END:Milestones — CI Matrix Expand -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gates S/P/O -->
+Day 216: 시드 테스트 반영 및 CI 확장
+Day 217+: 각 게이트 모듈 작성 시 xfail → assert 전환, 커버리지 목표 상향
+<!-- AUTOGEN:END:Next Actions — Gates S/P/O -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-S v1 -->
+- schema/ingest/reconcile 구현
+- test_metering_contract_v1 Green
+- requirements-dev에 pydantic 추가
+<!-- AUTOGEN:END:Milestones — Gate-S v1 -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-S -->
+Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering)
+Day 222: Cost-Guard 조치의 Evidence(치명 로그) 연동 및 RBAC hook
+<!-- AUTOGEN:END:Next Actions — Gate-S -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-S v1.1 -->
+- store.py/factory.py 추가
+- plugin 테스트: InMemory/SQLite 중복 필터 검증
+- .gitignore var/ 보강
+<!-- AUTOGEN:END:Milestones — Gate-S v1.1 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-S v1.2 -->
+- watermark.py 추가, reconcile V2 함수 추가
+- test_watermark_lateness_v1 Green
+<!-- AUTOGEN:END:Milestones — Gate-S v1.2 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-S v1.3 -->
+- rating/ plans.py + engine.py
+- limits/ quota.py
+- cost_guard/ budget.py + anomaly.py (+ actions stub)
+- 단위 테스트 3종 Green
+<!-- AUTOGEN:END:Milestones — Gate-S v1.3 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-S v1.4 -->
+- apps/obs/witness/io.py (CSV 파서)
+- tests/integration/test_witness_vs_metering_rating_quota_v1.py
+- End-to-end smoke: witness → metering → rating → quota
+<!-- AUTOGEN:END:Milestones — Gate-S v1.4 -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Integration -->
+Day 221: Gate-T Witness 대조 통합 테스트(witness_vs_metering) ✓
+Day 222: Cost-Guard 조치의 Evidence 연동 + RBAC hook
+<!-- AUTOGEN:END:Next Actions — Integration -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11f -->
+- Evidence 스냅샷 모듈(apps/obs/evidence/snapshot.py) 추가
+- 통합 테스트(test_integration_costguard_evidence_v1.py) Green
+- 스냅샷 파일 저장 및 해시 무결성 확인
+<!-- AUTOGEN:END:Milestones — v0.5.11f -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11f -->
+Day 222: 통합 테스트 Green 및 Evidence 샘플 커밋
+Day 223: slo.json 기반 Judge(멀티쿼럼) 연계 스냅샷(v0.5.11g)
+<!-- AUTOGEN:END:Next Actions — v0.5.11f -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11g -->
+- slo_schema.py, slo_judge.py, quorum.py 구현
+- CLI: dosctl judge slo ... 추가
+- 테스트: gate_aj 3종(단일판정, 쿼럼 2/3, 무결성 실패)
+- 샘플 slo 파일 2종 추가 (canary, strict)
+<!-- AUTOGEN:END:Milestones — v0.5.11g -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11g -->
+Day 223: 코드/테스트/CLI Green
+Day 224: CI 매트릭스(gate_aj) 확장 및 샘플 evidence/slo 아카이브
+<!-- AUTOGEN:END:Next Actions — v0.5.11g -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11h -->
+- Witness: perf.py + CLI 추가
+- Evidence: perf 블록 병합 지원
+- SLO 스키마/저지: latency/error 정책 추가
+- 샘플 SLO v2 2종 (canary/strict)
+- 테스트: gate_t(1), gate_aj(2), integration(1) Green
+<!-- AUTOGEN:END:Milestones — v0.5.11h -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11h -->
+Day 223: perf witness/CLI 구현 및 단위테스트
+Day 224: slo(latency/error) + judge 확장, 통합테스트 및 CI 매트릭스 업데이트
+<!-- AUTOGEN:END:Next Actions — v0.5.11h -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11i -->
+- Provider ABC/Local/HTTP 구현
+- Pool quorum_decide 구현
+- providers.yaml 샘플
+- Evidence.judges 블록 병합
+- CLI: dosctl judge quorum --slo ... --evidence ... --providers ... --quorum 2/3
+- 테스트: unit 6, integration 2, e2e 1 (모두 Green)
+<!-- AUTOGEN:END:Milestones — v0.5.11i -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11i -->
+Day 224: providers/base/local/http, pool, 서명 로직
+Day 225: Evidence.judges 병합, CLI, 테스트/CI 매트릭스 업데이트
+<!-- AUTOGEN:END:Next Actions — v0.5.11i -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11i.1 -->
+- CLI dosctl judge quorum 구현
+- Evidence.judges 병합 옵션(--attach-evidence)
+- Anti-Replay(minimal SQLite) 유틸(테스트용)
+- 단위/통합/E2E 테스트 그린
+- CI 매트릭스 업데이트(gate_aj async)
+<!-- AUTOGEN:END:Milestones — v0.5.11i.1 -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11i.1 -->
+Day 224: CLI/증빙 병합/반복방지 유틸
+Day 225: unit+integration+e2e 테스트, CI 확장, 커밋/태깅
+<!-- AUTOGEN:END:Next Actions — v0.5.11i.1 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11i.2 -->
+- crypto: multi-key loader, provider: key resolver
+- replay: ABC+Redis 구현, 설정 스키마 확장
+- rbac: PEP 스텁→실행 경로 연결(dosctl, HTTP provider)
+- CI release_gate 잡 추가
+<!-- AUTOGEN:END:Milestones — v0.5.11i.2 -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11i.2 -->
+Day 226: crypto/key-rotation, replay plugins
+Day 227: RBAC enforce + 단위/통합 테스트
+Day 228: CI release_gate + 문서/샘플 갱신
+<!-- AUTOGEN:END:Next Actions — v0.5.11i.2 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11k -->
+- M1: controller/shadow/compare 스켈레톤 + 정책 파일
+- M2: Evidence.canary 병합 + Judge canary 판정
+- M3: 통합/E2E + CI release gate
+<!-- AUTOGEN:END:Milestones — v0.5.11k -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11k -->
+Day 232: controller.py, shadow.py, compare.py, 정책/샘플 CSV
+Day 233: evidence.canary 병합, slo-canary.json, judge 확장
+Day 234: 통합/E2E/CI 파이프라인, strict infra gate on
+<!-- AUTOGEN:END:Next Actions — v0.5.11k -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11l -->
+Day 1-2: 배포 파이프라인 훅 연결(옵션A/B 중 택1), 환경변수/시크릿 배선
+Day 3: 로그→Evidence 자동화(Job/Cron) + 보존정책
+Day 4: KMS 키 로테이션 드라이런 + RBAC 정책 배포
+Day 5: SLO 알람/런북 + CI 릴리스 게이트 확장(운영 스텝)
+<!-- AUTOGEN:END:Milestones — v0.5.11l -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11l -->
+• pipeline/release: canary_step.sh, promote.sh, abort.sh 추가
+• configs/: ingress-mirror.* 또는 rollouts/*.yaml 추가
+• jobs/: evidence_harvest_{reqlog,judgelog}.py + cron 스케줄
+• docs/ops/: RUNBOOK-SLO.md, RUNBOOK-ROLLBACK.md, CLI-DEPLOY.md
+<!-- AUTOGEN:END:Next Actions — v0.5.11l -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11m -->
+- Day 1: indexer/clock_guard/chaos·DR 스크립트 추가, 로컬 스모크
+- Day 2: CI pre-gate(clock) → evidence_harvest → indexer → infra·canary gate 순서 확정
+- Day 3: S3 ObjectLock 잡(옵션) 연결, 운영 런북 보강
+<!-- AUTOGEN:END:Milestones — v0.5.11m -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — v0.5.11m -->
+- jobs/evidence_indexer.py, apps/obs/evidence/indexer.py
+- jobs/evidence_objectlock.py (옵션, boto3)
+- apps/common/clock.py, jobs/clock_guard.py
+- pipeline/chaos/chaos_inject.sh, pipeline/release/abort_on_gate_fail.sh
+- tests/* 스모크 추가, CI 매트릭스에 pre-gate 삽입
+<!-- AUTOGEN:END:Next Actions — v0.5.11m -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11n -->
+- RBAC default-deny 적용(pep.py)
+- SLO 인프라 파라미터(min_samples/window/grace) 반영
+- evidence GC 잡(dry-run 포함) + CI 프리게이트 삽입
+- stage 서명 사이드카 도입 및 테스트 보강
+<!-- AUTOGEN:END:Milestones — v0.5.11n -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11o -->
+Day 1: Reasons 표준화 훅 적용(slo_judge) + 문서(REA S ONS.md)
+Day 2: Stage Safe-Mode 구현(controller/stage_file)
+Day 3: GC 외부화 로더 + 잡 갱신(indexer/gc)
+Day 4: CLI 종료코드 E2E, 문서 반영
+Day 5: grace_burst 경계 테스트 추가 및 CI 매트릭스 편입
+<!-- AUTOGEN:END:Milestones — v0.5.11o -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Ops Hardening -->
+• CI에 pre_gate: clock_guard → evidence_index → gc(dry-run) 아티팩트 업로드
+• release_gate: infra+canary SLO 통과 시에만 promote
+• RUNBOOK 갱신: 이유코드/롤백/키미설정 시 Safe-Mode 동작
+<!-- AUTOGEN:END:Next Actions — Ops Hardening -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11p -->
+Day 1: API/스크립트 구현 및 단위 테스트
+Day 2: CI 배선(PR 코멘트/레이블러) 및 아티팩트 링크 검증
+Day 3: 운영문서 업데이트(Ops API/대시보드 카드)
+<!-- AUTOGEN:END:Milestones — v0.5.11p -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11p-1 -->
+Day 1: cache/etag/RBAC 적용 및 단위 테스트
+Day 2: CI 매트릭스에 gate_ops 포함, API 304 경로 스모크
+<!-- AUTOGEN:END:Milestones — v0.5.11p-1 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11q-1 -->
+Day 1: 템플릿/검증 스크립트 추가, CI 단계 삽입
+Day 2: 게이트 요약(gate_summary.json)·사유(reasons.json)·아티팩트(manifest.json) 연동
+Day 3: PR 코멘트 자동화 E2E 확인 및 문구/형식 튜닝
+<!-- AUTOGEN:END:Milestones — v0.5.11q-1 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11q-2 -->
+Day 1: upsert/label/top-impact 스크립트 추가 및 CI 단계 삽입
+Day 2: 템플릿 없이도 Top-Impact 섹션 자동 주입(존재 시)
+Day 3: 라벨/가중치 설정 튜닝 및 운영 문서 반영
+<!-- AUTOGEN:END:Milestones — v0.5.11q-2 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11q-3 -->
+Day 1: ensure_labels 스텝 추가, 카탈로그/매핑 분리
+Day 2: 코멘트 diff-permalink 자동 주입, 템플릿 키 {{DIFF_LINK}}
+Day 3: 운영 문서 보강(라벨 팔레트, 설명 규칙)
+<!-- AUTOGEN:END:Milestones — v0.5.11q-3 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — q-4 -->
+D+0: 스크립트/라우터 추가, CI 단계 삽입
+D+1: Cards API 응답에 palette/rollup 반영, ETag seed 연결
+D+2: Drift 리포트 모니터링, 라벨 변경 시 카드 즉시 반영 확인
+<!-- AUTOGEN:END:Milestones — q-4 -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11q Cutover -->
+Day 1: RBAC/Keys/Clock 프리게이트 점검
+Day 2: Evidence Index/GC/ObjectLock dry-run
+Day 3: Canary start + Release gates(Infra/Canary)
+Day 4: Auto promote/abort + Post-verify(Ops cards)
+Day 5: LOCK 티어 전환 및 태그 고정
+<!-- AUTOGEN:END:Milestones — v0.5.11q Cutover -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11q -->
+D1-2: Ops API 캐시/ETag + /readyz 강화
+D3-4: KMS/Redis 플러그인 스모크
+D5: Evidence LOCK/GC 게이트 강제
+D6: 카나리 자동 승격/중단
+D7: 부하→증빙→게이트→승격 CI 시퀀스 green
+<!-- AUTOGEN:END:Milestones — v0.5.11q -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11r -->
+Day 1-2: ETag Redis 전환 스테이징·폴백 검증
+Day 3: Backpressure 상수화 및 Chaos 스파이크 테스트
+Day 4: 7d 실측 기반 SLO 재보정, canary policy 튜닝
+Day 5: RBAC default-deny 전면 적용
+Day 6: Evidence Index/GC/ObjectLock 파이프라인 완성
+Day 7: DR 리허설, 온콜 30분 드릴, 문서 확정
+<!-- AUTOGEN:END:Milestones — v0.5.11r -->
+
+
+<!-- AUTOGEN:BEGIN:Acceptance — r-round -->
+- 캐시 히트율 ≥80%, Redis 장애 시 5xx=0
+- 스파이크 10x 3분 내 SLA 위반 없이 429/503 수렴
+- canary 3연속 통과 평균 승격 ≤15m, 버스트 즉시 abort
+- 모든 위험 경로 스코프 미부여 시 403
+- Evidence tampered=0, PR 코멘트에서 1클릭 검증
+- 키 로테이션 무중단, 스큐 초과 시 503 Degraded
+<!-- AUTOGEN:END:Acceptance — r-round -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — v0.5.11t -->
+Day 1-2: Redis ETagStore/RateLimit + 단위/통합 테스트
+Day 3: Keys/KMS 로더 통합, 서명·시계 하드닝 리그레션
+Day 4: PII 마스킹(공통 훅) + 카드/로그/Evidence 적용
+Day 5: Evidence GC/Index/ObjectLock 검증 + DR 리허설(E2E)
+Day 6: Ops/Judge 보안 정책 강화 + CI 게이트 확대
+Day 7: Canary Auto-Tune 운영치 반영, 문서·런북 확정, GA 태그
+<!-- AUTOGEN:END:Milestones — v0.5.11t -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-AG -->
+- Ontology v2 스키마/핸드북/스타일가이드
+- Decision Graph 엔진/플래너
+- DecisionContract v2 + 검증기
+- Source Mapping 정의 + 검증
+- Codegen 파이프라인(모델/DB/그래프/클라이언트)
+- 대시/증빙·SLO 측정
+<!-- AUTOGEN:END:Milestones — Gate-AG -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-AG -->
+Day 181: 핵심 타입 스키마(Entity/Event/Decision/Policy) · 핸드북/스타일가이드
+Day 182: Decision Graph 엔진/플래너 스켈레톤 · .dot/.json export
+Day 183: Contract v2 스키마·검증기 · API/CLI validate
+Day 184: Mapping 정의/검증 · PII/Residency 태깅 교차검사(AD/AF)
+Day 185: Codegen 파이프라인(파이썬/SQL/그래프/클라이언트) · CI drift 체크 · 대시/증빙
+<!-- AUTOGEN:END:Next Actions — Gate-AG -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-AH -->
+- 레지스트리/계약(AG 링크) · 환경 재현
+- 피처스토어(offline/online) · 파리티 체커
+- 학습/평가/패키징/서빙 파이프라인
+- 스큐/드리프트 감지 · 롤아웃/롤백 자동화
+- 대시/증빙 · SLO 측정
+<!-- AUTOGEN:END:Milestones — Gate-AH -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-AH -->
+Day 186: Model Registry/Env manifest · DecisionContract v2 연결(AG)
+Day 187: Feature Store offline/online 스캐폴드 · parity_checker
+Day 188: Train/Eval/Serve 파이프라인 · router_adapter
+Day 189: Skew/Drift detectors · alerts · retrain triggers
+Day 190: Shadow/Canary/BlueGreen · API/CLI · 대시/증빙 · SLO 측정
+<!-- AUTOGEN:END:Next Actions — Gate-AH -->
+
+
+<!-- AUTOGEN:BEGIN:Milestones — Gate-DocOps -->
+- wo_apply.py에 upsert_section() + apply_plan_patch() 추가
+- 메인 루프 plan 타겟 감지 로직 추가
+- plan_migrate.py 스크립트로 기존 내용 게이트별 분리
+- 모든 Gate work order 검증 및 테스트
+<!-- AUTOGEN:END:Milestones — Gate-DocOps -->
+
+
+<!-- AUTOGEN:BEGIN:Next Actions — Gate-DocOps -->
+Day 191: wo_apply.py 수정 완료 (upsert 함수 + 라우팅)
+Day 192: plan_migrate.py 작성 및 실행 (기존 내용 복원)
+Day 193: 전체 Gate work order 재적용 테스트 (A~AH 37개)
+Day 194: doc_guard.py 검증 통과
+Day 195: 문서화 및 PR 체크리스트 완료
+<!-- AUTOGEN:END:Next Actions — Gate-DocOps -->

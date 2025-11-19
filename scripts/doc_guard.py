@@ -2,21 +2,16 @@
 """
 문서 가드:
 - AUTOGEN 마커 짝/중복 확인
-- meta 헤더(version/date/status/summary) 확인
-- 최신 Work Order 적용 필요 여부 확인(--strict 시 wo_apply --check 호출)
+- meta 헤더(version/date/status/summary) 확인(유효한 Work Order가 있을 때만)
+- --strict 시 wo_apply --all --check로 out-of-sync 감지
 """
 from __future__ import annotations
 
-import io
 import pathlib
 import re
 import subprocess
 import sys
 from typing import Dict, List
-
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 ROOT = pathlib.Path(".")
 DOCS = ROOT / "docs"
@@ -36,10 +31,6 @@ def parse_header(text: str) -> Dict[str, str]:
         "status": HDR_STATUS.search(text).group(1) if HDR_STATUS.search(text) else "",
         "summary": HDR_SUM.search(text).group(1) if HDR_SUM.search(text) else "",
     }
-
-
-def find_markers(text: str) -> List[str]:
-    return re.findall(r"<!--\s*AUTOGEN:BEGIN:(.*?)\s*-->", text)
 
 
 def check_markers(text: str) -> List[str]:
@@ -62,9 +53,13 @@ def latest_work_order_meta() -> Dict[str, str]:
 
     meta = {}
     for f in files:
-        with open(f, "r", encoding="utf-8") as fh:
-            wo = yaml.safe_load(fh)
-            meta = wo.get("meta", meta)
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                wo = yaml.safe_load(fh)
+                if isinstance(wo, dict) and "meta" in wo:
+                    meta = wo["meta"]
+        except Exception:
+            continue
     return meta
 
 
@@ -72,14 +67,14 @@ def main():
     strict = "--strict" in sys.argv
     errors: List[str] = []
 
+    meta = latest_work_order_meta()
     for path in (TECHSPEC, PLAN):
         if not path.exists():
             errors.append(f"DOC003: {path} 없음")
             continue
         text = path.read_text(encoding="utf-8")
         errors += check_markers(text)
-        meta = latest_work_order_meta()
-        if meta:
+        if meta and meta.get("version") and meta.get("date"):
             hdr = parse_header(text)
             if not all([hdr.get("version"), hdr.get("date"), hdr.get("status")]):
                 errors.append("DOC003: 헤더 누락")
@@ -87,7 +82,6 @@ def main():
                 errors.append("DOC003: 헤더 버전 불일치")
 
     if strict:
-        # wo_apply --all --check로 out-of-sync 탐지
         proc = subprocess.run(
             [sys.executable, "scripts/wo_apply.py", "docs/work_orders/wo-*.yaml", "--all", "--check"],
             stdout=subprocess.PIPE,

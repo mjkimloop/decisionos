@@ -8,6 +8,7 @@ import datetime
 import random
 import logging
 import re
+from apps.executor.http_client import get_http_client
 
 log = logging.getLogger("decisionos.exec.http")
 
@@ -31,7 +32,7 @@ def python_call(decision: Dict[str, Any]) -> Any:
     return _USER_FUNCS[fn_name](*args, **kwargs)
 
 def http_call_stub(decision: Dict[str, Any]) -> Any:
-    #     return {"status": "stub", "decision": decision}
+    return {"status": "stub", "decision": decision}
 
 
 # ---- real HTTP (httpx optional) ----
@@ -102,34 +103,36 @@ def http_call(decision: Dict[str, Any]) -> Any:
 
     last_exc: Optional[Exception] = None
     headers = _maybe_hmac_headers(headers, json_body, method=method, url=url)
+    client = get_http_client() if httpx else None
     for attempt in range(retries + 1):
         exc: Optional[Exception] = None
         try:
-            with httpx.Client(timeout=timeout) as client:
-                t0 = time.time()
-                resp = client.request(method, url, headers=headers, json=json_body)
-                if attempt < retries and _should_retry(method, resp.status_code, None):
-                    _EXEC_METRICS["retries"] += 1
-                    _sleep_backoff(backoff_base, attempt)
-                    continue
-                _EXEC_METRICS["attempts"] += 1
-                if attempt > 0:
-                    _EXEC_METRICS["retries"] += 1
-                log.info(
-                    "http_call result method=%s url=%s sc=%s lat_ms=%s headers=%s body=%s",
-                    method,
-                    url,
-                    resp.status_code,
-                    int((time.time() - t0) * 1000),
-                    _mask_headers(headers),
-                    _mask_json(json_body),
-                )
-                return {
-                    "status_code": resp.status_code,
-                    "headers": dict(resp.headers),
-                    "json": _safe_json(resp),
-                    "text": None if "application/json" in resp.headers.get("content-type", "") else resp.text,
-                }
+            if not client:
+                raise RuntimeError("httpx not installed")
+            t0 = time.time()
+            resp = client.request(method, url, headers=headers, json=json_body)
+            if attempt < retries and _should_retry(method, resp.status_code, None):
+                _EXEC_METRICS["retries"] += 1
+                _sleep_backoff(backoff_base, attempt)
+                continue
+            _EXEC_METRICS["attempts"] += 1
+            if attempt > 0:
+                _EXEC_METRICS["retries"] += 1
+            log.info(
+                "http_call result method=%s url=%s sc=%s lat_ms=%s headers=%s body=%s",
+                method,
+                url,
+                resp.status_code,
+                int((time.time() - t0) * 1000),
+                _mask_headers(headers),
+                _mask_json(json_body),
+            )
+            return {
+                "status_code": resp.status_code,
+                "headers": dict(resp.headers),
+                "json": _safe_json(resp),
+                "text": None if "application/json" in resp.headers.get("content-type", "") else resp.text,
+            }
         except Exception as ex:
             exc = ex
             last_exc = ex

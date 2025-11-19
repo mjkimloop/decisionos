@@ -1,13 +1,16 @@
 routes:
-  - path: /ops/*
-    method: "*"
+  - path: /api/v1/consent/grant
+    method: POST
+    scopes: ["consent:write"]
+  - path: /api/v1/consent/revoke
+    method: POST
+    scopes: ["consent:write"]
+  - path: /api/v1/consent/*
+    method: GET
+    scopes: ["consent:read"]
+  - path: /api/v1/metrics
+    method: GET
     scopes: ["ops:read"]
-  - path: /judge/*
-    method: "*"
-    scopes: ["judge:run"]
-  - path: /deploy/promote
-    method: POST
-    scopes: ["deploy:promote"]
-  - path: /deploy/abort
-    method: POST
-    scopes: ["deploy:abort"]
+  - path: /api/v1/metrics/healthz
+    method: GET
+    scopes: []

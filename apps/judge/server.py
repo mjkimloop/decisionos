@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from apps.common.metrics import REG
 from apps.common.rl import attach_rate_limit
 from apps.common.timeutil import time_utcnow, within_clock_skew
-from apps.judge.crypto import MultiKeyLoader, verify_with_multikey
+from apps.judge.crypto import MultiKeyLoader, SignatureInvalid, verify_signature_safe
 from apps.judge import slo_judge
 from apps.judge.metrics import JudgeMetrics
 from apps.judge.metrics_readyz import READYZ_METRICS
@@ -83,11 +83,14 @@ def create_app(replay_store: Optional[ReplayStoreABC] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="invalid timestamp header")
         ts_dt = datetime.fromtimestamp(ts_epoch, tz=timezone.utc)
 
-        ok_sig, reason = verify_with_multikey(payload, signature, key_id, _key_loader)
-        if not ok_sig:
+        # Security (v0.5.11u-5): use safe verification with generic error message
+        try:
+            verify_signature_safe(payload, signature, key_id, _key_loader)
+        except SignatureInvalid:
             status_code = 401
             request.state.sig_error = True
-            raise HTTPException(status_code=401, detail=f"signature mismatch ({reason})")
+            # Generic message (detailed reason logged internally)
+            raise HTTPException(status_code=401, detail="invalid signature")
 
         now = time_utcnow()
         if not within_clock_skew(now, ts_dt, 90):

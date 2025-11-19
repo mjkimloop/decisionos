@@ -10,6 +10,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Request, Response
 
+from apps.ops.cache.etag_calc import compute_strong_etag
 from apps.ops.api.cards_data import compute_reason_trends
 from apps.ops.cache.snapshot_store import SnapshotStore
 from apps.policy.rbac_enforce import require_scopes
@@ -87,10 +88,10 @@ async def reason_trends(request: Request, period: str = "7d", bucket: str = "day
     q = {"period": period, "bucket": bucket}
     body_obj = compute_reason_trends(period=period, bucket=bucket)
     body_json = json.dumps(body_obj, ensure_ascii=False)
-    qhash = hashlib.sha1(json.dumps(q, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     index_path = (body_obj.get("_meta") or {}).get("index_path") or os.getenv("DECISIONOS_EVIDENCE_INDEX", "")
-    seed = _compute_etag_seed(index_path, TENANT, CATALOG_SHA, qhash)
-    etag = _etag(seed)
+    query_hash = hashlib.sha1(json.dumps(q, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:8]
+    salt = f"t={TENANT};c={CATALOG_SHA};q={query_hash}"
+    etag = compute_strong_etag(index_path, salt=salt)
 
     if request.headers.get("If-None-Match") == etag:
         headers = {

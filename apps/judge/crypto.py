@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -12,6 +13,22 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from apps.judge.keyloader_kms import load_from_ssm
 from datetime import datetime, timezone
+
+log = logging.getLogger(__name__)
+
+
+class SignatureInvalid(Exception):
+    """
+    Signature validation failed.
+
+    Security (v0.5.11u-5):
+    - Public message is generic ("invalid signature")
+    - Detailed reason logged internally for debugging
+    """
+
+    def __init__(self, reason: str = "invalid signature"):
+        self.reason = reason
+        super().__init__(reason)
 
 @dataclass
 class KeyMaterial:
@@ -200,3 +217,47 @@ def verify_with_multikey(
     if km.state == "grace":
         return True, "key.grace"
     return True, "ok"
+
+
+def verify_signature_safe(
+    payload_obj,
+    signature_hex: str,
+    key_id: str,
+    loader: MultiKeyLoader,
+    *,
+    allow_grace: bool = True,
+) -> None:
+    """
+    Verify signature with safe error handling.
+
+    Security (v0.5.11u-5):
+    - Raises SignatureInvalid with generic message for external responses
+    - Logs detailed failure reason internally for debugging
+    - Prevents signature verification info leakage
+
+    Args:
+        payload_obj: Payload to verify
+        signature_hex: HMAC signature (hex)
+        key_id: Key identifier
+        loader: Multi-key loader
+        allow_grace: Allow grace period keys
+
+    Raises:
+        SignatureInvalid: Signature verification failed (generic message)
+    """
+    ok, reason = verify_with_multikey(
+        payload_obj, signature_hex, key_id, loader, allow_grace=allow_grace
+    )
+
+    if not ok:
+        # Log detailed reason internally
+        log.warning(
+            "signature_verify_failed",
+            extra={
+                "key_id": key_id,
+                "reason": reason,
+                "event": "sig_fail",
+            },
+        )
+        # Raise generic exception (prevents info leakage)
+        raise SignatureInvalid("invalid signature")

@@ -1,0 +1,156 @@
+meta:
+  version: v0.5.11u-5
+  date: 2025-11-19
+  status: locked
+  summary: "Security hotfix: RBAC test-mode OFF by default, strict CORS allowlist, generic signature errors"
+  priority: critical
+  owner: security-team
+  reviewers:
+    - ops-team
+    - platform-team
+
+scope:
+  modules:
+    - apps/policy/rbac_enforce.py
+    - apps/gateway/security/cors.py
+    - apps/gateway/server.py
+    - apps/judge/crypto.py
+    - apps/judge/server.py
+  tests:
+    - tests/security/test_rbac_testmode_default_off_v1.py
+    - tests/security/test_cors_allowlist_enforced_v1.py
+    - tests/judge/test_signature_error_generalization_v1.py
+  configs:
+    - .env.example
+    - .github/workflows/ci.yml
+  docs:
+    - docs/ops/RUNBOOK-u-5-security.md
+
+vulnerabilities:
+  - id: SEC-001
+    severity: critical
+    title: "RBAC test-mode bypass in production"
+    description: |
+      DECISIONOS_RBAC_TEST_MODE 기본값이 "1"이어서 프로덕션에서도
+      X-Scopes 헤더로 권한 우회 가능
+    impact: "인증되지 않은 사용자가 ops:read, admin:write 등 권한 획득 가능"
+    fix: "기본값 0, prod 환경에서 test-mode ON 시 부팅 실패"
+
+  - id: SEC-002
+    severity: high
+    title: "CORS wildcard in production"
+    description: |
+      allow_origins=["*"] 기본값으로 모든 Origin에서 API 호출 가능
+    impact: "CSRF 공격, 비인가 도메인에서 사용자 세션 탈취"
+    fix: "prod 환경에서 allowlist 명시 강제, '*' 금지"
+
+  - id: SEC-003
+    severity: medium
+    title: "Signature verification error leakage"
+    description: |
+      서명 검증 실패 시 상세 사유 노출 (key mismatch, clock skew 등)
+    impact: "공격자가 키 추론, 타이밍 공격 수행 가능"
+    fix: "외부 응답은 'invalid signature'로 일반화, 로그만 상세 기록"
+
+patches:
+  techspec:
+    - section: "Security Controls"
+      mode: append
+      content: |
+        ## v0.5.11u-5 보안 강화
+
+        ### RBAC 테스트 모드
+        - 기본값: OFF (`DECISIONOS_RBAC_TEST_MODE=0`)
+        - 프로덕션 환경에서 test-mode=1 설정 시 부팅 실패
+        - X-Scopes 헤더는 dev/test 환경에서만 허용
+
+        ### CORS 정책
+        - 프로덕션: DECISIONOS_CORS_ALLOWLIST 명시 필수
+        - Wildcard ('*') 금지
+        - Dev 환경 기본값: localhost:3000, 127.0.0.1:3000
+
+        ### 서명 검증
+        - 외부 응답: "invalid signature" (일반 메시지)
+        - 내부 로그: 상세 실패 사유 (키 불일치, clock skew, nonce 재사용)
+        - 메트릭: decisionos_signature_fail_total (실패 유형별 카운터)
+
+  plan:
+    - section: "Milestones"
+      mode: append
+      content: |
+        ## v0.5.11u-5 Gate
+
+        ### 테스트
+        - tests/security/* 그린 (3/3)
+        - CI pre_gate 보안 환경변수 검증 통과
+        - E2E: prod 시뮬레이션 (RBAC 우회 차단, CORS 검증)
+
+        ### 배포
+        - 24시간 릴리즈 프리즈
+        - Canary 단계: 5%/30분 → 25%/30분 → 100%
+        - 메트릭: 401 에러율, CORS 위반율, 서명 실패율
+
+    - section: "Next Actions"
+      mode: append
+      content: |
+        ## 후속 작업
+
+        ### v0.5.11u-6: 성능 최적화
+        - ETag 계산 캐싱 (mtime 기반 무효화)
+        - HTTP Connection pooling (httpx.AsyncClient 재사용)
+        - 메트릭 배치 플러시 (1초 주기)
+
+        ### v0.5.11u-7: 운영 강화
+        - APM 연동 (Datadog/New Relic)
+        - 회로차단기 (HTTP 재시도 폭풍 방지)
+        - Secrets Manager 전환 (AWS Secrets Manager/Vault)
+
+deliverables:
+  code:
+    - apps/policy/rbac_enforce.py (전체 재작성)
+    - apps/gateway/security/cors.py (신규)
+    - apps/gateway/server.py (CORS 연결)
+    - apps/judge/crypto.py (검증 예외 일반화)
+    - apps/judge/server.py (401 응답 일반화)
+
+  tests:
+    - tests/security/test_rbac_testmode_default_off_v1.py
+    - tests/security/test_cors_allowlist_enforced_v1.py
+    - tests/judge/test_signature_error_generalization_v1.py
+
+  ci:
+    - .github/workflows/ci.yml (pre_gate_security_guard, gate_u5)
+
+  docs:
+    - docs/ops/RUNBOOK-u-5-security.md (배포 절차)
+    - .env.example (보안 기본값 업데이트)
+
+acceptance_criteria:
+  - prod 환경에서 RBAC test-mode ON 시 부팅 실패
+  - prod 환경에서 CORS allowlist 미지정 시 부팅 실패
+  - 서명 검증 실패 시 외부 응답은 "invalid signature"만 반환
+  - 보안 테스트 3개 모두 Green
+  - CI pre_gate_security_guard 통과
+  - Canary 배포 시 메트릭 이상 없음 (베이스라인 ±3σ)
+
+rollback:
+  trigger:
+    - 401 에러율 > 베이스라인 + 5σ
+    - CORS 위반으로 정상 요청 차단 > 1%
+    - 서명 검증 실패율 > 10%
+
+  procedure: |
+    1. Canary 트래픽 0%로 롤백
+    2. 이전 태그로 재배포: git checkout v0.5.11t+3
+    3. 장애 보고서 작성 (실패 원인, 메트릭 스냅샷)
+    4. 핫픽스 재검토 후 재배포
+
+metrics:
+  - decisionos_rbac_denied_total (사유별: test_mode_disabled, scope_missing)
+  - decisionos_cors_violation_total (origin별)
+  - decisionos_signature_fail_total (유형별: key_mismatch, clock_skew, nonce_replay)
+
+references:
+  - docs/ops/GO-READINESS-48H.md
+  - docs/ops/RUNBOOK-OPS-CARDS.md
+  - configs/security/rbac_map.yaml

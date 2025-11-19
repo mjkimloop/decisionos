@@ -1,3 +1,14 @@
+## v0.5.11u-5 — 2025-11-19 (보안 핫픽스)
+- **SEC-001 (Critical)**: RBAC 테스트모드 기본 OFF, 프로덕션에서 test-mode=1 시 부팅 실패
+- **SEC-002 (High)**: CORS 화이트리스트 강제, 프로덕션에서 wildcard(*) 금지
+- **SEC-003 (Medium)**: 서명 검증 에러 메시지 일반화 ("invalid signature", 상세 사유 로그만)
+- `apps/policy/rbac_enforce.py`: 테스트모드 기본값 0, prod 환경 검증
+- `apps/gateway/security/cors.py`: 엄격 CORS 미들웨어 (화이트리스트 강제)
+- `apps/judge/crypto.py`: SignatureInvalid 예외 + verify_signature_safe() 추가
+- `tests/security/*`: 보안 테스트 3개 (15개 테스트 케이스)
+- `.env.example`: 보안 기본값 업데이트 (RBAC_TEST_MODE=0, CORS_ALLOWLIST 주석)
+- `docs/ops/RUNBOOK-u-5-security.md`: 배포 런북 (Canary 단계, 롤백 절차, 트러블슈팅)
+
 ## v0.5.11u-4 — 2025-11-19
 - **운영 RUNBOOK**: Cards API 운영 가이드 (캐시 정책, 트러블슈팅, 메트릭, 환경변수)
 - `docs/ops/RUNBOOK-OPS-CARDS.md` 추가 (ETag/304/Delta 프로토콜, 4가지 장애 시나리오, Prometheus 메트릭)

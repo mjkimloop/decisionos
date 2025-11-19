@@ -1,0 +1,31 @@
+meta:
+  version: v0.5.11u-6
+  date: 2025-11-19
+  status: locked
+  summary: "Perf: ETag 계산 캐싱(LRU/Redis) + Executor HTTP 커넥션 풀링(keep-alive/HTTP2)"
+
+patches:
+  techspec:
+    - section: "Performance"
+      mode: append
+      content: |
+        v0.5.11u-6:
+        - ETag 계산 캐싱: (path, mtime, size, salt) 키로 LRU/Redis 캐시
+        - Cards Delta: 강한 ETag 생성 시간을 최대 90% 단축(대용량 인덱스 기준)
+        - HTTP 커넥션 풀: httpx Client 싱글톤, keep-alive/HTTP2, 풀 사이즈/만료 설정
+        - 메트릭: decisionos_etag_compute_seconds, decisionos_etag_cache_hits_total,
+                  decisionos_http_client_created_total, decisionos_http_pool_reused_total
+  plan:
+    - section: "Milestones"
+      mode: append
+      content: |
+        u-6 Gate:
+        - ETag 캐시 히트율 ≥ 0.7 (최근 24h)
+        - Cards Delta p95 응답시간 20%↓
+        - HTTP 외부 호출 p95 10%↓(pool on)
+        - CI gate_u6_perf 그린
+    - section: "Next Actions"
+      mode: append
+      content: |
+        - u-7: Evidence gzip/deflate, Snapshot 압축 전송
+        - u-8: APM/트레이스(OTel) + 회로차단기

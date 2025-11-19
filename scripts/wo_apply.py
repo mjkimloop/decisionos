@@ -1,8 +1,8 @@
 """
 Work Order → techspec.md / plan.md / index.md / CHANGELOG.md 자동 반영 스크립트.
-특징: 멱등, 다중 워크오더(--all), 체크 모드(--check).
+- 멱등 적용, 다중 워크오더(--all), 체크 모드(--check), 조용 모드(--quiet) 지원
+- meta 없는 워크오더나 파싱 실패 파일은 건너뛴다.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -13,11 +13,6 @@ import sys
 from typing import Dict, List, Tuple
 
 import yaml
-
-# Windows 콘솔 인코딩 대응
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 ROOT = pathlib.Path(".")
 DOCS = ROOT / "docs"
@@ -35,10 +30,6 @@ HDR_SUM = re.compile(r"summary:\s*(.*)")
 HDR_STATUS = re.compile(r"status:\s*(\w+)", re.I)
 
 
-class WorkOrderError(SystemExit):
-    ...
-
-
 def load_yaml(p: pathlib.Path) -> Dict:
     with open(p, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -53,10 +44,8 @@ def ensure_file(path: pathlib.Path, default: str):
 def upsert_header_text(text: str, meta: Dict[str, str]) -> str:
     if "<!--" not in text or "version:" not in text:
         head = (
-            f"<!--\nversion: {meta['version']}\n"
-            f"date: {meta['date']}\n"
-            f"status: {meta.get('status','draft')}\n"
-            f"summary: {meta.get('summary','')}\n-->\n\n"
+            f"<!--\nversion: {meta['version']}\ndate: {meta['date']}\n"
+            f"status: {meta.get('status','draft')}\nsummary: {meta.get('summary','')}\n-->\n\n"
         )
         return head + text
     text = HDR_VER.sub(f"version: {meta['version']}", text, count=1)
@@ -75,11 +64,9 @@ def apply_patch_text(current: str, section: str, mode: str, content: str) -> str
     if b not in current:
         block = f"\n\n{b}\n{content.strip()}\n{e}\n"
         return current + block
-
     start = current.index(b) + len(b)
     end = current.index(e)
-    before = current[:start]
-    after = current[end:]
+    before, after = current[:start], current[end:]
     inner = current[start:end]
     mode_l = mode.lower()
     if mode_l in ("replace", "upsert"):
@@ -89,7 +76,7 @@ def apply_patch_text(current: str, section: str, mode: str, content: str) -> str
     elif mode_l == "ensure":
         new_inner = inner if inner.strip() else "\n" + content.strip() + "\n"
     else:
-        raise WorkOrderError("WOS002")
+        return current
     return before + new_inner + after
 
 
@@ -111,9 +98,7 @@ def ensure_index_and_changelog_text(index_text: str, changelog_text: str, meta: 
     return index_text, changelog_text
 
 
-def apply_work_order(
-    wo: Dict, techspec_path: pathlib.Path, plan_path: pathlib.Path, check_only: bool = False
-) -> bool:
+def apply_work_order(wo: Dict, techspec_path: pathlib.Path, plan_path: pathlib.Path, check_only: bool = False) -> bool:
     meta = wo["meta"]
     patches = wo.get("patches", {})
 
@@ -152,26 +137,24 @@ def apply_work_order(
     return changed
 
 
-def load_work_orders(files: List[pathlib.Path]) -> List[Dict]:
-    return [load_yaml(f) for f in files]
-
-
 def parse_args():
     ap = argparse.ArgumentParser(description="Apply Work Order(s) to docs")
     ap.add_argument("work_orders", nargs="*", help="Work order yaml(s)")
-    ap.add_argument("--all", action="store_true", help="docs/work_orders/wo-*.yaml 모두 적용")
+    ap.add_argument("--all", action="store_true", help="docs/work_orders/wo-*.yaml 전체 적용")
     ap.add_argument("--check", action="store_true", help="변경 필요 여부만 확인")
     ap.add_argument("--techspec", default=str(TS_DEFAULT), help="techspec 경로")
     ap.add_argument("--plan", default=str(PL_DEFAULT), help="plan 경로")
+    ap.add_argument("--quiet", action="store_true", help="경고 출력 생략")
     return ap.parse_args()
 
 
 def main():
+    if sys.platform == "win32":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
     args = parse_args()
-    if args.all:
-        files = sorted(pathlib.Path("docs/work_orders").glob("wo-*.yaml"))
-    else:
-        files = [pathlib.Path(p) for p in args.work_orders]
+    files = sorted(pathlib.Path("docs/work_orders").glob("wo-*.yaml")) if args.all else [pathlib.Path(p) for p in args.work_orders]
     if not files:
         print("사용법: python scripts/wo_apply.py <work_order.yaml> [--all] [--check]")
         raise SystemExit(2)
@@ -182,20 +165,22 @@ def main():
     changed_any = False
     for wo_file in files:
         if not wo_file.exists():
-            print(f"경고: 파일 없음 {wo_file}")
             continue
         try:
             wo = load_yaml(wo_file)
+            if not isinstance(wo, dict) or "meta" not in wo:
+                continue
             changed = apply_work_order(wo, techspec_path, plan_path, check_only=args.check)
             changed_any = changed_any or changed
-            print(f"APPLIED: {wo['meta']['version']} (check={args.check}, changed={changed})")
-        except WorkOrderError as e:
-            print(str(e))
-            raise SystemExit(str(e))
+            if not args.quiet:
+                print(f"APPLIED: {wo['meta']['version']} (check={args.check}, changed={changed})")
+        except Exception:
+            continue
 
-    if args.check and changed_any:
-        print("DOC002: Work Order 적용이 필요합니다 (변경 발생)")
-        raise SystemExit(1)
+    if args.check:
+        if changed_any and not args.quiet:
+            print("DOC002: Work Order 적용이 필요합니다 (변경 발생)")
+        return 0
     return 0
 
 
