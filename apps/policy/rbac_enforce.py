@@ -26,12 +26,28 @@ from apps.metrics.registry import METRICS
 
 log = logging.getLogger(__name__)
 
+
+def _metrics_inc(name: str, labels: Dict[str, str] | None = None) -> None:
+    """Increment metrics, ignoring errors during early boot or tests."""
+    try:
+        if METRICS:
+            METRICS.inc(name, labels or {})
+    except Exception:
+        pass
+
 # Environment detection
 DECISIONOS_ENV = os.getenv("DECISIONOS_ENV", "dev").lower()
 
 # RBAC test mode: default OFF (v0.5.11u-5 security hardening)
+def _is_test_mode_enabled(raw: str | None = None) -> bool:
+    """Return True when RBAC test mode is explicitly enabled and not in prod."""
+    if DECISIONOS_ENV == "prod":
+        return False
+    raw_val = (raw if raw is not None else os.getenv("DECISIONOS_RBAC_TEST_MODE", "0")).strip().lower()
+    return raw_val in ("1", "true", "yes")
+
 _RBAC_TEST_MODE_RAW = os.getenv("DECISIONOS_RBAC_TEST_MODE", "0").strip().lower()
-_RBAC_TEST_MODE = _RBAC_TEST_MODE_RAW in ("1", "true", "yes")
+_RBAC_TEST_MODE = _is_test_mode_enabled(_RBAC_TEST_MODE_RAW)
 
 # Production safety: test-mode must be OFF
 if DECISIONOS_ENV == "prod" and _RBAC_TEST_MODE:
@@ -95,7 +111,7 @@ def _extract_scopes_from_headers(req: Request) -> Set[str]:
     Security: X-Scopes header only allowed in test mode (dev/test environments).
     In production, this always returns empty set.
     """
-    if _RBAC_TEST_MODE:
+    if _is_test_mode_enabled():
         # Test mode: allow X-Scopes header override
         hdr = req.headers.get("X-Scopes", "")
         if hdr:
@@ -185,9 +201,7 @@ class RbacMapState:
         self.sha = _sha256_of(self.map_path)
         self._next_check_ts = time.time() + self.reload_sec
         # Record initial load
-        asyncio.create_task(
-            METRICS.inc("decisionos_rbac_map_reload_total", {"etag": self.sha or "EMPTY"})
-        )
+        _metrics_inc("decisionos_rbac_map_reload_total", {"etag": self.sha or "EMPTY"})
         _record_rbac_history(self.sha, "initial")
 
     def ensure_fresh(self):
@@ -207,9 +221,7 @@ class RbacMapState:
                 self.routes = (_load_map(self.map_path) or {}).get("routes", [])
                 self.sha = current
                 # New metrics: reload counter + ETag info
-                asyncio.create_task(
-                    METRICS.inc("decisionos_rbac_map_reload_total", {"etag": current or "EMPTY"})
-                )
+                _metrics_inc("decisionos_rbac_map_reload_total", {"etag": current or "EMPTY"})
                 _record_rbac_history(current, "reload")
             self._next_check_ts = time.time() + self.reload_sec
         # Update ETag info metric
@@ -248,7 +260,7 @@ class RbacMapMiddleware(BaseHTTPMiddleware):
         # Bypass check (health, metrics)
         for prefix in _BYPASS:
             if request.url.path.startswith(prefix):
-                await METRICS.inc("decisionos_rbac_eval_total", {"result": "bypass"})
+                _metrics_inc("decisionos_rbac_eval_total", {"result": "bypass"})
                 return await call_next(request)
 
         self.state.ensure_fresh()
@@ -257,15 +269,13 @@ class RbacMapMiddleware(BaseHTTPMiddleware):
         # Route match metrics
         if matched:
             REG.counter("rbac_route_matches_total", "Total RBAC route matches").inc()
-            await METRICS.inc("decisionos_rbac_route_match_total", {"match": "hit"})
+            _metrics_inc("decisionos_rbac_route_match_total", {"match": "hit"})
         else:
-            await METRICS.inc("decisionos_rbac_route_match_total", {"match": "miss"})
+            _metrics_inc("decisionos_rbac_route_match_total", {"match": "miss"})
 
         if not matched and self.default_deny:
             REG.counter("rbac_forbidden_total", "Total RBAC forbidden requests").inc()
-            await METRICS.inc(
-                "decisionos_rbac_denied_total", {"reason": "no_route_match"}
-            )
+            _metrics_inc("decisionos_rbac_denied_total", {"reason": "no_route_match"})
             log.warning(
                 "rbac_deny_no_route",
                 extra={
@@ -292,9 +302,7 @@ class RbacMapMiddleware(BaseHTTPMiddleware):
             have = _parse_scopes(request)
             if not _allowed(have, need, require_all=self.state.require_all):
                 REG.counter("rbac_forbidden_total", "Total RBAC forbidden requests").inc()
-                await METRICS.inc(
-                    "decisionos_rbac_denied_total", {"reason": "missing_scope"}
-                )
+                _metrics_inc("decisionos_rbac_denied_total", {"reason": "missing_scope"})
                 log.warning(
                     "rbac_deny_scope",
                     extra={
@@ -318,7 +326,7 @@ class RbacMapMiddleware(BaseHTTPMiddleware):
 
         # Allowed
         REG.counter("rbac_allowed_total", "Total RBAC allowed requests").inc()
-        await METRICS.inc("decisionos_rbac_eval_total", {"result": "allow"})
+        _metrics_inc("decisionos_rbac_eval_total", {"result": "allow"})
 
         # Add RBAC map version to response header
         resp: Response = await call_next(request)
@@ -355,12 +363,10 @@ def require_scopes(*required: str, policy: str = "OR"):
                     "need": sorted(required_set),
                     "have": sorted(caller),
                     "policy": policy,
-                    "test_mode": _RBAC_TEST_MODE,
+                    "test_mode": _is_test_mode_enabled(),
                 },
             )
-            await METRICS.inc(
-                "decisionos_rbac_denied_total", {"reason": "scope_mismatch"}
-            )
+            _metrics_inc("decisionos_rbac_denied_total", {"reason": "scope_mismatch"})
             raise HTTPException(status_code=403, detail="forbidden")
 
         return True

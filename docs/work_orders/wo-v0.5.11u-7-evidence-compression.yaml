@@ -1,0 +1,155 @@
+meta:
+  version: v0.5.11u-7
+  date: 2025-11-19
+  status: locked
+  summary: "Evidence 압축/전송 최적화: Cards API gzip 협상, ETag 불변, S3 업로드 압축"
+  priority: medium
+  owner: performance-team
+  reviewers:
+    - ops-team
+    - platform-team
+
+scope:
+  modules:
+    - apps/common/compress.py
+    - apps/ops/api/cards_delta.py
+    - apps/common/s3_adapter.py
+    - apps/ops/cache/snapshot_store.py
+  tests:
+    - tests/ops/test_cards_gzip_and_etag_v1.py
+    - tests/common/test_compress_threshold_v1.py
+    - tests/s3/test_stub_upload_gzip_v1.py
+  configs:
+    - .env.example
+    - .github/workflows/ci.yml
+
+objectives:
+  bandwidth:
+    target: "≥60% 응답 크기 감소 (24h 관찰)"
+    baseline: "Cards API 평균 응답 크기 (비압축)"
+    metric: "decisionos_compress_bytes_saved_total"
+
+  etag_stability:
+    target: "ETag 동일성 유지 (gzip/일반 응답)"
+    test: "tests/ops/test_cards_gzip_and_etag_v1.py::test_cards_gzip_negotiation_and_etag"
+
+  storage:
+    target: "S3 저장 공간 ≥70% 절감 (JSON 파일)"
+    method: "gzip 압축 + Content-Encoding 메타데이터"
+
+patches:
+  techspec:
+    - section: "Performance"
+      mode: append
+      content: |
+        ## v0.5.11u-7 압축/전송 최적화
+
+        ### Cards API
+        - Accept-Encoding 협상 (gzip)
+        - 4KB 이상 본문 자동 압축
+        - ETag: 표현(representation) 무관 불변 (비압축 해시 기반)
+        - `Vary: Accept-Encoding` 헤더 추가
+
+        ### Evidence 저장
+        - Snapshot/S3: evidence/*.json 업로드 시 gzip 저장
+        - 메타데이터: Content-Encoding=gzip, Content-Type=application/json
+        - 파일명: 자동 .gz 확장자 추가
+
+        ### 메트릭
+        - decisionos_compress_bytes_saved_total: 압축으로 절감된 바이트
+        - decisionos_cards_encoded_total: 인코딩별 응답 카운터 (gzip/identity)
+
+  plan:
+    - section: "Milestones"
+      mode: append
+      content: |
+        ## v0.5.11u-7 Gate
+
+        ### 성능 목표
+        - Cards P95 응답 크기 ≥60% 감소 (24h 관찰)
+        - ETag 동일성: gzip/일반 응답 ETag 동일 (테스트 통과)
+        - S3 stub 업로드 시 .gz 키/메타데이터 일치
+
+        ### 테스트
+        - tests/ops/test_cards_gzip_and_etag_v1.py ✓
+        - tests/common/test_compress_threshold_v1.py ✓
+        - tests/s3/test_stub_upload_gzip_v1.py ✓
+
+    - section: "Next Actions"
+      mode: append
+      content: |
+        ## 후속 작업
+
+        ### v0.5.11u-8: 고급 압축
+        - Evidence 전송: Brotli/Zstd 옵션
+        - Chunked streaming (대용량 파일)
+        - 압축 알고리즘 자동 선택 (Accept-Encoding 우선순위)
+
+        ### v0.5.11u-9: 비용 분석
+        - 압축 전/후 APM 샘플링
+        - 전송/저장 비용 리포트
+        - 압축률 히스토그램 (파일 크기별)
+
+deliverables:
+  code:
+    - apps/common/compress.py: 압축 유틸 (should_compress, gzip_bytes, negotiate_gzip)
+    - apps/ops/api/cards_delta.py: gzip 협상 + ETag 불변
+    - apps/common/s3_adapter.py: S3 업로드 압축 (Stub/Real 공통)
+    - apps/ops/cache/snapshot_store.py: Snapshot 저장 압축
+    - jobs/evidence_recompress.py: 기존 파일 일괄 압축 잡 (선택)
+
+  tests:
+    - tests/ops/test_cards_gzip_and_etag_v1.py
+    - tests/common/test_compress_threshold_v1.py
+    - tests/s3/test_stub_upload_gzip_v1.py
+
+  ci:
+    - .github/workflows/ci.yml: gate_u7_compress
+
+  docs:
+    - .env.example: 압축 환경변수 추가
+
+acceptance_criteria:
+  - Cards API gzip 협상 동작 (Accept-Encoding: gzip → Content-Encoding: gzip)
+  - ETag 불변성: gzip/일반 응답 동일 ETag
+  - Vary 헤더: "Accept-Encoding" 포함
+  - S3 업로드: .gz 확장자 + Content-Encoding 메타데이터
+  - 압축 테스트 3개 모두 Green
+  - CI gate_u7_compress 통과
+
+rollback:
+  trigger:
+    - Cards API 응답 실패율 > 베이스라인 + 5σ
+    - ETag 불일치 감지 (gzip/일반)
+    - 압축 CPU 오버헤드 > 10% (P95 latency 증가)
+
+  procedure: |
+    1. 압축 비활성화: DECISIONOS_COMPRESS_ENABLE=0
+    2. S3 압축 비활성화: DECISIONOS_S3_COMPRESS=0
+    3. 재시작: kubectl rollout restart deployment/decisionos-gateway
+    4. 확인: Cards API 응답 정상 (비압축)
+
+environment_variables:
+  - DECISIONOS_COMPRESS_ENABLE: "압축 활성화 (1=enable, 0=disable)"
+    default: "1"
+  - DECISIONOS_COMPRESS_MIN_BYTES: "압축 최소 크기 (bytes)"
+    default: "4096"
+  - DECISIONOS_GZIP_LEVEL: "gzip 압축 레벨 (1-9)"
+    default: "6"
+  - DECISIONOS_SNAPSHOT_COMPRESS: "Snapshot 압축 (1=enable)"
+    default: "1"
+  - DECISIONOS_S3_COMPRESS: "S3 업로드 압축 (1=enable)"
+    default: "1"
+  - DECISIONOS_S3_STUB_BASE: "S3 stub 기본 경로"
+    default: "var/s3"
+
+metrics:
+  - decisionos_compress_bytes_saved_total: "압축으로 절감된 총 바이트 (counter)"
+  - decisionos_cards_encoded_total: "응답 인코딩별 카운터 (labels: encoding=gzip|identity)"
+  - decisionos_compress_ratio: "압축률 히스토그램 (compressed_size / original_size)"
+
+references:
+  - docs/ops/GO-READINESS-48H.md
+  - docs/ops/RUNBOOK-OPS-CARDS.md
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
