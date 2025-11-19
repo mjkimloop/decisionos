@@ -1,3 +1,21 @@
+## v0.5.11u-15c — 2025-11-19 (Judge/SLO 스키마 v2 전환)
+- **SLO 스키마 Pydantic v2 호환**: 13개 SLO 모델에 ConfigDict 추가
+- `apps/judge/slo_schema.py`: 모든 SLO 모델에 v2 ConfigDict 적용
+  - `SLOBudget`, `SLOQuota`, `SLOAnomaly`, `SLOWitness`, `SLOIntegrity`
+  - `SLOLatency`, `SLOError`, `SLOJudgeInfra` (+ 하위 모델 3개)
+  - `SLOCanary`, `SLOCanaryThresholds`, `SLOQuorum`
+  - `SLODrift`, `SLOSaturation`, `SLOSpec`
+  - `extra='forbid'`: 알 수 없는 필드 거부 (v2)
+- **테스트 15개 추가 (36→51 테스트)**:
+  - `tests/judge/test_slo_schema_v2_compat_v1.py` (15/15):
+    - 기본값 검증 (budget, latency, error, canary, quorum, drift, saturation)
+    - 중첩 모델 검증 (judge_infra, canary_thresholds)
+    - model_validate() v1/v2 호환성
+    - model_to_dict() 직렬화
+    - extra='forbid' 검증 (v2)
+- 워크오더: `docs/work_orders/wo-v0.5.11u-15c-judge-slo-schemas-v2.yaml`
+- SLO 판정 로직 변경 없음 (100% 하위 호환)
+
 ## v0.5.11u-15b — 2025-11-19 (Ops/Gateway 스키마 v2 전환)
 - **Cards API Pydantic v2 스키마**: 계약 스냅샷 테스트로 응답 구조 안정성 보장
 - `apps/ops/schemas.py` (195줄): Cards API Pydantic 모델 7개

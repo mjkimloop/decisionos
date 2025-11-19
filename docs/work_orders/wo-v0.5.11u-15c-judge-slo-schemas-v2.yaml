@@ -1,0 +1,144 @@
+meta:
+  version: v0.5.11u-15c
+  date: 2025-11-19
+  status: locked
+  summary: "Judge/SLO 스키마 v2 전환: ConfigDict 추가 및 호환성 테스트"
+  priority: high
+  owner: platform-team
+  reviewers:
+    - backend-team
+  dependencies:
+    - v0.5.11u-15a
+
+scope:
+  modules:
+    - apps/judge/slo_schema.py
+  tests:
+    - tests/judge/test_slo_schema_v2_compat_v1.py
+
+---
+
+## Objective
+Judge와 SLO 스키마를 Pydantic v2로 전환하여 단계적 마이그레이션 지원.
+
+## Context
+- **Phase 3** of Pydantic v2 migration (u-15 series)
+- SLO 스키마는 이미 Pydantic을 사용하지만 v2 ConfigDict가 없음
+- 13개 SLO 모델에 v2 호환성 추가 필요
+
+## Deliverables
+
+### 1. Pydantic v2 ConfigDict 추가 (`apps/judge/slo_schema.py`)
+```python
+# 모든 SLO 모델에 ConfigDict 추가:
+if PYDANTIC_V2:
+    model_config = ConfigDict(extra='forbid')
+
+# 업데이트된 모델 (13개):
+- SLOBudget: 예산 제약 (allow_levels, max_spent)
+- SLOQuota: 쿼터 제약 (forbid_actions)
+- SLOAnomaly: 이상 징후 허용 (allow_spike)
+- SLOWitness: 증거 검증 요구사항
+- SLOIntegrity: 무결성 검증 (signature)
+- SLOLatency: 레이턴시 임계값 (p95/p99)
+- SLOError: 에러율 임계값
+- SLOJudgeInfraLatency: Judge 인프라 레이턴시
+- SLOJudgeInfraAvailability: Judge 인프라 가용성
+- SLOJudgeInfraSignature: Judge 서명 에러율
+- SLOJudgeInfra: Judge 인프라 SLO
+- SLOCanaryThresholds: 카나리 배포 임계값
+- SLOCanary: 카나리 배포 SLO
+- SLOQuorum: 쿼럼 설정 (k-of-n)
+- SLODrift: 모델 드리프트 검증
+- SLOSaturation: 리소스 포화도 제한 (cpu/mem/qps)
+- SLOSpec: SLO 전체 스펙 (v1)
+```
+
+### 2. ConfigDict 설정
+```python
+# extra='forbid': 알 수 없는 필드 거부 (v2)
+# v1에서는 무시됨 (기본 동작)
+model_config = ConfigDict(extra='forbid')
+```
+
+### 3. 호환성 테스트 (`tests/judge/test_slo_schema_v2_compat_v1.py`)
+```python
+# 15개 테스트 (all passing):
+- test_slo_budget_defaults: 기본값 검증
+- test_slo_budget_custom: 커스텀 값 검증
+- test_slo_latency_thresholds: p95/p99 임계값
+- test_slo_error_threshold: 에러율 임계값
+- test_slo_judge_infra_nested: 중첩 모델 검증
+- test_slo_canary_defaults: 카나리 기본값
+- test_slo_quorum_defaults: 쿼럼 k-of-n 기본값
+- test_slo_drift_defaults: 드리프트 기본값
+- test_slo_saturation_defaults: 포화도 제한
+- test_slo_spec_full: 전체 스펙 검증
+- test_slo_spec_model_validate: v1/v2 호환성
+- test_slo_spec_to_dict: 직렬화
+- test_slo_spec_extra_fields_forbidden: extra='forbid' 검증
+- test_slo_quota_forbid_actions: 쿼터 금지 액션
+- test_slo_anomaly_allow_spike: 스파이크 제어
+```
+
+## Test Results
+```
+✅ 51/51 tests passing (100%)
+  - 24 tests: Pydantic compat layer (u-15a)
+  - 6 tests: Cards API contracts (u-15b)
+  - 6 tests: Ops contracts (u-15b)
+  - 15 tests: SLO schema v2 compat (u-15c) ⬅️ NEW
+
+Execution time: ~0.68s (SLO tests only)
+```
+
+## SLO 판정 로직 안정성 보장
+- ✅ SLO 판정 로직 변경 없음 (apps/judge/slo_judge.py)
+- ✅ 모든 기존 SLO 정책과 호환
+- ✅ extra='forbid'로 잘못된 필드 조기 발견
+- ✅ v1/v2 투명 전환 (pydantic_compat 사용)
+
+## Files Changed
+```
+M  apps/judge/slo_schema.py           (13개 모델에 ConfigDict 추가, docstring 추가)
+A  tests/judge/test_slo_schema_v2_compat_v1.py  (15 tests)
+A  docs/work_orders/wo-v0.5.11u-15c-judge-slo-schemas-v2.yaml
+M  CHANGELOG.md
+```
+
+## Migration Impact
+- **Zero breaking changes**: SLO 판정 로직 동일
+- **Extra validation**: v2에서 알 수 없는 필드 거부
+- **Type safety improved**: ConfigDict로 엄격한 스키마 검증
+- **Performance impact**: Negligible
+
+## Rollback Procedure
+```bash
+# If schema validation causes issues:
+git revert v0.5.11u-15c
+pytest tests/judge/  # Verify rollback
+
+# Or temporarily disable extra validation:
+# In slo_schema.py:
+model_config = ConfigDict(extra='ignore')  # Instead of 'forbid'
+```
+
+## Next Steps
+- ✅ u-15c complete
+- ⏳ u-15d: Policy/RBAC model v2 conversion
+- ⏳ u-15e: Evidence/Executor model v2 conversion
+
+## Notes
+- 모든 SLO 모델에 docstring 추가 (가독성 향상)
+- extra='forbid'로 SLO 정의 파일의 오타 조기 발견
+- slo_judge.py는 변경 불필요 (이미 model_validate 사용)
+- 기존 SLO 정책 JSON 파일과 100% 호환
+
+---
+**Acceptance Criteria:**
+- [x] All 15 SLO schema tests pass
+- [x] All models have ConfigDict (v2)
+- [x] No breaking changes to SLO evaluation logic
+- [x] All existing tests pass (51/51)
+
+**Signed-off:** Claude (2025-11-19)
