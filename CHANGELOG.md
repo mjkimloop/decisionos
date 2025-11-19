@@ -1,3 +1,23 @@
+## v0.5.11u-15a — 2025-11-19 (Pydantic v2 호환 레이어)
+- **Pydantic v1/v2 호환**: 단계적 마이그레이션을 위한 통합 API
+- `apps/common/pydantic_compat.py` (195줄): TypeAdapter, BaseSettings, validators 래퍼
+  - `parse_obj_as()` → TypeAdapter (v2) / parse_obj_as (v1) 투명 전환
+  - `model_to_dict/json()` → model_dump (v2) / dict/json (v1) 호환
+  - `field_validator/model_validator` 양방향 매핑
+  - `BaseSettings` with ConfigDict (v2) / Config (v1)
+  - `DecimalStr` 타입 시리얼라이저
+- `apps/config/settings.py` (160줄): BaseSettings 기반 애플리케이션 설정
+  - 환경변수 DECISIONOS_ prefix 자동 파싱
+  - `get_cors_origins()`: prod wildcard/empty 검증
+  - `get_allow_scopes()`: 스코프 파싱
+  - `is_prod()`, `is_dev()` 헬퍼
+- **테스트 24개 모두 통과**:
+  - `tests/pydantic/test_typeadapter_parse_v1.py` (6/6): parse_obj_as 호환
+  - `tests/pydantic/test_v2_validators_v1.py` (9/9): field/model validators
+  - `tests/settings/test_settings_v2_env_v1.py` (9/9): settings env 주입, CORS 검증
+- 워크오더: `docs/work_orders/wo-v0.5.11u-15a-pydantic-compat.yaml`
+- 마이그레이션 전략: 모듈별 단계적 전환 (u-15b: Ops, u-15c: Judge, u-15d: RBAC, u-15e: Evidence)
+
 ## v0.5.11u-7 — 2025-11-19 (성능 최적화)
 - **압축/전송 최적화**: gzip 압축으로 응답 크기 ≥60% 감소, 저장 공간 ≥70% 절감
 - `apps/common/compress.py`: 압축 유틸 (should_compress, gzip_bytes, negotiate_gzip, 임계값 체크)

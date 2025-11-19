@@ -1,0 +1,123 @@
+meta:
+  version: v0.5.11u-15a
+  date: 2025-11-19
+  status: locked
+  summary: "Pydantic v2 호환 레이어: TypeAdapter, BaseSettings, validators"
+  priority: high
+  owner: infra-team
+  reviewers:
+    - platform-team
+    - backend-team
+
+scope:
+  modules:
+    - apps/common/pydantic_compat.py
+    - apps/config/settings.py
+  tests:
+    - tests/pydantic/test_typeadapter_parse_v1.py
+    - tests/pydantic/test_v2_validators_v1.py
+    - tests/settings/test_settings_v2_env_v1.py
+  docs:
+    - docs/PYDANTIC-V2-MIGRATION.md
+
+objectives:
+  compatibility:
+    target: "v1/v2 양방향 호환 (동일 API)"
+    metric: "모든 호환 레이어 테스트 100% 통과"
+
+  migration_path:
+    target: "단계적 모듈별 전환 가능"
+    method: "parse_obj_as, model_dump, validators 래퍼"
+
+  zero_regression:
+    target: "기존 코드 동작 불변"
+    test: "24개 테스트 (parse, validators, settings)"
+
+patches:
+  implementation:
+    - file: apps/common/pydantic_compat.py
+      lines: 195
+      features:
+        - "parse_obj_as() → TypeAdapter (v2) / parse_obj_as (v1)"
+        - "model_to_dict/json() → model_dump (v2) / dict/json (v1)"
+        - "field_validator/model_validator 양방향 매핑"
+        - "BaseSettings with ConfigDict (v2) / Config (v1)"
+        - "DecimalStr type serializer"
+
+    - file: apps/config/settings.py
+      lines: 160
+      features:
+        - "Environment variables with DECISIONOS_ prefix"
+        - "get_cors_origins(): prod validation"
+        - "get_allow_scopes(): space-separated parsing"
+        - "is_prod(), is_dev() helpers"
+
+deliverables:
+  code:
+    - apps/common/pydantic_compat.py: v1/v2 호환 래퍼 (195줄)
+    - apps/config/settings.py: BaseSettings 기반 설정 (160줄)
+
+  tests:
+    - tests/pydantic/test_typeadapter_parse_v1.py (6 tests): parse_obj_as 호환
+    - tests/pydantic/test_v2_validators_v1.py (9 tests): validators 호환
+    - tests/settings/test_settings_v2_env_v1.py (9 tests): settings env 주입
+
+acceptance_criteria:
+  - 24/24 테스트 통과 (parse, validators, settings)
+  - PYDANTIC_V2 플래그 정상 감지
+  - CORS prod 검증 (wildcard 거부, empty 거부)
+  - field_validator/@model_validator 동작 일치
+  - parse_obj_as → TypeAdapter 투명 전환
+
+rollback:
+  trigger:
+    - 기존 모듈 임포트 실패
+    - validator 동작 변경
+    - settings 파싱 오류
+
+  procedure: |
+    1. apps/common/pydantic_compat.py 삭제
+    2. apps/config/settings.py 롤백
+    3. 기존 pydantic v1 직접 사용으로 복귀
+
+environment_variables:
+  - DECISIONOS_ENV: "Environment: dev, staging, prod"
+    default: "dev"
+  - DECISIONOS_CORS_ALLOWLIST: "Comma-separated allowed origins"
+    default: ""
+    validation: "Production must have explicit list (no wildcard)"
+  - DECISIONOS_RBAC_TEST_MODE: "RBAC test mode (0 in production)"
+    default: "0"
+  - DECISIONOS_COMPRESS_ENABLE: "Compression enable"
+    default: "1"
+
+API:
+  functions:
+    - parse_obj_as(type, data): "v1/v2 호환 파서"
+    - parse_obj_as_json(type, json_str): "v1/v2 호환 JSON 파서"
+    - model_to_dict(model, by_alias=True): "v1/v2 호환 dict 변환"
+    - model_to_json(model, by_alias=True): "v1/v2 호환 JSON 변환"
+    - field_validator(*fields, mode='after'): "v2-style validator"
+    - model_validator(mode='after'): "v2-style model validator"
+
+  classes:
+    - BaseSettings: "v2 pydantic-settings / v1 BaseSettings"
+    - Settings: "Application settings with env parsing"
+
+migration_strategy:
+  phases:
+    - u-15a: "호환 레이어 (완료)"
+    - u-15b: "Ops/Gateway 스키마 v2 전환"
+    - u-15c: "Judge/SLO 스키마 v2 전환"
+    - u-15d: "Policy/RBAC 모델 v2 전환"
+    - u-15e: "Evidence/Executor 모델 v2 전환"
+
+  gradual_adoption:
+    - "모듈별 단계적 전환 (PR 단위)"
+    - "응답 계약 스냅샷으로 회귀 방지"
+    - "v1/v2 동시 지원 기간 1-2주 유지"
+
+references:
+  - https://docs.pydantic.dev/latest/migration/
+  - https://github.com/pydantic/pydantic-settings
+  - docs/PYDANTIC-V2-MIGRATION.md
