@@ -121,6 +121,8 @@ jobs:
         run: python -m pytest -q tests/gates/gate_q/test_rbac_env_unify_v1.py
       - name: gate_q — readyz shape / metrics
         run: python -m pytest -q tests/gates/gate_q/test_readyz_shape_v1.py
+      - name: gate_u7_compress — Evidence compression
+        run: python -m pytest -q tests/common/test_compress_threshold_v1.py tests/ops/test_cards_gzip_and_etag_v1.py tests/s3/test_stub_upload_gzip_v1.py
       - name: Security tests (gate)
         run: pytest -q -m "gate_aj or gate_ops"
       - name: Judge infra gate (optional)
@@ -645,4 +647,22 @@ PY
           python-version: "3.11"
       - run: python -m cli.dosctl main metrics get --json | tee var/ci-metrics.json || true
       - run: python -m scripts.ci.annotate_release_gate --upsert 1 --badges 1 --artifacts var/ci-metrics.json || true
+
+  gate_u9_u13_bundle:
+    name: gate_u9_u13 — bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - name: pytest (u9-u13 bundle)
+        run: |
+          python -m pytest -q \
+            tests/infra/test_etag_single_path_v1.py \
+            tests/secrets/test_secrets_provider_v1.py \
+            tests/executor/test_circuit_breaker_v1.py \
+            tests/apm/test_otlp_noop_v1.py \
+            tests/compat/test_pyd_compat_v1.py
 

@@ -14,6 +14,11 @@ try:  # boto3 is optional in local dev / CI
 except Exception:  # pragma: no cover - optional dependency
     boto3 = None
 
+# v0.5.11u-7: Compression support
+from apps.common.compress import should_compress, gzip_bytes, gunzip_bytes
+
+_S3_COMPRESS = os.getenv("DECISIONOS_S3_COMPRESS", "1") in ("1", "true", "yes")
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -50,6 +55,7 @@ class S3Adapter:
         data: bytes,
         lock_mode: str = "GOVERNANCE",
         retention_days: int = 30,
+        compress: bool = False,
     ) -> S3Result:
         raise NotImplementedError
 
@@ -78,25 +84,38 @@ class StubS3Adapter(S3Adapter):
         data: bytes,
         lock_mode: str = "GOVERNANCE",
         retention_days: int = 30,
+        compress: bool = False,
     ) -> S3Result:
-        dest = self.root / bucket / key
+        # v0.5.11u-7: Compression for JSON files
+        upload_data = data
+        upload_key = key
+        content_encoding = None
+
+        if compress and _S3_COMPRESS and should_compress(len(data)):
+            upload_data = gzip_bytes(data)
+            if not key.endswith(".gz"):
+                upload_key = f"{key}.gz"
+            content_encoding = "gzip"
+
+        dest = self.root / bucket / upload_key
         _ensure_dir(dest.parent)
-        dest.write_bytes(data)
+        dest.write_bytes(upload_data)
 
         retain_until = (_utcnow() + timedelta(days=retention_days)).isoformat().replace("+00:00", "Z")
         lock_payload = {
             "mode": lock_mode,
             "retention_days": retention_days,
             "retain_until": retain_until,
+            "content_encoding": content_encoding,
         }
         _lock_path(dest).write_text(json.dumps(lock_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
         return S3Result(
             adapter="stub",
             bucket=bucket,
-            key=key,
-            url=self.url_for(bucket, key),
-            extra={"retain_until": retain_until},
+            key=upload_key,
+            url=self.url_for(bucket, upload_key),
+            extra={"retain_until": retain_until, "content_encoding": content_encoding},
         )
 
     def url_for(self, bucket: str, key: str) -> str:
@@ -128,6 +147,15 @@ class StubS3Adapter(S3Adapter):
         lock_path = _lock_path(path)
         if lock_path.exists():
             lock = json.loads(lock_path.read_text(encoding="utf-8"))
+
+        # v0.5.11u-7: Auto-decompress if gzipped
+        content_encoding = (lock or {}).get("content_encoding")
+        if content_encoding == "gzip" or key.endswith(".gz"):
+            try:
+                data = gunzip_bytes(data)
+            except Exception:
+                pass  # Return compressed data if decompression fails
+
         return {"Body": data, "ETag": _sha256_bytes(data), "Lock": lock}
 
 
@@ -148,26 +176,47 @@ class AWSS3Adapter(S3Adapter):
         data: bytes,
         lock_mode: str = "GOVERNANCE",
         retention_days: int = 30,
+        compress: bool = False,
     ) -> S3Result:
+        # v0.5.11u-7: Compression for JSON files
+        upload_data = data
+        upload_key = key
+        content_encoding = None
+        metadata = {}
+
+        if compress and _S3_COMPRESS and should_compress(len(data)):
+            upload_data = gzip_bytes(data)
+            if not key.endswith(".gz"):
+                upload_key = f"{key}.gz"
+            content_encoding = "gzip"
+            metadata["content-encoding"] = "gzip"
+
         retain_until = _utcnow() + timedelta(days=retention_days)
-        resp = self.client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=io.BytesIO(data),
-            ObjectLockMode=lock_mode,
-            ObjectLockRetainUntilDate=retain_until,
-        )
+        put_kwargs = {
+            "Bucket": bucket,
+            "Key": upload_key,
+            "Body": io.BytesIO(upload_data),
+            "ObjectLockMode": lock_mode,
+            "ObjectLockRetainUntilDate": retain_until,
+        }
+        if content_encoding:
+            put_kwargs["ContentEncoding"] = content_encoding
+        if metadata:
+            put_kwargs["Metadata"] = metadata
+
+        resp = self.client.put_object(**put_kwargs)
         etag = (resp or {}).get("ETag", "").strip('"')
         version_id = (resp or {}).get("VersionId")
         return S3Result(
             adapter="aws",
             bucket=bucket,
-            key=key,
-            url=self.url_for(bucket, key),
+            key=upload_key,
+            url=self.url_for(bucket, upload_key),
             extra={
                 "etag": etag,
                 "version_id": version_id,
                 "retain_until": retain_until.isoformat().replace("+00:00", "Z"),
+                "content_encoding": content_encoding,
             },
         )
 
@@ -196,6 +245,15 @@ class AWSS3Adapter(S3Adapter):
         resp = self.client.get_object(Bucket=bucket, Key=key)
         body = resp["Body"].read()
         etag = (resp.get("ETag") or "").strip('"')
+        content_encoding = resp.get("ContentEncoding")
+
+        # v0.5.11u-7: Auto-decompress if gzipped
+        if content_encoding == "gzip" or key.endswith(".gz"):
+            try:
+                body = gunzip_bytes(body)
+            except Exception:
+                pass  # Return compressed data if decompression fails
+
         lock = None
         try:
             head = self.client.head_object(Bucket=bucket, Key=key)
@@ -205,7 +263,7 @@ class AWSS3Adapter(S3Adapter):
                 retain_iso = None
                 if hasattr(retain, "isoformat"):
                     retain_iso = retain.isoformat().replace("+00:00", "Z")
-                lock = {"mode": lock_mode, "retain_until": retain_iso}
+                lock = {"mode": lock_mode, "retain_until": retain_iso, "content_encoding": content_encoding}
         except Exception:  # pragma: no cover - best-effort
             lock = None
         return {"Body": body, "ETag": etag, "Lock": lock}

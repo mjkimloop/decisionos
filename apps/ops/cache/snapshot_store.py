@@ -10,6 +10,11 @@ try:
 except Exception:  # pragma: no cover
     redis = None
 
+# v0.5.11u-7: Compression support
+from apps.common.compress import should_compress, gzip_bytes, gunzip_bytes
+
+_SNAPSHOT_COMPRESS = os.getenv("DECISIONOS_SNAPSHOT_COMPRESS", "1") in ("1", "true", "yes")
+
 
 class SnapshotStore:
     def __init__(self):
@@ -24,6 +29,15 @@ class SnapshotStore:
             if not v:
                 return None
             try:
+                # v0.5.11u-7: Auto-decompress if compressed
+                if isinstance(v, bytes) and _SNAPSHOT_COMPRESS:
+                    try:
+                        v = gunzip_bytes(v).decode("utf-8")
+                    except Exception:
+                        # Not compressed or decompression failed, treat as JSON string
+                        if isinstance(v, bytes):
+                            v = v.decode("utf-8")
+
                 obj = json.loads(v)
                 return obj.get("body"), float(obj.get("ts", 0))
             except Exception:
@@ -39,8 +53,15 @@ class SnapshotStore:
 
     def set(self, key: str, body: str):
         ts = time.time()
+        payload = json.dumps({"body": body, "ts": ts})
+
         if self._r:
-            self._r.setex(key, self._ttl, json.dumps({"body": body, "ts": ts}))
+            # v0.5.11u-7: Compress before storing in Redis
+            if _SNAPSHOT_COMPRESS and should_compress(len(payload)):
+                payload_bytes = gzip_bytes(payload.encode("utf-8"))
+            else:
+                payload_bytes = payload.encode("utf-8")
+            self._r.setex(key, self._ttl, payload_bytes)
         else:
             self._mem[key] = (body, ts)
 

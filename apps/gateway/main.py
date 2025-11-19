@@ -9,6 +9,7 @@ from apps.gateway.routers import consent, metrics
 from apps.gateway.security.cors import attach_strict_cors
 from apps.metrics.collectors import add_latency_middleware
 from apps.policy.rbac_enforce import RbacMapMiddleware
+from apps.ops.api.cards_delta import router as cards_router
 
 
 app = FastAPI(title="DecisionOS Gateway", version="v0.1.3")
@@ -26,6 +27,7 @@ add_latency_middleware(app)
 # 라우터 마운트
 app.include_router(consent.router)
 app.include_router(metrics.router)
+app.include_router(cards_router)
 
 
 @app.get("/healthz")

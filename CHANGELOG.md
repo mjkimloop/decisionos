@@ -1,11 +1,17 @@
 ## v0.5.11u-7 — 2025-11-19 (성능 최적화)
 - **압축/전송 최적화**: gzip 압축으로 응답 크기 ≥60% 감소, 저장 공간 ≥70% 절감
-- `apps/common/compress.py`: 압축 유틸 (should_compress, gzip_bytes, negotiate_gzip)
-- Cards API: Accept-Encoding 협상, 4KB 이상 자동 압축, `Vary: Accept-Encoding`
-- ETag 불변성: 압축 여부 무관 동일 ETag (표현 무관 원칙)
-- S3/Snapshot: JSON 업로드 시 gzip 저장 (.gz 확장자 + Content-Encoding 메타데이터)
-- `tests/common/test_compress_threshold_v1.py`: 압축 임계값/협상 테스트 (5/5 passed)
-- `.env.example`: 압축 환경변수 (COMPRESS_ENABLE, MIN_BYTES, GZIP_LEVEL)
+- `apps/common/compress.py`: 압축 유틸 (should_compress, gzip_bytes, negotiate_gzip, 임계값 체크)
+- `apps/ops/api/cards_delta.py`: Accept-Encoding 협상, 4KB 이상 자동 압축, `Vary: Accept-Encoding` 헤더
+- ETag 불변성: 압축 여부 무관 동일 ETag (RFC 7232 표현 무관 원칙)
+- `apps/common/s3_adapter.py`: S3 업로드 압축 (.gz 확장자 + Content-Encoding 메타데이터, Stub/AWS 공통)
+- `apps/ops/cache/snapshot_store.py`: Redis 스냅샷 압축 (4KB 이상, 메모리 절감)
+- `apps/gateway/main.py`: Cards API 라우터 마운트
+- **테스트 13개 모두 통과**:
+  - `tests/common/test_compress_threshold_v1.py` (5/5): 압축 임계값/협상/roundtrip
+  - `tests/ops/test_cards_gzip_and_etag_v1.py` (3/3): Cards API gzip 협상, ETag 불변성, 304 응답
+  - `tests/s3/test_stub_upload_gzip_v1.py` (5/5): S3 stub 압축 업로드, 자동 압축 해제, 임계값
+- `.github/workflows/ci.yml`: gate_u7_compress 추가 (13개 테스트 자동 실행)
+- `.env.example`: 압축 환경변수 (COMPRESS_ENABLE=1, MIN_BYTES=4096, GZIP_LEVEL=6)
 
 ## v0.5.11u-5 — 2025-11-19 (보안 핫픽스)
 - **SEC-001 (Critical)**: RBAC 테스트모드 기본 OFF, 프로덕션에서 test-mode=1 시 부팅 실패
