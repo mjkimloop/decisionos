@@ -1,3 +1,21 @@
+## v0.5.11u-15d — 2025-11-19 (Evidence GC 설정 v2 전환)
+- **Evidence GC 설정 Pydantic v2 호환**: GC 설정 모델에 ConfigDict 추가
+- `apps/obs/evidence/gc_config.py`: GC 설정 모델 2개 v2 전환
+  - `ObjectLockCfg`: S3 Object Lock 설정 (enabled, retention_days, s3_bucket, s3_prefix)
+  - `GCCfg`: Evidence GC 설정 (retention_days, keep_min_per_tenant, exclude_globs, dry_run, object_lock)
+  - `extra='forbid'`: 알 수 없는 필드 거부 (v2)
+  - 한글 docstring 추가
+- **테스트 12개 추가 (45→57 테스트)**:
+  - `tests/evidence/test_gc_config_v2_compat_v1.py` (12/12):
+    - ObjectLockCfg 기본값/커스텀 값 검증
+    - GCCfg 기본값/커스텀 retention/exclude globs 검증
+    - 중첩 모델 검증 (GCCfg.object_lock)
+    - model_validate() v1/v2 호환성
+    - model_to_dict() 직렬화
+    - extra='forbid' 검증 (v2)
+- 워크오더: `docs/work_orders/wo-v0.5.11u-15d-evidence-gc-config-v2.yaml`
+- GC 로직 변경 없음 (100% 하위 호환)
+
 ## v0.5.11u-15c — 2025-11-19 (Judge/SLO 스키마 v2 전환)
 - **SLO 스키마 Pydantic v2 호환**: 13개 SLO 모델에 ConfigDict 추가
 - `apps/judge/slo_schema.py`: 모든 SLO 모델에 v2 ConfigDict 적용

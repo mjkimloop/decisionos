@@ -6,22 +6,34 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, ValidationError
+from apps.common.pydantic_compat import PYDANTIC_V2
 import yaml
+
+if PYDANTIC_V2:
+    from pydantic import ConfigDict
 
 
 class ObjectLockCfg(BaseModel):
+    """S3 Object Lock 설정"""
     enabled: bool = True
     retention_days: int = 365
     s3_bucket: Optional[str] = None
     s3_prefix: Optional[str] = None
 
+    if PYDANTIC_V2:
+        model_config = ConfigDict(extra='forbid')
+
 
 class GCCfg(BaseModel):
+    """Evidence GC (Garbage Collection) 설정"""
     retention_days: Dict[str, int] = Field(default_factory=lambda: {"WIP": 7, "LOCKED": 365})
     keep_min_per_tenant: int = 5
     exclude_globs: List[str] = Field(default_factory=lambda: ["**/*locked.json"])
     dry_run: bool = True
     object_lock: ObjectLockCfg = ObjectLockCfg()
+
+    if PYDANTIC_V2:
+        model_config = ConfigDict(extra='forbid')
 
 
 CONFIG_ENV = "DECISIONOS_GC_CONFIG"
